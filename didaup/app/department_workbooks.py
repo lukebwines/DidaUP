@@ -89,8 +89,13 @@ def _write_safe(sheet, row, col, value, locked):
         sheet.write_string(row, col, _display(value)[:MAX_STRING_LENGTH], locked)
 
 
-def _activity_id(data: dict[str, object]) -> str:
-    # Internal grouping key, NOT an official activity identifier.
+def _activity_id(data: dict[str, object], historical_id: str) -> str:
+    """Internal key only, never an official teaching-activity code.
+
+    If neither course/UGOV code is available, the stable snapshot-row ID
+    keeps the line distinct rather than guessing equivalences with other
+    records. It is reproducible on all five copies and during re-review.
+    """
     fields = [
         "CODICE CORSO", "SEDE CORSO", "ANNO", "CODICE INS",
         "CODICE UGOV", "DISCRIMINANTE DI OI", "MODULO", "UL",
@@ -98,10 +103,9 @@ def _activity_id(data: dict[str, object]) -> str:
     ]
     payload = [_display(data.get(key)) for key in fields]
     if not (_display(data.get("CODICE INS")) or _display(data.get("CODICE UGOV"))):
-        raise WorkbookGenerationError(
-            "Codice insegnamento e codice UGOV entrambi assenti: "
-            "impossibile collegare con sicurezza le proposte"
-        )
+        return "ACT-ROW-" + hashlib.sha256(
+            historical_id.encode("utf-8")
+        ).hexdigest()[:32]
     return "ACT-" + hashlib.sha256(
         json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
     ).hexdigest()[:32]
@@ -124,8 +128,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     if not 1 <= header_row <= 40:
         raise WorkbookGenerationError("Riga intestazioni fuori intervallo")
     required = (
-        "cds_codice", "sede", "anno_corso", "codice_insegnamento",
-        "ore_effettive_totali",
+        "cds_codice", "sede", "anno_corso", "ore_effettive_totali",
     )
     missing = [key for key in required if key not in assigned]
     if missing:
@@ -156,6 +159,8 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     excluded_count = 0
     unresolved_annuality_rows = 0
     unresolved_annuality_examples = []
+    missing_activity_code_rows = 0
+    missing_activity_code_examples = []
     for excel_row, row in enumerate(rows[header_row:], start=header_row + 1):
         if not any(_display(x) for x in row):
             continue
@@ -198,10 +203,18 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
                 f"Riga {excel_row}: TOT ORE EFFETTIVE non numerico o negativo"
             )
         historical_id = source_row_id(source_sha256, sheet_name, excel_row)
-        prepared.append((data, historical_id, _activity_id(data)))
+        if not (_display(data.get("CODICE INS")) or _display(data.get("CODICE UGOV"))):
+            missing_activity_code_rows += 1
+            if len(missing_activity_code_examples) < 30:
+                missing_activity_code_examples.append(excel_row)
+        prepared.append((data, historical_id, _activity_id(data, historical_id)))
     if not prepared:
         raise WorkbookGenerationError("Nessuna riga storica esportabile")
-    return prepared, excluded_count, unresolved_annuality_rows, unresolved_annuality_examples
+    return (
+        prepared, excluded_count, unresolved_annuality_rows,
+        unresolved_annuality_examples,
+        missing_activity_code_rows, missing_activity_code_examples,
+    )
 
 
 def build_five_workbooks(
@@ -211,7 +224,8 @@ def build_five_workbooks(
 ) -> tuple[bytes, dict]:
     """ZIP of exactly five byte-identical XLSX, no department-specific filters."""
     proposal_year = next_academic_year(history_year)
-    prepared, excluded_count, unresolved_count, unresolved_examples = _prepare(
+    (prepared, excluded_count, unresolved_count, unresolved_examples,
+     missing_code_count, missing_code_examples) = _prepare(
         source, source_sha256, sheet_name, header_row, assigned,
         history_year, excluded or set(),
     )
@@ -328,6 +342,8 @@ def build_five_workbooks(
         "excluded_rows": excluded_count,
         "unresolved_annuality_rows_included": unresolved_count,
         "unresolved_annuality_example_rows": unresolved_examples,
+        "missing_activity_codes_rows_included": missing_code_count,
+        "missing_activity_codes_example_rows": missing_code_examples,
         "source_sha256": source_sha256,
         "template_sha256": hashlib.sha256(template).hexdigest(),
         "historical_year": history_year, "proposal_year": proposal_year,
