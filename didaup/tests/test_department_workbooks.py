@@ -132,7 +132,7 @@ def test_mismatched_year_and_tampered_source_are_refused(tmp_path):
     src = tmp_path / "synthetic.xlsx"
     assigned = make_source(src, wrong_year=True)
     digest = hashlib.sha256(src.read_bytes()).hexdigest()
-    with pytest.raises(WorkbookGenerationError, match="diverso"):
+    with pytest.raises(WorkbookGenerationError, match="non coerente"):
         build_five_workbooks(src, digest, "Offerta sintetica", 1,
                              assigned, "2026/27")
     with pytest.raises(WorkbookGenerationError, match="hash"):
