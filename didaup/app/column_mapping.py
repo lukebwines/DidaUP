@@ -118,6 +118,59 @@ def preview(path: Path, sheet_name: str, header_row: int) -> dict[str, Any]:
     }
 
 
+# Important: these names are supplied by the original report, not invented
+# equivalents. Never convert planned hours into actual covered hours.
+STRICT_SOURCE_FIELDS = {
+    "ore_effettive_totali": "TOT ORE EFFETTIVE",
+    "ore_previste": "TOT ORE PREVISTE",
+    "ore_prevlez": "OREPREVLEZ",
+    "codice_insegnamento": "CODICE INS",
+    "codice_ugov": "CODICE UGOV",
+    "docente_identificativo": "MATRICOLA DOCENTE",
+    "docente_nome": "NOME DOCENTE",
+    "docente_cognome": "COGNOME DOCENTE",
+    "ssd_docente_nuovo": "CODICE SSD DOCENTE NUOVO",
+}
+
+
+def source_header_conflicts(
+    kind: str, assigned: dict[str, int], headers: list[Any],
+) -> list[str]:
+    """Catch dangerous mapping-label discrepancies BEFORE saving/exporting.
+
+    Applies strict checks only when the source itself identifies the relevant
+    field unambiguously with its official header; doesn't invent equivalents
+    for unfamiliar reports that require manual validation.
+    """
+    if kind != "offerta":
+        return []
+    normalized = [normalize_header(h) for h in headers]
+    conflicts = []
+    for field, expected in STRICT_SOURCE_FIELDS.items():
+        if field not in assigned:
+            continue
+        chosen = assigned[field]
+        if chosen < 0 or chosen >= len(normalized):
+            conflicts.append(f"{field}: indice colonna non valido")
+            continue
+        official_header = normalize_header(expected)
+        available = [i for i, header in enumerate(normalized) if header == official_header]
+        selected_header = normalized[chosen]
+        if len(available) == 1 and chosen != available[0]:
+            conflicts.append(
+                f"{field}: associato alla colonna {chosen + 1} "
+                f"«{headers[chosen]}», ma la fonte riporta «{expected}» "
+                f"alla colonna {available[0] + 1}"
+            )
+        elif (field == "ore_effettive_totali"
+              and selected_header in ("TOT ORE PREVISTE", "OREPREVLEZ")):
+            conflicts.append(
+                "Le ore effettive non possono essere ricavate da "
+                f"«{headers[chosen]}»; scegliere «TOT ORE EFFETTIVE»"
+            )
+    return conflicts
+
+
 def evaluate_mapping(kind: str, assigned: dict[str, int]) -> list[str]:
     """Provide warnings; do not silently claim a draft mapping is approved."""
     missing: list[str] = []
