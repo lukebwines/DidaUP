@@ -704,26 +704,31 @@ def test_reconciliation_blocks_missing_or_duplicated_exported_ids(tmp_path):
 
 def test_partial_annuality_rows_remain_present_and_reconciled(tmp_path):
     source = tmp_path / "partial.xlsx"
-    assigned = make_source(source)
+    assigned = _write_named_course_report(source, course_year="1,2,3")
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
-    # An included academic year on the same source row prevents deletion.
+    # Year 1 is excluded but years 2 and 3 on that SAME row are included.
+    # Never drop the whole source line or silently change ANNO to "2,3".
     archive_bytes, stats = build_five_workbooks(
         source, digest, "Offerta sintetica", 1, assigned, "2026/27",
-        excluded={("SYN-A", "Sede TEST", 1)},
-        included={("SYN-A", "Sede TEST", 2)},
+        excluded={("CF-REPORT", "VERONA", 1)},
+        included={("CF-REPORT", "VERONA", 2),
+                  ("CF-REPORT", "VERONA", 3)},
     )
     assert stats["reconciliation"]["verified"] is True
-    assert stats["reconciliation"]["source_nonempty_rows"] == 4
-    assert stats["reconciliation"]["included_in_each_workbook"] == 4
+    assert stats["reconciliation"]["source_nonempty_rows"] == 2
+    assert stats["reconciliation"]["included_in_each_workbook"] == 2
     assert stats["reconciliation"]["excluded_in_internal_register"] == 0
+    assert stats["mixed_annuality_rows_retained"] == 1
+    assert stats["mixed_annuality_example_rows"] == [2]
     with ZipFile(io.BytesIO(archive_bytes)) as archive:
         item = tmp_path / "partial-out.xlsx"
         item.write_bytes(archive.read(referent_names(archive)[0]))
     rows = CalamineWorkbook.from_path(item).get_sheet_by_name(
         "Proposte SSD"
     ).to_python(skip_empty_area=False)
+    assert rows[6][13] == "1,2,3"
     assert [row[38] for row in rows[6:]] == [
-        source_row_id(digest, "Offerta sintetica", index) for index in (2, 3, 4, 5)
+        source_row_id(digest, "Offerta sintetica", index) for index in (2, 3)
     ]
 
 
