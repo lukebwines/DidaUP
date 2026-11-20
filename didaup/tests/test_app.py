@@ -519,3 +519,149 @@ def test_mapping_loaded_from_database_does_not_repeat_legacy_id_warning(client):
     assert loaded.status_code == 200
     assert not any("ID copertura" in warning
                    for warning in loaded.json()["mapping"]["warnings"])
+
+
+def synthetic_cohort_workbook():
+    """No real university data: repeated synthetic activities and one invalid year."""
+    import io
+    import zipfile
+    from xml.sax.saxutils import escape
+
+    headers = ["CODICE CORSO", "CDS", "SEDE CORSO", "ANNO", "ANNO ACCADEMICO"]
+    values = [
+        headers,
+        ["SYN01", "CdS simulato A", "Sede demo", "1", "2026/27"],
+        ["SYN01", "CdS simulato A", "Sede demo", "1", "2026/27"],
+        ["SYN01", "CdS simulato A", "Sede demo", "2", "2026/27"],
+        ["SYN02", "CdS simulato B", "Sede demo", "1", "2026/27"],
+        ["SYN03", "CdS simulato C", "Sede demo", "1", "2025/26"],
+    ]
+    row_xml = []
+    for row_idx, row in enumerate(values, 1):
+        cells = []
+        for column_idx, value in enumerate(row):
+            col = chr(65 + column_idx)
+            cells.append(
+                f'<c r="{col}{row_idx}" t="inlineStr"><is><t>{escape(value)}</t></is></c>'
+            )
+        row_xml.append(f'<row r="{row_idx}">{"".join(cells)}</row>')
+    sheet_xml = (
+        '<?xml version="1.0" encoding="utf-8"?>'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        '<sheetData>' + "".join(row_xml) + '</sheetData></worksheet>'
+    )
+    destination = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(synthetic_xlsx())) as source:
+        with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as output:
+            for item in source.infolist():
+                contents = (
+                    sheet_xml.encode("utf-8")
+                    if item.filename == "xl/worksheets/sheet1.xml"
+                    else source.read(item.filename)
+                )
+                output.writestr(item.filename, contents)
+    return destination.getvalue()
+
+
+def prepare_synthetic_cohorts(client):
+    headers = signed_in(client)
+    payload = synthetic_cohort_workbook()
+    imported = client.post(
+        "/api/years/1/imports", headers=headers,
+        data={"kind": "offerta", "test_data_only": "true"},
+        files={"source": ("cohort-synthetic.xlsx", payload, "application/octet-stream")},
+    )
+    assert imported.status_code == 200, imported.text
+    report_id = imported.json()["id"]
+    mapped = client.put(f"/api/imports/{report_id}/mapping", headers=headers, json={
+        "sheet_name": "Sintetico", "header_row": 1,
+        "assigned": {
+            "cds_codice": 0, "cds_nome": 1, "sede": 2,
+            "anno_corso": 3, "anno_accademico_report": 4,
+        }, "expected_version": 0,
+    })
+    assert mapped.status_code == 200, mapped.text
+    return headers, report_id, payload
+
+
+def test_cohort_checklist_preview_and_bulk_exclusion(client, tmp_path):
+    headers, report_id, original = prepare_synthetic_cohorts(client)
+    preview = client.get("/api/years/1/cohort-candidates", params={"import_id": report_id})
+    assert preview.status_code == 200, preview.text
+    data = preview.json()
+    assert data["cohort_count"] == 3  # two identical activity rows -> one cohort
+    assert data["valid_rows"] == 4
+    assert data["anomaly_count"] == 1
+    assert data["cohorts"][0]["source_rows"] == 2
+    assert all(not item["excluded"] for item in data["cohorts"])
+    assert client.get("/api/years/1/cohorts").json() == []  # Preview is strictly read-only.
+
+    chosen = [{"course_code": "SYN01", "campus": "Sede demo", "study_year": 2}]
+    request = {
+        "import_id": report_id, "mapping_version": data["mapping_version"],
+        "expected_revision": data["expected_revision"], "excluded": chosen,
+        "reason": "Non più in gestione", "acknowledge_anomalies": False,
+    }
+    no_ack = client.post("/api/years/1/cohort-candidates/apply", headers=headers, json=request)
+    assert no_ack.status_code == 409
+    assert client.get("/api/years/1/cohorts").json() == []
+
+    request["acknowledge_anomalies"] = True
+    applied = client.post("/api/years/1/cohort-candidates/apply", headers=headers, json=request)
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["total"] == 3
+    assert applied.json()["excluded"] == 1
+    assert applied.json()["added"] == 3
+
+    all_cohorts = client.get("/api/years/1/cohorts").json()
+    assert len(all_cohorts) == 3
+    excluded = [row for row in all_cohorts if not row["included"]]
+    assert len(excluded) == 1
+    assert excluded[0]["study_year"] == 2
+    assert excluded[0]["exclusion_reason"] == "Non più in gestione"
+
+    # Submitted data are staged separately; source bytes are never changed.
+    from app.main import SOURCE_DIR
+    source_bytes = list((tmp_path / "sources").glob("source_*.xlsx"))
+    assert len(source_bytes) == 1
+    assert source_bytes[0].read_bytes() == original
+
+    stale = client.post("/api/years/1/cohort-candidates/apply", headers=headers, json=request)
+    assert stale.status_code == 409  # Concurrent-edit token has changed.
+    assert len(client.get("/api/years/1/cohorts").json()) == 3
+
+    refreshed = client.get("/api/years/1/cohort-candidates", params={"import_id": report_id})
+    assert refreshed.status_code == 200
+    assert sum(bool(item["excluded"]) for item in refreshed.json()["cohorts"]) == 1
+    after = refreshed.json()
+    restoring = client.post("/api/years/1/cohort-candidates/apply", headers=headers, json={
+        "import_id": report_id, "mapping_version": after["mapping_version"],
+        "expected_revision": after["expected_revision"], "excluded": [],
+        "reason": "", "acknowledge_anomalies": True,
+    })
+    assert restoring.status_code == 200, restoring.text
+    assert all(bool(row["included"]) for row in client.get("/api/years/1/cohorts").json())
+
+
+def test_cohort_checklist_rejects_unrelated_selection(client):
+    headers, report_id, _ = prepare_synthetic_cohorts(client)
+    data = client.get("/api/years/1/cohort-candidates", params={"import_id": report_id}).json()
+    invalid = client.post("/api/years/1/cohort-candidates/apply", headers=headers, json={
+        "import_id": report_id, "mapping_version": data["mapping_version"],
+        "expected_revision": data["expected_revision"],
+        "excluded": [{"course_code": "NOT-IN-REPORT", "campus": "Sede demo", "study_year": 1}],
+        "reason": "Fittizio", "acknowledge_anomalies": True,
+    })
+    assert invalid.status_code == 409
+    assert client.get("/api/years/1/cohorts").json() == []
+
+
+def test_cohort_checklist_blocks_other_academic_year(client):
+    headers, report_id, _ = prepare_synthetic_cohorts(client)
+    created = client.post("/api/years", headers=headers, json={"code": "2027/28"})
+    assert created.status_code == 200
+    response = client.get(
+        f"/api/years/{created.json()['id']}/cohort-candidates",
+        params={"import_id": report_id}
+    )
+    assert response.status_code == 422
