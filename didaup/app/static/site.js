@@ -493,9 +493,18 @@ function hookForms() {
           (result.unresolved_annuality_example_rows || []).slice(0, 8).join(", ") +
           "). Controllarle successivamente; non sono state escluse automaticamente."
         : "";
+      const missingCodes = Number(result.missing_activity_codes_rows_included || 0);
+      const missingCodeMessage = missingCodes
+        ? " ATTENZIONE: " + missingCodes +
+          " righe prive sia di Codice insegnamento sia di Codice UGOV " +
+          "sono state conservate con identificativo tecnico di riga; " +
+          "l'eventuale aggregazione con altre coperture richiede verifica. " +
+          "Righe del report (esempi): " +
+          (result.missing_activity_codes_example_rows || []).slice(0, 8).join(", ") + "."
+        : "";
       showNotice("Generati cinque file identici con " +
         result.historical_rows + " righe storiche ciascuno; nessun filtro dipartimentale. " +
-        "Il pacchetto ZIP è disponibile per il download." + warningMessage);
+        "Il pacchetto ZIP è disponibile per il download." + warningMessage + missingCodeMessage);
       el("workbook-progress").textContent = warnings
         ? warnings + " righe mantenute per impossibilità di verificare l'annualità: " +
           "generazione conclusa, verifica non bloccante."
