@@ -1,8 +1,8 @@
 # DidaUP
 
-**Add-on per la predisposizione di file Excel evoluti destinati ai referenti SSD.**
+**Add-on per la programmazione didattica 2027/28 con cinque Excel completi e identici destinati ai dipartimenti.**
 
-> Stato: **0.1.5-alpha1 (primo nucleo tecnico)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. Non utilizzare dati reali dell'Ateneo durante il collaudo.
+> Stato: **0.1.10-alpha1 (generazione cinque file e revisione preliminare)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. **Solo dati sintetici** durante il collaudo.
 
 ## Obiettivo
 Partire dall'offerta e dalle coperture storiche **2026/27** per costruire un archivio di riferimento verificabile. Quando saranno disponibili le estrazioni ufficiali, predisporre i fogli di programmazione **2027/28** senza trasporre automaticamente come valide assegnazioni, codici o nominativi precedenti.
@@ -14,8 +14,8 @@ Il primo caso d'uso riguarda i **referenti SSD dell'area medica**, già condivis
 Il regolamento già fornito è un riferimento essenziale da analizzare durante lo sviluppo: le regole applicabili dovranno essere evidenziate negli Excel dei referenti come **istruzioni, avvertenze e controlli verificabili**, con il riferimento alla disposizione in vigore. Non inventare obblighi, soglie o condizioni, né introdurre blocchi automatici prima di validare le fonti.
 
 ## Utilizzatori
-- Segreteria: importazione, produzione dei file Excel per SSD, reimport, controlli e riepiloghi.
-- Referenti SSD: **solo file .xlsx**, senza accesso all'add-on.
+- Segreteria: importazione, produzione di cinque file Excel identici, revisione preliminare dei cinque file, controlli e riepiloghi.
+- Referenti SSD: **solo i file .xlsx condivisi sul OneDrive d'Ateneo**, senza accesso all'add-on. La pubblicazione automatica su OneDrive resta [DA IMPLEMENTARE].
 
 ## Vincoli funzionali
 1. La scheda Excel presenta i dati identificativi dell'insegnamento e le coperture storiche in **sola lettura**.
@@ -43,7 +43,7 @@ Nella cartella [`didaup/`](didaup/) è presente la prima versione:
 - accesso sia da **Home Assistant Ingress** sia dalla porta dedicata **8097/tcp**, utilizzabile da Cloudflare Tunnel protetto da Access;
 - database SQLite persistente separato dal repository.
 
-**Non implementati in questa versione:** mappatura semantica delle colonne del report importato, generazione e reimportazione XLSX per SSD, gestione dei referenti SSD e avvisi regolamentari. L'importazione attuale archivia il file e ne legge la struttura; **non importa ancora le assegnazioni nel modello didattico**.
+**Implementati:** mappatura versionata delle colonne, scelta delle annualità, generazione di cinque file identici e protetti, download ZIP e analisi preliminare delle cinque restituzioni con controllo di sovrapposizioni e integrità dello storico. **Non implementati:** condivisione OneDrive automatica, «+» realmente incorporato nei cinque file, acquisizione definitiva/versionata delle proposte, gestione autorizzazioni dei referenti, esito amministrativo e approvazioni.
 
 I controlli su GitHub includono test sintetici, verifica sintattica Python e build dell'immagine Docker. La riuscita della build **non sostituisce** il collaudo su Home Assistant e sul tunnel.
 
@@ -62,13 +62,22 @@ Il report procedurale 2026/27 servirà a validare il tracciato di importazione, 
 ## Riconoscimento automatico 2026/27
 Il tracciato a 36 colonne fornito dall'utilizzatore è riconoscibile in **Importa report → Mappa colonne → Riconosci automaticamente**. Il sistema propone foglio, riga delle intestazioni e mappatura senza chiedere l'associazione manuale di tutte le colonne.
 
-**Uniche tre colonne di variazione:** Nuovo docente, Ore, Note. Le altre sono informazioni storiche e di contesto da mantenere non modificabili nei futuri XLSX. La lettura delle intestazioni e il salvataggio della mappatura **non** importano ancora incarichi o generano i file per i referenti.
+**Quattro colonne modificabili concordate:** Tipo variazione, Nuovo docente, Ore, Note. Le altre sono informazioni storiche e di contesto da mantenere non modificabili nei futuri XLSX. La lettura delle intestazioni e il salvataggio della mappatura non approvano incarichi; i cinque file completi si generano separatamente nella sezione **Genera Excel**.
 
 ## Report originale e modello Excel per i referenti
-Il report di offerta e coperture è una fonte ampia da mappare e verificare; non ha per forza la stessa struttura del modello Excel ridotto inviato ai referenti. Nella versione 0.1.5 la mappatura automatica distingue questi due tracciati. **Nuovo docente, Ore, Note** sono campi di *output* da compilare per le variazioni, non campi obbligatori di *input* del report ufficiale. La generazione dei nuovi XLSX non è ancora implementata.
+Il report di offerta e coperture è una fonte ampia da mappare e verificare; non ha per forza la stessa struttura del modello Excel ridotto inviato ai referenti. Nella versione 0.1.5 la mappatura automatica distingue questi due tracciati. **Nuovo docente, Ore, Note** sono campi di *output* da compilare per le variazioni, non campi obbligatori di *input* del report ufficiale. La generazione delle cinque copie identiche è implementata; non include ancora la pubblicazione automatica su OneDrive.
 
 ## Selezione annualità CdS (0.1.8-alpha1)
 La schermata **Annualità CdS** propone un elenco a spunte ricavato dal report mappato: ricerca rapida per codice/nome/sede/anno, selezione limitata ai risultati visibili, riepilogo di tutte le esclusioni, motivazione e conferma finale. Un raggruppamento rappresenta una combinazione codice CdS + sede + anno di corso. Le esclusioni non cancellano righe né modificano il report originale. Questo passaggio è preliminare alla futura generazione degli Excel per SSD.
 
 ## Protezione delle mappature e delle esclusioni (0.1.9-alpha1)
 L'azione **Azzera soltanto le elaborazioni** non cancella le annualità censite, gli stati di inclusione/esclusione e le motivazioni, le mappature, i documenti Excel importati, la cronologia e gli account. Cancella esclusivamente eventuali output di lavoro rigenerabili; **attualmente non esistono ancora output generati** e l'operazione può non eliminare alcun elemento. Usare un backup recente Home Assistant per proteggere il database e i file sorgenti da danni o disinstallazioni.
+
+
+## Evoluzione 0.1.10-alpha1 — Cinque Excel completi e controllo delle sovrapposizioni
+
+La sezione **Genera Excel** crea un **ZIP contenente esattamente cinque copie inizialmente identiche a livello di contenuto e byte**, tutte con ogni attività presente nel perimetro storico selezionato. **Nessun criterio dipartimentale filtra le righe**: la suddivisione per file riguarda soltanto il canale di compilazione da parte dei referenti. Eventuali annualità già esplicitamente escluse nell'archivio non sono reintrodotte automaticamente. I file contengono **37 colonne visibili** (33 informazioni storiche più **Tipo variazione, Nuovo docente, Ore, Note**), identificativi interni nascosti, protezione per evitare modifiche accidentali e filtro di foglio. L'unico valore storico delle ore utilizzato per la copertura è **`TOT ORE EFFETTIVE`**.
+
+Dopo la compilazione, è disponibile un endpoint e una schermata per una **revisione preliminare di cinque XLSX**: il sistema confronta ogni riga con lo storico privato, rileva trasferimenti di ore in eccesso e segnala attività modificate da più dipartimenti, **anche se riguardano docenti storici differenti**. Le sovrapposizioni non vengono sommate, risolte o approvate automaticamente. Gli XLSX caricati per la revisione sono file temporanei cancellati a fine analisi, e non sono acquisiti come proposte approvate.
+
+**Limiti della versione:** i cinque XLSX sono attualmente distribuiti in ZIP e devono essere pubblicati manualmente sull'account universitario autorizzato; non vi è un pulsante Excel «+» già operativo nel file esportato. È presente uno script Office Scripts sperimentale per aggiungere variazioni, ma va ancora associato e verificato nell'ambiente Microsoft 365 dell'Ateneo. L'applicazione continua a consentire **soltanto dati sintetici** per importazione e revisione.
