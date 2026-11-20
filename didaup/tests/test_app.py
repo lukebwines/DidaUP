@@ -127,3 +127,37 @@ def test_ingress_cookie_scoped_to_addon(client):
     cookie = response.headers["set-cookie"]
     assert "HttpOnly" in cookie
     assert "Path=/api/hassio_ingress/TestToken_1/" in cookie
+
+
+def test_recovery_preserves_years_and_does_not_repeat_after_password_change(client, tmp_path):
+    # Simulate a previous initialized installation that rejects the original password.
+    original_csrf = signed_in(client)
+    created = client.post("/api/years", headers=original_csrf, json={"code": "2027/28"})
+    assert created.status_code == 200
+    client.post("/api/logout", headers=original_csrf, json={})
+
+    options_file = tmp_path / "options.json"
+    options = json.loads(options_file.read_text(encoding="utf-8"))
+    options["admin_recovery_password"] = "SyntheticRecoveryPass!2026"
+    options_file.write_text(json.dumps(options), encoding="utf-8")
+
+    import app.main as main
+    main.startup()  # Simulates an add-on restart with its unchanged persistent /data.
+
+    old = client.post("/api/login", json={
+        "username": "admin", "password": "SyntheticTestingPass!2026"
+    })
+    assert old.status_code == 401
+    recovered = signed_in(client, password="SyntheticRecoveryPass!2026")
+    assert any(row["code"] == "2027/28" for row in client.get("/api/years").json())
+
+    # Protect user changes: same recovery option left in place must not reapply.
+    update = client.post("/api/account/password", headers=recovered, json={
+        "current_password": "SyntheticRecoveryPass!2026",
+        "new_password": "SyntheticPermanentPass!2026"
+    })
+    assert update.status_code == 200, update.text
+    client.post("/api/logout", headers=recovered, json={})
+    main.startup()
+    signed_in(client, password="SyntheticPermanentPass!2026")
+    assert any(row["code"] == "2027/28" for row in client.get("/api/years").json())
