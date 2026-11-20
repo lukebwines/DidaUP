@@ -843,3 +843,38 @@ def test_assignment_title_filter_is_descriptive_not_an_exclusion(tmp_path):
     assert alt["assignment_title_mapped"] is False
     assert alt["cohort_count"] == 3
     assert a_first["study_year"] == 1
+
+
+def test_source_anno_filter_retains_original_distinct_text_values(tmp_path):
+    """UI filter strings must not be restricted to integer year labels."""
+    import xlsxwriter
+    from app.cohort_import import extract_cohorts
+
+    source = tmp_path / "original-anno-text-values.xlsx"
+    wb = xlsxwriter.Workbook(str(source))
+    sh = wb.add_worksheet("Demo")
+    for i, label in enumerate(("CODICE CORSO", "CDS", "SEDE CORSO", "ANNO", "TIPOLOGIA")):
+        sh.write_string(0, i, label)
+    for row, record in enumerate((
+        ("TEST-01", "Dottorato simulato", "Sede A", "1,2,3", "Dottorati di ricerca"),
+        ("TEST-02", "Secondo CdS sintetico", "Sede A", "1", "Altra tipologia"),
+        ("TEST-03", "Terzo CdS sintetico", "Sede A", "annualità non indicata", "Dottorati di ricerca"),
+    ), 1):
+        for col, text in enumerate(record):
+            sh.write_string(row, col, text)
+    wb.close()
+    result = extract_cohorts(source, "Demo", 1, {
+        "cds_codice": 0, "cds_nome": 1, "sede": 2,
+        "anno_corso": 3, "cds_tipologia": 4,
+    }, "2026/27")
+    assert result["source_year_filter_values"] == [
+        "1", "1,2,3", "annualità non indicata"
+    ]
+    assert result["cohort_count"] == 4
+    assert result["multi_year_source_rows"] == 1
+    assert result["anomaly_count"] == 1
+    assert all("1,2,3" in row["source_year_values"]
+               for row in result["cohorts"] if row["course_code"] == "TEST-01")
+    assert any(group["typology"] == "Dottorati di ricerca" and
+               group["count"] == 1
+               for group in result["invalid_source_rows_by_typology"])
