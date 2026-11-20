@@ -467,3 +467,53 @@ def test_auto_mapping_reads_synthetic_template_without_saving_automatically(clie
     record = client.get(f"/api/imports/{import_id}/mapping").json()
     assert record["mapping"] is None
     assert record["available_fields"]
+
+
+def test_missing_official_coverage_id_is_not_a_mapping_warning():
+    from app.column_mapping import evaluate_mapping
+    mapped = {
+        "cds_codice": 1, "insegnamento": 4,
+        "ssd_insegnamento_originale": 9, "docente_identificativo": 12,
+    }
+    assert evaluate_mapping("offerta", mapped) == []
+
+
+def test_source_row_identity_is_unique_and_only_snapshot_scoped():
+    from app.row_identity import source_row_id
+
+    file_sha = "a" * 64  # synthetic fixture; never a real file hash
+    first = source_row_id(file_sha, "Foglio sintetico", 10)
+    assert first.startswith("SRC-")
+    assert first == source_row_id(file_sha, "Foglio sintetico", 10)
+    assert first != source_row_id(file_sha, "Foglio sintetico", 11)
+    assert first != source_row_id("b" * 64, "Foglio sintetico", 10)
+    assert first != source_row_id(file_sha, "Foglio diverso", 10)
+    with pytest.raises(ValueError):
+        source_row_id(file_sha, "Foglio sintetico", 0)
+
+
+def test_mapping_loaded_from_database_does_not_repeat_legacy_id_warning(client):
+    csrf = signed_in(client)
+    imported = client.post(
+        "/api/years/1/imports", headers=csrf,
+        data={"kind": "offerta", "test_data_only": "true"},
+        files={"source": ("prova-sintetica.xlsx", synthetic_xlsx(), "application/octet-stream")},
+    )
+    assert imported.status_code == 200
+    report_id = imported.json()["id"]
+    saved = client.put(f"/api/imports/{report_id}/mapping", headers=csrf, json={
+        "sheet_name": "Sintetico", "header_row": 1,
+        "assigned": {"cds_codice": 0, "insegnamento": 1},
+        "expected_version": 0,
+    })
+    assert saved.status_code == 200
+    import app.main as main
+    with main.connect() as cx:
+        cx.execute(
+            "UPDATE source_mappings SET warnings_json=? WHERE import_id=?",
+            ('["ID copertura storica: da verificare prima della riconciliazione"]', report_id),
+        )
+    loaded = client.get(f"/api/imports/{report_id}/mapping")
+    assert loaded.status_code == 200
+    assert not any("ID copertura" in warning
+                   for warning in loaded.json()["mapping"]["warnings"])
