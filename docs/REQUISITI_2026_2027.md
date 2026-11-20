@@ -168,3 +168,10 @@ La mappatura salvata è associata all'ID del report e persistita nel database pr
 L'utente ha chiarito che, **per direttiva**, tutte le attività presenti nel report ufficiale identificato come offerta **2026/27** sono da gestire come attività dell'A.A. **2026/27**, anche se nella singola riga compare un A.A. diverso (incluso il caso convenzionale delle Scuole di specializzazione). **Non è quindi necessario né corretto bloccare singole righe in base alla corrispondenza dell'A.A.**
 
 DidaUP deve usare come riferimento l'**anno accademico dell'archivio/report selezionato all'importazione**; il campo A.A. originale di ciascuna riga resta visibile e **immutato** quale dato storico. Il controllo sull'archivio di appartenenza del report resta attivo: il report scelto per la generazione deve appartenere all'A.A. selezionato e al corretto tipo di fonte. Non introdurre interpretazioni per tipologia di corso e non applicare il precedente blocco differenziato sulle Scuole di specializzazione. Questa regola **sostituisce la precedente verifica dell'A.A. per singola riga**, mantenendo integra la fonte.
+
+
+## Generazione non bloccante per annualità incomplete — CONFERMATO
+
+Una riga del report con codice CdS, sede oppure anno di corso assente/non interpretabile **non deve fermare la generazione delle cinque copie**. Quando esistono annualità esplicitamente escluse, DidaUP applica l'esclusione **solo in caso di corrispondenza certa** di codice CdS + sede + anno; tutte le altre righe sono **mantenute** nel file, senza attribuzioni presunte. Il riepilogo comunica il **numero di righe mantenute con identificativo di annualità incompleto** e riporta esempi dei numeri di riga del report, così l'operatore può esaminarle in seguito. Il report sorgente non viene modificato.
+
+La regola riguarda le anomalie amministrative classificatorie delle annualità. Rimangono distinti gli errori di integrità tecnica della fonte (es. hash diverso, tracciato/associazioni incompatibili), da non occultare perché impedirebbero di ricostruire correttamente i dati.
