@@ -44,15 +44,17 @@ def review_five_workbooks(
     assigned: dict[str, int], history_year: str,
     files: list[Path], excluded: set[tuple[str, str, int]] | None = None,
     included: set[tuple[str, str, int]] | None = None,
+    cohort_names: dict[tuple[str, str, int], str] | None = None,
 ) -> dict:
     if len(files) != 5:
         raise ReviewError("Occorrono esattamente cinque file Excel")
     try:
         (historical, excluded_count, unresolved_count, unresolved_examples,
          missing_code_count, missing_code_examples, excluded_ambiguous_count,
-         unmatched_exclusions_count, unmatched_exclusion_examples) = _prepare(
+         unmatched_exclusions_count, unmatched_exclusion_examples,
+         fallback_count, fallback_examples, partial_count, partial_examples) = _prepare(
             original, source_sha256, sheet_name, header_row, assigned,
-            history_year, excluded or set(), included,
+            history_year, excluded or set(), included, cohort_names,
         )
     except WorkbookGenerationError as exc:
         raise ReviewError(str(exc)) from exc
@@ -221,6 +223,10 @@ def review_five_workbooks(
         "excluded_rows_with_missing_year": excluded_ambiguous_count,
         "unmatched_exclusion_count": unmatched_exclusions_count,
         "unmatched_exclusion_examples": unmatched_exclusion_examples,
+        "cohorts_matched_by_unique_name_rows": fallback_count,
+        "cohorts_matched_by_unique_name_examples": fallback_examples,
+        "mixed_annuality_rows_retained": partial_count,
+        "mixed_annuality_example_rows": partial_examples,
         "unresolved_annuality_rows_included": unresolved_count,
         "unresolved_annuality_example_rows": unresolved_examples,
         "missing_activity_codes_rows_included": missing_code_count,
