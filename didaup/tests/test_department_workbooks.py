@@ -128,13 +128,21 @@ def test_explicit_cohort_exclusions_apply_to_all_five_copies(tmp_path):
         assert all(x == contents[0] for x in contents)
 
 
-def test_mismatched_year_and_tampered_source_are_refused(tmp_path):
+def test_per_row_academic_year_is_preserved_and_source_integrity_checked(tmp_path):
     src = tmp_path / "synthetic.xlsx"
     assigned = make_source(src, wrong_year=True)
     digest = hashlib.sha256(src.read_bytes()).hexdigest()
-    with pytest.raises(WorkbookGenerationError, match="non coerente"):
-        build_five_workbooks(src, digest, "Offerta sintetica", 1,
-                             assigned, "2026/27")
+    archive, details = build_five_workbooks(
+        src, digest, "Offerta sintetica", 1, assigned, "2026/27"
+    )
+    assert details["historical_rows"] == 4
+    with ZipFile(io.BytesIO(archive)) as zf:
+        output = tmp_path / "output.xlsx"
+        output.write_bytes(zf.read(zf.namelist()[0]))
+        rows = CalamineWorkbook.from_path(output).get_sheet_by_name(
+            "Proposte SSD"
+        ).to_python(skip_empty_area=False)
+        assert rows[6][3] == "2025/26"
     with pytest.raises(WorkbookGenerationError, match="hash"):
         build_five_workbooks(src, "0" * 64, "Offerta sintetica", 1,
                              assigned, "2026/27")
