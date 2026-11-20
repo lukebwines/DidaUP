@@ -182,6 +182,11 @@
                 </details>
                 <button class="secondary" type="button" id="cohort-clear-filters">Ripristina tutti i filtri</button>
               </div>
+              <details id="cohort-extraction-diagnostics" class="cohort-diagnostics" hidden>
+                <summary id="cohort-extraction-diagnostics-summary">Righe non classificabili nel report</summary>
+                <p class="muted">Queste righe non sono annualità selezionabili perché manca un identificativo certo. Sono conservate nel report e non vengono escluse automaticamente.</p>
+                <div id="cohort-extraction-diagnostics-body"></div>
+              </details>
               <div class="cohort-count-row" aria-live="polite">
                 <span id="cohort-review-count" class="chip"></span>
                 <span id="cohort-review-selected" class="chip"></span>
