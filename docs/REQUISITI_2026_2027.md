@@ -67,3 +67,9 @@ Il software può proporre associazioni in modo deterministico **solo quando trov
 
 ## Chiarimento sul report sorgente da schermata DidaUP
 La schermata ricevuta mostra un import Excel per 2026/27 con 11.735 righe e 110 colonne, mentre le 36 intestazioni fornite per il file distribuito ai referenti descrivono un **tracciato di output** più compatto. La futura elaborazione non deve imporre la stessa mappatura ai due tracciati. La distinzione tra dati fonte e campi di proposta è stata recepita nell'alpha 0.1.5.
+
+## ID copertura storica — chiarimento funzionale
+
+Nel report 2026/27 l'identificativo ufficiale univoco della singola copertura **non è stato ancora verificato**. L'assenza di una colonna etichettata come tale non deve causare un avviso di incompletezza di mappatura: il campo è **facoltativo** e sarà usato soltanto se effettivamente presente nel tracciato.
+
+Per mantenere distinte le righe senza modificarle si potrà usare un ID tecnico interno, derivato da impronta del file sorgente, foglio e numero di riga originale. Questo ID serve esclusivamente alla tracciabilità nello snapshot; non dimostra che due righe di anni o importazioni differenti si riferiscano alla stessa copertura. La futura riconciliazione dovrà impiegare i riferimenti ufficiali disponibili e rilevare casi ambigui, co-docenze, frazionamenti e duplicazioni.
