@@ -4,24 +4,144 @@
 const workloadUI = (() => {
   const stateLocal = {year: null, version: 0, rules: [], dirty: false, editing: -1, choices: null};
 
-  function choose(id, values, placeholder, getValue, getLabel) {
-    const select = document.getElementById(id);
-    select.replaceChildren();
-    const wildcard = document.createElement("option");
-    wildcard.value = "";
-    wildcard.textContent = placeholder;
-    select.append(wildcard);
-    for (const item of values) {
-      const option = document.createElement("option");
-      option.value = getValue(item);
-      option.textContent = getLabel(item);
-      select.append(option);
-    }
+  const criteria = ["typologia", "cds", "taf"];
+  const fieldNames = {typologia: "tipologia", cds: "cds", taf: "taf"};
+  const defaultLabels = {
+    typologia: "Tutte le tipologie", cds: "Tutti i CdS", taf: "Tutte le TAF"
+  };
+  const groups = Object.fromEntries(criteria.map(key => [
+    key, {options: [], selected: new Set(), filter: ""}
+  ]));
+
+  function asArray(value) {
+    if (Array.isArray(value)) return value.filter(x => typeof x === "string" && x.trim());
+    return typeof value === "string" && value.trim() ? [value] : [];
+  }
+  function criterionSummary(value, fallback, max = 3) {
+    const selections = asArray(value);
+    if (!selections.length) return fallback;
+    const shown = selections.slice(0, max).join(", ");
+    return selections.length > max ? shown + " (+" + (selections.length - max) + ")" : shown;
   }
   function labelOf(rule) {
-    const labels = [rule.tipologia || "Tutte", rule.cds || "Tutti", rule.taf || "Tutte"];
+    const labels = [
+      criterionSummary(rule.tipologia, "Tutte"),
+      criterionSummary(rule.cds, "Tutti"),
+      criterionSummary(rule.taf, "Tutte")
+    ];
     return labels.join(" · ") + " · " + rule.value +
       (rule.mode === "percentuale" ? "%" : " ore");
+  }
+  function multiElement(key, suffix) {
+    return document.getElementById("workload-" + key + "-" + suffix);
+  }
+  function filteredOptions(key) {
+    const {options, filter} = groups[key];
+    const query = filter.toLocaleLowerCase("it").trim();
+    if (!query) return options;
+    return options.filter(option =>
+      (option.label + " " + option.value).toLocaleLowerCase("it").includes(query)
+    );
+  }
+  function closeMulti(key) {
+    multiElement(key, "panel").hidden = true;
+    multiElement(key, "toggle").setAttribute("aria-expanded", "false");
+  }
+  function refreshMulti(key) {
+    const group = groups[key];
+    const count = group.selected.size;
+    const toggle = multiElement(key, "toggle");
+    toggle.textContent = count ? count + " selezionat" + (count === 1 ? "o" : "i") : defaultLabels[key];
+    toggle.title = count ? [...group.selected].join(", ") : defaultLabels[key];
+    multiElement(key, "count").textContent = count
+      ? count + " selezionati · " + filteredOptions(key).length + " opzioni visibili"
+      : "Nessuna selezione: " + defaultLabels[key].toLowerCase();
+    const choices = multiElement(key, "options");
+    choices.replaceChildren();
+    const visible = filteredOptions(key);
+    if (!visible.length) {
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "Nessuna corrispondenza per la ricerca.";
+      choices.append(empty);
+    }
+    for (const option of visible) {
+      const label = document.createElement("label");
+      label.className = "workload-multi-option";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = option.value;
+      input.checked = group.selected.has(option.value);
+      input.addEventListener("change", () => {
+        if (input.checked) group.selected.add(option.value);
+        else group.selected.delete(option.value);
+        // Update counters without recreating focused checkbox rows.
+        const n = group.selected.size;
+        toggle.textContent = n ? n + " selezionat" + (n === 1 ? "o" : "i") : defaultLabels[key];
+        toggle.title = n ? [...group.selected].join(", ") : defaultLabels[key];
+        multiElement(key, "count").textContent = n
+          ? n + " selezionati · " + visible.length + " opzioni visibili"
+          : "Nessuna selezione: " + defaultLabels[key].toLowerCase();
+      });
+      const title = document.createElement("span");
+      title.textContent = option.label;
+      label.append(input, title);
+      choices.append(label);
+    }
+  }
+  function setMulti(key, values) {
+    const group = groups[key];
+    const restored = asArray(values);
+    const available = new Set(group.options.map(option => option.value));
+    for (const value of restored) {
+      // Previously saved values remain visible even if absent from this source.
+      if (!available.has(value)) {
+        group.options.push({value, label: value + " (non presente nel report corrente)"});
+        available.add(value);
+      }
+    }
+    group.selected = new Set(restored);
+    group.filter = "";
+    multiElement(key, "search").value = "";
+    refreshMulti(key);
+  }
+  function configureMulti(key, options) {
+    groups[key].options = options;
+    setMulti(key, []);
+    closeMulti(key);
+  }
+  function initializeMulti() {
+    for (const key of criteria) {
+      multiElement(key, "toggle").addEventListener("click", () => {
+        const panel = multiElement(key, "panel");
+        const opening = panel.hidden;
+        criteria.forEach(closeMulti);
+        if (opening) {
+          panel.hidden = false;
+          multiElement(key, "toggle").setAttribute("aria-expanded", "true");
+          multiElement(key, "search").focus();
+        }
+      });
+      multiElement(key, "search").addEventListener("input", event => {
+        groups[key].filter = event.target.value;
+        refreshMulti(key);
+      });
+      multiElement(key, "all").addEventListener("click", () => {
+        for (const option of filteredOptions(key)) groups[key].selected.add(option.value);
+        refreshMulti(key);
+      });
+      multiElement(key, "clear").addEventListener("click", () => {
+        groups[key].selected.clear();
+        refreshMulti(key);
+      });
+    }
+    document.addEventListener("click", event => {
+      if (!event.target.closest(".workload-multi"))
+        criteria.forEach(closeMulti);
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") criteria.forEach(closeMulti);
+    });
   }
   function drawRules() {
     const body = document.getElementById("workload-rules");
@@ -29,10 +149,15 @@ const workloadUI = (() => {
     for (const [index, rule] of stateLocal.rules.entries()) {
       const row = body.insertRow();
       for (const value of [
-        rule.tipologia || "Tutte", rule.cds || "Tutti", rule.taf || "Tutte",
+        criterionSummary(rule.tipologia, "Tutte"),
+        criterionSummary(rule.cds, "Tutti"),
+        criterionSummary(rule.taf, "Tutte"),
         rule.mode === "percentuale" ? "Percentuale" : "Quota fissa",
         rule.value + (rule.mode === "percentuale" ? " %" : " ore")
-      ]) row.insertCell().textContent = value;
+      ]) {
+        const cell = row.insertCell();
+        cell.textContent = value;
+      }
       const actions = row.insertCell();
       if (state.user?.role === "admin") {
         const edit = document.createElement("button");
@@ -67,6 +192,8 @@ const workloadUI = (() => {
   function resetForm() {
     stateLocal.editing = -1;
     document.getElementById("workload-rule-form").reset();
+    criteria.forEach(key => setMulti(key, []));
+    criteria.forEach(closeMulti);
     document.getElementById("workload-add").textContent = "Aggiungi regola";
     document.getElementById("workload-cancel").hidden = true;
     updateLimit();
@@ -74,10 +201,9 @@ const workloadUI = (() => {
   function editRule(index) {
     const rule = stateLocal.rules[index];
     stateLocal.editing = index;
-    for (const [field, selector] of [
-      ["tipologia", "workload-typologia"], ["cds", "workload-cds"], ["taf", "workload-taf"],
-      ["mode", "workload-mode"], ["value", "workload-value"]
-    ]) document.getElementById(selector).value = rule[field];
+    for (const key of criteria) setMulti(key, rule[fieldNames[key]]);
+    document.getElementById("workload-mode").value = rule.mode;
+    document.getElementById("workload-value").value = rule.value;
     document.getElementById("workload-add").textContent = "Aggiorna regola";
     document.getElementById("workload-cancel").hidden = false;
     updateLimit();
@@ -96,10 +222,11 @@ const workloadUI = (() => {
       "years/" + state.selected + "/workload/choices?import_id=" + encodeURIComponent(source)
     );
     stateLocal.choices = result;
-    choose("workload-typologia", result.tipologie, "Tutte le tipologie", x => x, x => x);
-    choose("workload-cds", result.cds, "Tutti i CdS", x => x.code,
-      x => x.code + (x.name ? " · " + x.name : ""));
-    choose("workload-taf", result.taf, "Tutte le TAF", x => x, x => x);
+    configureMulti("typologia", result.tipologie.map(value => ({value, label: value})));
+    configureMulti("cds", result.cds.map(item => ({
+      value: item.code, label: item.code + (item.name ? " · " + item.name : "")
+    })));
+    configureMulti("taf", result.taf.map(value => ({value, label: value})));
     const missing = [];
     if (!result.mapped.tot_ore_previste) missing.push("TOT ORE PREVISTE");
     if (!result.mapped.tipologia) missing.push("TIPOLOGIA (necessaria per regole per tipologia)");
@@ -149,6 +276,7 @@ const workloadUI = (() => {
     }
   }
   function setup() {
+    initializeMulti();
     document.getElementById("workload-source").addEventListener("change", () => {
       choices().catch(error => showNotice(error.message, true));
     });
@@ -156,13 +284,13 @@ const workloadUI = (() => {
     document.getElementById("workload-cancel").addEventListener("click", resetForm);
     document.getElementById("workload-rule-form").addEventListener("submit", event => {
       event.preventDefault();
-      const fields = [
-        ["tipologia", "workload-typologia"], ["cds", "workload-cds"], ["taf", "workload-taf"],
-        ["mode", "workload-mode"], ["value", "workload-value"]
-      ];
-      const rule = {};
-      for (const [key, selector] of fields)
-        rule[key] = document.getElementById(selector).value.trim();
+      const rule = {
+        tipologia: [...groups.typologia.selected],
+        cds: [...groups.cds.selected],
+        taf: [...groups.taf.selected],
+        mode: document.getElementById("workload-mode").value,
+        value: document.getElementById("workload-value").value.trim()
+      };
       if (!rule.value) return;
       if (stateLocal.editing >= 0) stateLocal.rules[stateLocal.editing] = rule;
       else stateLocal.rules.push(rule);
