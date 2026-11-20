@@ -45,7 +45,7 @@ def make_synthetic_school_report(path):
     headers = [
         "TIPOLOGIA", "SEDE CORSO", "CODICE CORSO", "CDS",
         "ANNO ACCADEMICO", "CODICE INS", "INSEGNAMENTO",
-        "MODULO", "ANNO", "SSD INSEGNAMENTO", "TOT ORE EFFETTIVE"
+        "MODULO", "ANNO", "SSD INSEGNAMENTO", "TOT ORE EFFETTIVE", "TOT ORE PREVISTE"
     ]
     wb = xlsxwriter.Workbook(str(path))
     ws = wb.add_worksheet("Offerta")
@@ -54,7 +54,7 @@ def make_synthetic_school_report(path):
     def row(i, code, title, kind, year):
         vals = [
             kind, "Sede TEST", code, title, year, f"INS-{i}",
-            "Insegnamento sintetico", "Modulo sintetico", 1, "SSD-TEST", 12,
+            "Insegnamento sintetico", "Modulo sintetico", 1, "SSD-TEST", 12, 12,
         ]
         for col, val in enumerate(vals):
             if isinstance(val, int):
@@ -113,14 +113,14 @@ def test_previous_year_in_unclassified_row_is_preserved(tmp_path):
     headers = [
         "TIPOLOGIA", "SEDE CORSO", "CODICE CORSO", "CDS",
         "ANNO ACCADEMICO", "CODICE INS", "INSEGNAMENTO",
-        "MODULO", "ANNO", "SSD INSEGNAMENTO", "TOT ORE EFFETTIVE"
+        "MODULO", "ANNO", "SSD INSEGNAMENTO", "TOT ORE EFFETTIVE", "TOT ORE PREVISTE"
     ]
     for col, name in enumerate(headers):
         sh.write_string(0, col, name)
     values = [
         "CORSO NON CLASSIFICATO", "Sede TEST", "UNKNOWN",
         "Attività generica TEST", "2025/26", "INS-X", "Insegnamento",
-        "Modulo", 1, "SSD-X", 9,
+        "Modulo", 1, "SSD-X", 9, 9,
     ]
     for col, val in enumerate(values):
         if isinstance(val, int):
