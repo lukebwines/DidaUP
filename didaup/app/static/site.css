@@ -139,3 +139,30 @@ td small{display:block;color:#718398}td button{padding:7px 11px!important;font-s
 .mapping-field.mapping-conflict{border:1px solid #d65050;border-radius:8px;padding:7px;background:#fff1f1}
 .mapping-field.mapping-conflict select{border-color:#c74747}
 [data-theme='dark'] .mapping-field.mapping-conflict{border-color:#ff8888;background:#4b242b}
+
+/* CdS annuality review: fast search and accessible checkbox selection */
+.cohort-review .cohort-source-row{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:16px 0}
+.cohort-source-row label{display:grid;gap:6px;flex:1 1 310px;font-size:.82rem;font-weight:650;color:#526c82}
+.cohort-source-row select{width:100%}
+.cohort-search-row{display:flex;gap:13px;align-items:end;flex-wrap:wrap;margin:18px 0 12px}
+.cohort-search-row label{display:grid;gap:5px;font-size:.81rem;font-weight:650;color:#526c82}
+.cohort-search-row label.cohort-search{flex:1 1 300px}
+.cohort-search-row input{width:100%}
+.cohort-count-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 12px}
+.cohort-batch-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.cohort-list-wrap{max-height:450px;border-radius:10px;border:1px solid #dce5ee}
+.cohort-list-wrap table{min-width:690px}
+.cohort-list-wrap thead th{position:sticky;top:0;z-index:1}
+.cohort-list-wrap td:nth-child(1),.cohort-list-wrap td:nth-child(5),.cohort-list-wrap td:nth-child(6){text-align:center}
+.cohort-exclude-checkbox{width:18px!important;height:18px;min-height:0!important;cursor:pointer;accent-color:#c45235}
+.cohort-excluded-row{background:#fff1ed}
+.cohort-confirm{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:20px 0 10px;padding:15px;border-radius:10px;background:#f4f8fd;border:1px solid #dbe6f3}
+.cohort-confirm label{flex:1 1 270px;font-size:.8rem;font-weight:650;color:#526c82;display:grid;gap:5px}
+.cohort-confirm input{width:100%}
+.cohort-review td small{color:#8b7468}
+[data-theme="dark"] .cohort-source-row label,[data-theme="dark"] .cohort-search-row label,[data-theme="dark"] .cohort-confirm label{color:#c6d8ec}
+[data-theme="dark"] .cohort-list-wrap{border-color:#39516b}
+[data-theme="dark"] .cohort-excluded-row{background:#412d32}
+[data-theme="dark"] .cohort-confirm{background:#1c304a;border-color:#3a5470}
+[data-theme="dark"] .cohort-review td small{color:#e0b89c}
+@media(max-width:630px){.cohort-confirm button{width:100%}.cohort-source-row button{width:100%}}
