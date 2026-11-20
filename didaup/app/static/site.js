@@ -5,10 +5,29 @@ const state = {user: null, years: [], selected: null, view: "dashboard"};
 const titles = {
   dashboard: ["PANORAMICA", "Programmazione didattica"],
   cohorts: ["ANNUALITÀ CDS", "Ambito di programmazione"],
+  imports: ["IMPORTAZIONE", "Acquisizione report Excel"],
+  archive: ["ARCHIVIO", "Gestione e azzeramento"],
   workbook: ["GENERA EXCEL", "File per i referenti SSD"],
   users: ["GESTIONE ACCOUNT", "Utenti autorizzati"],
   security: ["SICUREZZA", "Accesso e credenziali"]
 };
+
+function applyTheme(theme) {
+  const chosen = theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = chosen;
+  document.querySelectorAll("[data-theme-toggle]").forEach(btn => {
+    btn.textContent = chosen === "dark" ? "☀ Tema chiaro" : "◐ Tema scuro";
+    btn.setAttribute("aria-label", chosen === "dark" ? "Attiva modalità chiara" : "Attiva modalità scura");
+  });
+  try { localStorage.setItem("didaup-theme", chosen); } catch {}
+}
+
+function initialTheme() {
+  try {
+    return localStorage.getItem("didaup-theme") ||
+      (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  } catch { return "light"; }
+}
 
 function showNotice(message, bad = false) {
   const node = el("notice");
@@ -59,13 +78,13 @@ async function showApp() {
   const writable = admin || state.user.role === "operatore";
   document.querySelectorAll(".admin-only").forEach(node => node.hidden = !admin);
   document.querySelectorAll(".write-only").forEach(node => node.hidden = !writable);
-  if (!admin && state.view === "users") state.view = "dashboard";
+  if (!admin && ["users", "archive"].includes(state.view)) state.view = "dashboard";
   await refreshYears();
   switchView(state.view);
 }
 
 function switchView(view) {
-  if (view === "users" && state.user?.role !== "admin") return;
+  if (["users", "archive"].includes(view) && state.user?.role !== "admin") return;
   if (!titles[view]) return;
   state.view = view;
   hideNotice();
@@ -77,6 +96,8 @@ function switchView(view) {
   setText("page-title", titles[view][1]);
   if (view === "users") refreshUsers().catch(e => showNotice(e.message, true));
   if (view === "cohorts") refreshCohorts().catch(e => showNotice(e.message, true));
+  if (view === "imports") refreshImports().catch(e => showNotice(e.message, true));
+  if (view === "archive") refreshArchive().catch(e => showNotice(e.message, true));
 }
 
 async function refreshYears(preferred) {
@@ -96,6 +117,56 @@ async function refreshYears(preferred) {
   setText("metric-year", current?.code || "—");
   setText("metric-total", current?.total ?? 0);
   setText("metric-excluded", current?.excluded ?? 0);
+}
+
+async function refreshImports() {
+  const tbody = el("imports-body");
+  tbody.replaceChildren();
+  if (!state.selected) return;
+  const files = await api("years/" + state.selected + "/imports");
+  setText("imports-count", files.length + " file");
+  el("imports-empty").hidden = files.length > 0;
+  for (const file of files) {
+    const tr = tbody.insertRow();
+    const nameCell = tr.insertCell();
+    nameCell.textContent = file.original_name;
+    const hash = document.createElement("small");
+    hash.textContent = "SHA256: " + file.sha256.slice(0, 12) + "…";
+    nameCell.appendChild(hash);
+    tr.insertCell().textContent = file.kind === "offerta" ? "Offerta e coperture" : "Docenti di competenza";
+    const names = tr.insertCell();
+    for (const s of file.sheets) {
+      const label = document.createElement("div");
+      label.textContent = s.name + " · " + s.rows + " righe · " + s.columns + " colonne";
+      names.appendChild(label);
+    }
+    tr.insertCell().textContent = (file.size_bytes / (1024 * 1024)).toFixed(2) + " MB";
+    const status = tr.insertCell();
+    status.textContent = "Acquisito · Da mappare";
+    status.className = "status off";
+  }
+}
+
+function updateResetPhrase() {
+  const selected = state.years.find(x => x.id === state.selected);
+  const phrase = el("reset-scope").value === "all"
+    ? "AZZERA ARCHIVIO" : "AZZERA " + (selected?.code || "AAAA/AA");
+  setText("reset-required", phrase);
+  return phrase;
+}
+
+async function refreshArchive() {
+  if (state.user?.role !== "admin") return;
+  const summary = await api("admin/archive/summary");
+  const body = el("archive-summary-body");
+  body.replaceChildren();
+  for (const row of summary) {
+    const tr = body.insertRow();
+    tr.insertCell().textContent = row.code;
+    tr.insertCell().textContent = String(row.cohorts);
+    tr.insertCell().textContent = String(row.imports);
+  }
+  updateResetPhrase();
 }
 
 async function refreshCohorts() {
@@ -218,7 +289,12 @@ function hookForms() {
 
   el("academic-select").addEventListener("change", async event => {
     state.selected = Number(event.target.value);
-    try { await refreshYears(state.selected); if (state.view === "cohorts") await refreshCohorts(); }
+    try {
+      await refreshYears(state.selected);
+      if (state.view === "cohorts") await refreshCohorts();
+      if (state.view === "imports") await refreshImports();
+      if (state.view === "archive") await refreshArchive();
+    }
     catch (error) { showNotice(error.message, true); }
   });
 
@@ -277,10 +353,74 @@ function hookForms() {
   });
 
   el("go-cohorts").addEventListener("click", () => switchView("cohorts"));
+  el("go-imports").addEventListener("click", () => switchView("imports"));
+  document.querySelectorAll("[data-theme-toggle]").forEach(button => {
+    button.addEventListener("click", () => {
+      applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+    });
+  });
+  el("reset-scope").addEventListener("change", updateResetPhrase);
+  el("import-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!state.selected) return;
+    const file = el("import-file").files[0];
+    if (!file) return;
+    if (file.size > 32 * 1024 * 1024) { showNotice("File superiore a 32 MB", true); return; }
+    const form = new FormData();
+    form.append("kind", el("import-kind").value);
+    form.append("source", file, file.name);
+    const submit = el("import-submit");
+    submit.disabled = true;
+    setText("import-progress", "Acquisizione e lettura dei fogli in corso…");
+    try {
+      const response = await fetch("api/years/" + state.selected + "/imports", {
+        method: "POST", credentials: "same-origin",
+        headers: {"X-CSRF-Token": state.user.csrf}, body: form
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof payload.detail === "string" ? payload.detail : "Importazione fallita");
+      await refreshImports();
+      el("import-form").reset();
+      showNotice("Report acquisito. La struttura è stata letta; la mappatura degli incarichi deve ancora essere validata.");
+    } catch (error) {
+      showNotice(error.message, true);
+    } finally {
+      submit.disabled = false;
+      setText("import-progress", "");
+    }
+  });
+
+  el("archive-reset-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const phrase = updateResetPhrase();
+    if (el("reset-confirmation").value !== phrase) {
+      showNotice("La conferma testuale non corrisponde. Nessun dato eliminato.", true);
+      return;
+    }
+    if (!window.confirm("Confermi la cancellazione definitiva dei dati selezionati? L'operazione non è annullabile.")) return;
+    const scope = el("reset-scope").value;
+    try {
+      await api("admin/archive/reset", "POST", {
+        scope, year_id: scope === "year" ? state.selected : null,
+        confirmation: el("reset-confirmation").value,
+        password: el("reset-password").value
+      });
+      el("archive-reset-form").reset();
+      await refreshYears();
+      await refreshArchive();
+      showNotice("Archivio azzerato. Gli account degli operatori sono stati conservati.");
+    } catch (error) {
+      showNotice(error.message, true);
+    } finally {
+      el("reset-password").value = "";
+      updateResetPhrase();
+    }
+  });
   document.querySelectorAll(".nav-item").forEach(node => node.addEventListener("click", () => switchView(node.dataset.view)));
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  applyTheme(initialTheme());
   hookForms();
   try { await showApp(); }
   catch { showLogin(); }
