@@ -4,6 +4,7 @@ async function openMapping(importId) {
   const data = await api("imports/" + importId + "/mapping");
   state.mapping = data;
   state.preview = null;
+  state.suggestion = null;
   el("mapping-save").disabled = state.user?.role === "lettura";
   setText("mapping-source-name", data.original_name);
   setText("mapping-source-kind", data.kind === "offerta"
@@ -19,7 +20,11 @@ async function openMapping(importId) {
   picker.value = data.mapping?.sheet_name || data.sheets[0]?.name || "";
   el("mapping-header-row").value = data.mapping?.header_row || 1;
   switchView("mapping");
-  await loadMappingPreview();
+  if (!data.mapping) await autoMap();
+  else {
+    setText("mapping-auto-status", "Mappatura salvata in precedenza. Puoi rivederla o usare il riconoscimento automatico senza modificare l'originale.");
+    await loadMappingPreview();
+  }
 }
 
 async function loadMappingPreview() {
@@ -44,6 +49,9 @@ async function loadMappingPreview() {
   const previous = state.mapping.mapping;
   const reuse = previous && previous.sheet_name === sheetName &&
     previous.header_row === rowNumber;
+  const suggestion = state.suggestion;
+  const suggestHere = suggestion && suggestion.sheet_name === sheetName &&
+    suggestion.header_row === rowNumber;
   for (const field of state.mapping.available_fields) {
     const label = document.createElement("label");
     label.className = "mapping-field";
@@ -63,9 +71,12 @@ async function loadMappingPreview() {
         (column.label || "[senza intestazione]");
       select.appendChild(option);
     }
-    if (reuse && Object.prototype.hasOwnProperty.call(previous.assigned, field.key)) {
+    if (suggestHere && Object.prototype.hasOwnProperty.call(suggestion.assigned, field.key)) {
+      select.value = String(suggestion.assigned[field.key]);
+    } else if (reuse && Object.prototype.hasOwnProperty.call(previous.assigned, field.key)) {
       select.value = String(previous.assigned[field.key]);
     }
+    if (field.key.startsWith("proposta_")) label.classList.add("proposal-field");
     label.appendChild(select);
     fields.appendChild(label);
   }
@@ -92,6 +103,39 @@ async function loadMappingPreview() {
     body.appendChild(row);
   }
   renderMappingWarnings(reuse ? previous.warnings || [] : []);
+  if (suggestHere) el("mapping-advanced").open = false;
+}
+
+async function autoMap() {
+  if (!state.mapping) return;
+  const trigger = el("mapping-auto");
+  trigger.disabled = true;
+  try {
+    const result = await api("imports/" + state.mapping.id + "/autodetect");
+    if (!result.recognized) {
+      state.suggestion = null;
+      el("mapping-advanced").open = true;
+      setText("mapping-auto-status", result.message || "Tracciato non riconosciuto: usa la mappatura manuale.");
+      await loadMappingPreview();
+      return;
+    }
+    state.suggestion = result;
+    el("mapping-sheet").value = result.sheet_name;
+    el("mapping-header-row").value = result.header_row;
+    await loadMappingPreview();
+    const missing = result.missing_proposal_fields || [];
+    const complete = missing.length === 0;
+    const warnings = Object.keys(result.ambiguous || {}).length;
+    setText("mapping-auto-status", "Riconosciute " + result.matched +
+      " colonne dalla struttura dichiarata; " +
+      (complete ? "tutti i 3 campi di variazione individuati." :
+        "campi di variazione mancanti: " + missing.length + ".") +
+      (warnings ? " Colonne ambigue: " + warnings + "." : "") +
+      " Controlla l'anteprima e salva come bozza.");
+    if (warnings || !complete) el("mapping-advanced").open = true;
+  } finally {
+    trigger.disabled = false;
+  }
 }
 
 function renderMappingWarnings(warnings) {
@@ -142,11 +186,14 @@ async function saveMapping() {
 document.addEventListener("DOMContentLoaded", () => {
   const markOutdated = () => {
     state.preview = null;
+    state.suggestion = null;
     setText("mapping-info", "La scelta delle colonne è cambiata: premi Leggi colonne prima di salvare.");
   };
   el("mapping-sheet").addEventListener("change", markOutdated);
   el("mapping-header-row").addEventListener("change", markOutdated);
   el("back-to-imports").addEventListener("click", () => switchView("imports"));
+  el("mapping-auto").addEventListener("click", () =>
+    autoMap().catch(error => showNotice(error.message, true)));
   el("mapping-load").addEventListener("click", () =>
     loadMappingPreview().catch(error => showNotice(error.message, true)));
   el("mapping-save").addEventListener("click", () =>
