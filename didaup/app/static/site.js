@@ -522,11 +522,18 @@ function hookForms() {
     if (!Number.isInteger(sourceId) || sourceId < 1) return;
     const button = el("workbook-generate-button");
     button.disabled = true;
-    el("workbook-progress").textContent = "Creazione delle cinque copie in corso…";
+    el("workbook-progress").textContent = "Creazione dei cinque Excel e del registro interno delle righe escluse…";
     try {
       const result = await api("years/" + state.selected + "/department-workbooks",
         "POST", {import_id: sourceId});
       const excludedRows = Number(result.excluded_rows || 0);
+      const auditRows = Number(result.excluded_file_rows ?? -1);
+      const auditInfo = " Sesto file riservato CONTROLLO INTERNO: " +
+        auditRows + " righe escluse, con motivo dell'esclusione. " +
+        "NON condividerlo con i referenti.";
+      if (excludedRows !== auditRows) {
+        throw new Error("Incoerenza tra righe escluse e registro interno: non distribuire i file.");
+      }
       const mutTrue = Number(result.mutuazione_true_rows || 0);
       const mutFalse = Number(result.mutuazione_false_rows || 0);
       const mutOther = Number(result.mutuazione_other_rows || 0);
@@ -588,7 +595,8 @@ function hookForms() {
       showNotice("Generati cinque file identici con " +
         result.historical_rows + " righe storiche ciascuno; nessun filtro dipartimentale. " +
         "Righe escluse: " + excludedRows + ". " +
-        "Il pacchetto ZIP è disponibile per il download. " +
+        "Il pacchetto ZIP con 6 Excel è disponibile per il download. " +
+        auditInfo +
         "Revisione: " + (result.export_revision || "non disponibile") +
         " (non sostituisce gli Excel già presenti su OneDrive)." +
         warningMessage + missingCodeMessage + missedMessage +
@@ -596,7 +604,7 @@ function hookForms() {
         Boolean(residual || missed || mixedYears));
       el("workbook-progress").textContent =
         "Revisione " + (result.export_revision || "—") +
-        ". Escluse " + excludedRows + " righe. " +
+        ". Escluse " + excludedRows + " righe, tutte presenti nel sesto Excel interno. " +
         (missed ? missed + " annualità escluse senza corrispondenza nel report. " : "") +
         (matchedByName ? matchedByName + " riconciliate per denominazione univoca. " : "") +
         (mixedYears ? mixedYears + " righe miste incluse/escluse DA VERIFICARE. " : "") +
