@@ -143,6 +143,50 @@ def _normalized_course_site(course: object, campus: object):
     return (code, location) if code and location else None
 
 
+def _source_row_has_content(row: list) -> bool:
+    """Count every populated source line, even if only a Boolean is present."""
+    return any(
+        value is not None and (not isinstance(value, str) or bool(value.strip()))
+        for value in row
+    )
+
+
+def _verify_xlsx_ids(
+    xlsx_bytes: bytes, sheet_name: str, first_data_row: int,
+    id_column: int, expected_ids: list[str], file_label: str,
+) -> None:
+    """Read the *real generated Excel*, not the in-memory prepared model.
+
+    Every source-row identifier must appear once and only once, in the
+    expected original ordering. Fail closed before the ZIP is offered.
+    """
+    try:
+        with CalamineWorkbook.from_filelike(io.BytesIO(xlsx_bytes)) as workbook:
+            sheet = workbook.get_sheet_by_name(sheet_name)
+            cells = sheet.to_python(skip_empty_area=False)
+    except Exception as exc:
+        raise WorkbookGenerationError(
+            f"Verifica completezza: impossibile rileggere {file_label}"
+        ) from exc
+    actual = [
+        str(row[id_column]).strip() if len(row) > id_column and row[id_column] is not None
+        else ""
+        for row in cells[first_data_row:]
+    ]
+    if actual == expected_ids:
+        return
+    expected_set, actual_set = set(expected_ids), set(actual)
+    missing = [value for value in expected_ids if value not in actual_set]
+    extra = [value for value in actual if value not in expected_set]
+    duplicates = len(actual) - len(actual_set)
+    raise WorkbookGenerationError(
+        f"Verifica completezza fallita ({file_label}): "
+        f"attese {len(expected_ids)} righe, rilevate {len(actual)}; "
+        f"assenti {len(missing)}, estranee {len(extra)}, duplicate {duplicates}. "
+        "La generazione è stata bloccata: nessun Excel deve essere distribuito."
+    )
+
+
 def _source_years(value: object) -> set[int] | None:
     """Parse an explicitly enumerated year set, e.g. 1 / 1,2,3 / 1; 2.
 
@@ -287,7 +331,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     source_sites_by_title = {}
     if cohort_names and assigned.get("cds_nome") is not None:
         for raw in rows[header_row:]:
-            if not any(_display(value) for value in raw):
+            if not _source_row_has_content(raw):
                 continue
             def raw_field(name):
                 col = assigned.get(name)
@@ -300,6 +344,19 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
                 source_sites_by_title.setdefault(
                     (src_title, src_site[1]), set()
                 ).add(src_site)
+
+    # Independent source coverage baseline, computed BEFORE filtering.
+    # Rows whose only content is outside the mapped columns still count.
+    source_row_numbers = [
+        index for index, raw in enumerate(rows[header_row:], start=header_row + 1)
+        if _source_row_has_content(raw)
+    ]
+    source_ids = {
+        source_row_id(source_sha256, sheet_name, index)
+        for index in source_row_numbers
+    }
+    if len(source_ids) != len(source_row_numbers):
+        raise WorkbookGenerationError("Verifica completezza: ID sorgente duplicati")
 
     excluded_sites = {key[:2] for key in excluded_keys}
     retained_sites = {key[:2] for key in included_keys}
@@ -334,7 +391,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     mutuazione_other_count = 0
     mutuazione_blank_count = 0
     for excel_row, row in enumerate(rows[header_row:], start=header_row + 1):
-        if not any(_display(x) for x in row):
+        if not _source_row_has_content(row):
             continue
         def get(key):
             index = assigned.get(key)
@@ -500,6 +557,37 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         prepared.append((data, historical_id, _activity_id(data, historical_id)))
     if not prepared:
         raise WorkbookGenerationError("Nessuna riga storica esportabile")
+
+    # Cross-check EACH nonempty source line against the partition retained /
+    # excluded. This detects silent omissions caused by future filter changes.
+    kept_ids = [record[1] for record in prepared]
+    excluded_ids = [
+        source_row_id(source_sha256, sheet_name, excel_row)
+        for excel_row, *_ in excluded_records
+    ]
+    kept_set, excluded_set = set(kept_ids), set(excluded_ids)
+    missing_ids = source_ids - kept_set - excluded_set
+    extraneous_ids = (kept_set | excluded_set) - source_ids
+    if (len(kept_set) != len(kept_ids)
+            or len(excluded_set) != len(excluded_ids)
+            or kept_set & excluded_set or missing_ids or extraneous_ids
+            or len(kept_ids) + len(excluded_ids) != len(source_row_numbers)):
+        raise WorkbookGenerationError(
+            "Verifica completezza fallita: alcune righe del report non sono "
+            "riconciliate univocamente tra cinque Excel e registro delle esclusioni. "
+            f"Righe sorgente: {len(source_row_numbers)}; "
+            f"incluse: {len(kept_ids)}; escluse: {len(excluded_ids)}; "
+            f"non riconciliate: {len(missing_ids)}. "
+            "Generazione bloccata per prevenire omissioni o duplicazioni."
+        )
+    reconciliation = {
+        "verified": True,
+        "source_nonempty_rows": len(source_row_numbers),
+        "included_in_each_workbook": len(kept_ids),
+        "excluded_in_internal_register": len(excluded_ids),
+        "missing_from_outputs": 0,
+        "duplicate_ids": 0,
+    }
     workload_stats = {
         "rules": len(effective_rules),
         "rows_calculated": workload_matches,
@@ -538,7 +626,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         taf_mapping_mode, taf_rows_with_value, taf_rows_without_value,
         mutuazione_mapping_mode, mutuazione_true_count,
         mutuazione_false_count, mutuazione_other_count, mutuazione_blank_count,
-        excluded_records, workload_stats,
+        excluded_records, reconciliation, workload_stats,
     )
 
 
@@ -560,7 +648,7 @@ def build_five_workbooks(
      taf_mapping_mode, taf_rows_with_value, taf_rows_without_value,
      mutuazione_mapping_mode, mutuazione_true_count,
      mutuazione_false_count, mutuazione_other_count, mutuazione_blank_count,
-     excluded_records, workload_stats) = _prepare(
+     excluded_records, reconciliation, workload_stats) = _prepare(
         source, source_sha256, sheet_name, header_row, assigned,
         history_year, excluded or set(), included, cohort_names, workload_rules,
     )
@@ -614,8 +702,8 @@ def build_five_workbooks(
     sheet.merge_range(
         3, 0, 3, 36,
         "La colonna Ore è una QUOTA CEDUTA dal docente storico per le aggiunte/"
-        "sostituzioni parziali. TOT ORE EFFETTIVE parte da 0 e attende "
-        "il calcolo del carico didattico; non cedere ore prima del calcolo.",
+        "sostituzioni parziali. TOT ORE EFFETTIVE usa TOT ORE PREVISTE "
+        "salvo regole esplicite di calcolo o N.D. (non disponibile).",
         subtitle,
     )
     sheet.merge_range(
@@ -669,6 +757,12 @@ def build_five_workbooks(
     })
     workbook.close()
     template = output.getvalue()
+    # Independently reopen the physical referent XLSX to verify that ALL
+    # retained source rows have actually been written, once each.
+    _verify_xlsx_ids(
+        template, "Proposte SSD", 6, ALL_HEADERS.index("DIDAUP_ID_ORIGINE"),
+        [record[1] for record in prepared], "Excel per i referenti",
+    )
     if excluded_count != len(excluded_records):
         raise WorkbookGenerationError("Conteggio delle esclusioni incoerente")
     if {
@@ -723,11 +817,21 @@ def build_five_workbooks(
         "le righe con annualità dubbia e conservate nei cinque Excel non compaiono qui.",
         excluded_info,
     )
+    excluded_sheet.merge_range(
+        3, 0, 3, last_col,
+        f"CONTROLLO COMPLETEZZA: {reconciliation['source_nonempty_rows']} righe "
+        f"del report = {reconciliation['included_in_each_workbook']} presenti in "
+        "ciascuno dei cinque Excel + "
+        f"{reconciliation['excluded_in_internal_register']} escluse. "
+        "Nessuna riga mancante o duplicata.",
+        excluded_info,
+    )
     for col, header in enumerate(headers):
         excluded_sheet.write_string(4, col, header, excluded_header)
     excluded_sheet.set_row(0, 28)
     excluded_sheet.set_row(1, 36)
     excluded_sheet.set_row(2, 33)
+    excluded_sheet.set_row(3, 33)
     excluded_sheet.set_row(4, 44)
     excluded_sheet.set_column(0, len(HISTORIC_HEADERS) - 1, 19)
     excluded_sheet.set_column(len(HISTORIC_HEADERS), len(HISTORIC_HEADERS), 15)
@@ -754,6 +858,16 @@ def build_five_workbooks(
     excluded_sheet.protect("", {"autofilter": True, "select_locked_cells": True})
     excluded_wb.close()
     excluded_template = excluded_output.getvalue()
+    _verify_xlsx_ids(
+        excluded_template, "Righe escluse", 5, len(HISTORIC_HEADERS) + 4,
+        [
+            source_row_id(source_sha256, sheet_name, excel_row)
+            for excel_row, *_ in excluded_records
+        ],
+        "registro interno delle esclusioni",
+    )
+    reconciliation["exported_workbooks_checked"] = NUM_COPIES
+    reconciliation["internal_register_checked"] = True
     # Every generation gets a visibly different filename. Existing OneDrive
     # copies do not update when DidaUP regenerates the archive: the operator
     # must not mistake an earlier export for the latest one.
@@ -780,6 +894,7 @@ def build_five_workbooks(
         "copies": NUM_COPIES, "archive_files": NUM_COPIES + 1,
         "excluded_file_rows": len(excluded_records),
         "workload": workload_stats,
+        "reconciliation": reconciliation,
         "excluded_audit_sha256": hashlib.sha256(excluded_template).hexdigest(),
         "historical_rows": len(prepared),
         "excluded_rows": excluded_count,
