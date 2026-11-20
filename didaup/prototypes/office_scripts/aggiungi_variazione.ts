@@ -1,133 +1,142 @@
 /**
- * DidaUP — prototipo Office Scripts, SOLO DATI SINTETICI.
- * Selezionare una cella su una riga storica o di variazione,
- * quindi eseguire lo script "Aggiungi variazione" o il relativo pulsante.
+ * DidaUP · Aggiungi variazione
+ * Prototipo con dati FINTI, schema referenti 2026/27 + Tipo variazione.
  *
- * Il foglio e' protetto SENZA password per impedire modifiche accidentali.
- * Non e' una misura di sicurezza: le identita' dei dati vanno controllate
- * dal backend DidaUP, confrontando con la fonte storica originale.
+ * Prima di eseguire: selezionare una qualsiasi cella della riga
+ * storica o della variazione da estendere. Collega questo script
+ * al pulsante "+" da Automatizza > Associa alla cartella di lavoro.
  *
- * Il prototipo non effettua alcuna chiamata di rete.
+ * L'XLSX corretto e' gia' protetto (senza password). Lo script
+ * disattiva temporaneamente la protezione, inserisce una riga di
+ * proposta distinta e ripristina la protezione in ogni caso.
+ * La protezione del file non sostituisce la verifica DidaUP al reimport.
+ *
+ * Nessuna richiesta di rete; nessuna password incorporata.
  */
 function main(workbook: ExcelScript.Workbook) {
-  const SHEET = "Proposte SSD";
-  const FIRST_DATA_ROW_INDEX = 6; // Riga 7 di Excel.
-  const WIDTH = 13;               // Colonne A:M.
-  const sheet = workbook.getWorksheet(SHEET);
-  if (!sheet) {
-    throw new Error("Foglio 'Proposte SSD' non trovato.");
+  const NAME = "Proposte SSD";
+  const HEADER_ROW = 5;         // Riga Excel 6 (zero-based).
+  const START_ROW = 6;          // Prima riga di dati Excel 7.
+  const VISIBLE_COLS = 37;      // 36 storiche + Tipo variazione.
+  const FULL_COLS = 41;         // + 4 colonne tecniche nascoste.
+  const EDIT_START = 29;        // AD, zero-based.
+  const EDIT_COUNT = 4;         // AD:AG.
+  const TYPE_COL = 37;          // AL.
+  const ORIGIN_COL = 38;        // AM.
+  const PROPOSAL_COL = 39;      // AN.
+  const ACTIVITY_COL = 40;      // AO.
+  const sheet = workbook.getWorksheet(NAME);
+  if (!sheet) throw new Error("Foglio 'Proposte SSD' non trovato.");
+
+  const headers = sheet.getRangeByIndexes(HEADER_ROW, 0, 1, FULL_COLS).getTexts()[0];
+  const mustMatch: [number, string][] = [
+    [0, "SEDE CORSO"],
+    [28, "TOT ORE EFFETTIVE"],
+    [29, "Tipo variazione"],
+    [30, "Nuovo docente"],
+    [31, "Ore"],
+    [32, "Note"],
+    [36, "TITOLO AFFIDAMENTO"],
+    [37, "DIDAUP_TIPO_RIGA"],
+    [38, "DIDAUP_ID_ORIGINE"],
+    [39, "DIDAUP_ID_PROPOSTA"],
+    [40, "DIDAUP_ID_ATTIVITA"]
+  ];
+  for (const [index, label] of mustMatch) {
+    if (headers[index] !== label) {
+      throw new Error("Schema non corrispondente, colonna " + (index + 1) +
+        ": attesa '" + label + "'. Nessuna riga inserita.");
+    }
   }
-  const selection = workbook.getSelectedRange();
-  if (selection.getWorksheet().getName() !== SHEET) {
-    throw new Error("Selezionare una cella nella riga da duplicare su 'Proposte SSD'.");
+
+  const chosen = workbook.getSelectedRange();
+  if (chosen.getWorksheet().getName() !== NAME) {
+    throw new Error("Selezionare una cella nel foglio 'Proposte SSD'.");
   }
-  const rowIndex = selection.getRowIndex();
-  if (rowIndex < FIRST_DATA_ROW_INDEX) {
-    throw new Error("Selezionare una riga di copertura, non l'intestazione.");
+  const selectedIndex = chosen.getRowIndex();
+  if (selectedIndex < START_ROW) {
+    throw new Error("Selezionare una riga dati, non le istruzioni o le intestazioni.");
   }
+
+  const used = sheet.getUsedRange(true);
+  if (!used) throw new Error("Foglio senza dati.");
+  const last = used.getRowIndex() + used.getRowCount() - 1;
+  if (selectedIndex > last) throw new Error("Riga selezionata fuori dai dati.");
+
+  const chosenRow = sheet.getRangeByIndexes(selectedIndex, 0, 1, FULL_COLS).getValues()[0];
+  const chosenType = String(chosenRow[TYPE_COL] ?? "").trim();
+  const originId = String(chosenRow[ORIGIN_COL] ?? "").trim();
+  const activityId = String(chosenRow[ACTIVITY_COL] ?? "").trim();
+  if (!["STORICO", "VARIAZIONE"].includes(chosenType) || !originId || !activityId) {
+    throw new Error("Riga senza collegamento storico valido: nessuna modifica effettuata.");
+  }
+
+  let historicalRow = -1;
+  let maxCounter = 0;
+  for (let i = START_ROW; i <= last; i++) {
+    const r = sheet.getRangeByIndexes(i, 0, 1, FULL_COLS).getValues()[0];
+    const rowType = String(r[TYPE_COL] ?? "").trim();
+    const rowOrigin = String(r[ORIGIN_COL] ?? "").trim();
+    const rowProposal = String(r[PROPOSAL_COL] ?? "").trim();
+    const rowActivity = String(r[ACTIVITY_COL] ?? "").trim();
+    if (rowType === "STORICO" && rowOrigin === originId &&
+        rowProposal === originId && rowActivity === activityId) {
+      if (historicalRow !== -1) throw new Error("Riga storica duplicata: verifica necessaria.");
+      historicalRow = i;
+    }
+    const match = /^DIDAUP-VAR-(\d+)$/.exec(rowProposal);
+    if (match) maxCounter = Math.max(maxCounter, Number(match[1]));
+  }
+  if (historicalRow < 0) {
+    throw new Error("Riga storica corrispondente non trovata: nessuna modifica.");
+  }
+  if (maxCounter >= 999999) throw new Error("Limite massimo di variazioni raggiunto.");
 
   const protection = sheet.getProtection();
-  const wasProtected = protection.getProtected();
-  if (wasProtected && protection.getIsPasswordProtected()) {
-    throw new Error(
-      "Il prototipo non puo' modificare un foglio protetto da password. " +
-      "Non inserire password nello script condiviso."
-    );
+  if (!protection.getProtected()) {
+    throw new Error("Foglio non protetto: ripristinare la protezione prima di procedere.");
   }
-  const previousOptions = protection.getSavedOptions();
-  if (wasProtected) protection.unprotect();
+  if (protection.getIsPasswordProtected()) {
+    throw new Error("La protezione con password richiede una procedura autorizzata.");
+  }
+  const savedOptions = protection.getSavedOptions();
 
+  protection.unprotect();
   try {
-    const used = sheet.getUsedRange(true);
-    if (!used) throw new Error("Nessun dato presente nel foglio.");
-    const lastRowIndex = used.getRowIndex() + used.getRowCount() - 1;
-    if (rowIndex > lastRowIndex) {
-      throw new Error("La riga selezionata non contiene una copertura.");
-    }
-    const selected = sheet.getRangeByIndexes(rowIndex, 0, 1, WIDTH).getValues()[0];
-    const rowType = String(selected[10] ?? "").trim();
-    if (rowType !== "STORICO" && rowType !== "VARIAZIONE") {
-      throw new Error("La riga selezionata non e' una copertura o variazione valida.");
-    }
-    const historyId = String(selected[11] ?? "").trim();
-    if (!historyId) throw new Error("Riferimento alla riga storica assente.");
+    const insertAt = selectedIndex + 1;
+    // Inserisce una riga INTERA; non sposta solo le 41 colonne dell'area dati.
+    sheet.getRangeByIndexes(insertAt, 0, 1, 1)
+      .getEntireRow().insert(ExcelScript.InsertShiftDirection.down);
 
-    // Recupera SEMPRE il record storico: una duplicazione di una variazione
-    // non deve propagare le sue proposte o cambiare l'identita' della fonte.
-    let historicalRowIndex = -1;
-    let maxSequence = 0;
-    for (let i = FIRST_DATA_ROW_INDEX; i <= lastRowIndex; i++) {
-      const row = sheet.getRangeByIndexes(i, 0, 1, WIDTH).getValues()[0];
-      const itemType = String(row[10] ?? "").trim();
-      const id = String(row[1] ?? "").trim();
-      const parent = String(row[11] ?? "").trim();
-      const proposedId = String(row[12] ?? "").trim();
-      if (itemType === "STORICO" && id === historyId && parent === historyId) {
-        if (historicalRowIndex !== -1) {
-          throw new Error("Identificativo storico duplicato: interrompere e verificare.");
-        }
-        historicalRowIndex = i;
-      }
-      const match = /^DIDAUP-VAR-(\d+)$/.exec(proposedId);
-      if (match) {
-        maxSequence = Math.max(maxSequence, Number(match[1]));
-      }
-    }
-    if (historicalRowIndex < 0) {
-      throw new Error("Riga storica associata non trovata: impossibile duplicare.");
-    }
-    if (maxSequence >= 999999) {
-      throw new Error("Limite identificativi di prova raggiunto.");
-    }
+    const hist = sheet.getRangeByIndexes(historicalRow, 0, 1, FULL_COLS);
+    const dest = sheet.getRangeByIndexes(insertAt, 0, 1, FULL_COLS);
+    dest.copyFrom(hist, ExcelScript.RangeCopyType.all);
+    dest.getFormat().getProtection().setLocked(true);
 
-    const historical = sheet.getRangeByIndexes(
-      historicalRowIndex, 0, 1, 6
-    ).getValues()[0];
-    if (String(historical[0] ?? "").trim() !== String(selected[0] ?? "").trim()) {
-      throw new Error("La variazione selezionata non appartiene all'attivita' storica.");
-    }
+    // Le quattro celle compilabili partono vuote; mai copiare una proposta precedente.
+    const proposal = sheet.getRangeByIndexes(insertAt, EDIT_START, 1, EDIT_COUNT);
+    proposal.setValues([["", "", "", ""]]);
+    proposal.getFormat().getProtection().setLocked(false);
+    proposal.getFormat().getFill().setColor("#FFF0BF");
+    sheet.getRangeByIndexes(insertAt, EDIT_START + 2, 1, 1)
+      .setNumberFormat("0.##");
 
-    // La riga nuova viene inserita sotto quella selezionata. In Excel il
-    // formato viene copiato, ma le colonne di proposta saranno svuotate.
-    const insertIndex = rowIndex + 1;
-    sheet.getRangeByIndexes(insertIndex, 0, 1, WIDTH)
-      .insert(ExcelScript.InsertShiftDirection.down);
-    const originalSelected = sheet.getRangeByIndexes(rowIndex, 0, 1, WIDTH);
-    const newRow = sheet.getRangeByIndexes(insertIndex, 0, 1, WIDTH);
-    newRow.copyFrom(originalSelected, ExcelScript.RangeCopyType.all);
-
-    sheet.getRangeByIndexes(insertIndex, 0, 1, 6).setValues([historical]);
-    sheet.getRangeByIndexes(insertIndex, 6, 1, 4).setValues([["", "", "", ""]]);
-    sheet.getRangeByIndexes(insertIndex, 10, 1, 3).setValues([[
-      "VARIAZIONE",
-      historyId,
-      "DIDAUP-VAR-" + String(maxSequence + 1).padStart(6, "0")
+    sheet.getRangeByIndexes(insertAt, TYPE_COL, 1, 4).setValues([[
+      "VARIAZIONE", originId,
+      "DIDAUP-VAR-" + String(maxCounter + 1).padStart(6, "0"),
+      activityId
     ]]);
-
-    // Colonne storiche e metadati bloccati. Solo G:J modificabili.
-    newRow.getFormat().getProtection().setLocked(true);
-    sheet.getRangeByIndexes(insertIndex, 6, 1, 4)
-      .getFormat().getProtection().setLocked(false);
-    newRow.getFormat().getFill().setColor("#EAF3FD");
-    sheet.getRangeByIndexes(insertIndex, 6, 1, 4)
-      .getFormat().getFill().setColor("#FFF0BF");
-
-    sheet.getRangeByIndexes(insertIndex, 7, 1, 1).select();
+    dest.getFormat().getFill().setColor("#EAF3FD");
+    proposal.getFormat().getFill().setColor("#FFF0BF");
+    proposal.getCell(0, 0).select();
     console.log(
-      "Variazione creata e collegata alla riga storica " +
-      historyId + ". Compilare soltanto le colonne G:J."
+      "Riga di variazione aggiunta. Origine storica: " + originId +
+      ". Compilare Tipo variazione, Nuovo docente, Ore e Note."
     );
   } finally {
-    // Ripristina la protezione anche quando si verifica un errore.
+    // Anche un errore dopo l'inserimento non deve lasciare il foglio sprotetto.
     if (!protection.getProtected()) {
-      const options = wasProtected ? previousOptions : {
-        allowAutoFilter: true,
-        allowInsertRows: false,
-        allowDeleteRows: false,
-        allowSort: false,
-        selectionMode: ExcelScript.ProtectionSelectionMode.normal
-      };
-      protection.protect(options);
+      protection.protect(savedOptions);
     }
   }
 }
