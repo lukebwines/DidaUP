@@ -562,3 +562,84 @@ def list_audit(request: Request):
                ORDER BY id DESC LIMIT 100"""
         ).fetchall()
     return [dict(r) for r in rows]
+
+@app.get("/api/years/{year_id}/imports")
+def list_imports(year_id: int, request: Request):
+    current_user(request)
+    with closing(connect()) as cx:
+        ensure_year(cx, year_id)
+        rows = cx.execute(
+            """SELECT id,kind,original_name,sha256,size_bytes,sheets_json,status,created_at
+               FROM source_imports WHERE year_id=? ORDER BY id DESC""",
+            (year_id,),
+        ).fetchall()
+    return [{**dict(row), "sheets": json.loads(row["sheets_json"])} for row in rows]
+
+
+@app.post("/api/years/{year_id}/imports")
+async def upload_source(
+    year_id: int, request: Request,
+    kind: str = Form(...), source: UploadFile = File(...),
+):
+    actor = current_user(request, ("admin", "operatore"))
+    require_write(request, actor, allow_multipart=True)
+    if kind not in ("offerta", "docenti"):
+        raise HTTPException(422, "Tipologia di report non valida")
+    original_name = Path((source.filename or "").replace("\\", "/")).name
+    suffix = Path(original_name).suffix.lower()
+    if suffix not in (".xls", ".xlsx") or len(original_name) > 180:
+        raise HTTPException(422, "Sono ammessi soltanto file Excel .xls e .xlsx")
+    with closing(connect()) as cx:
+        ensure_year(cx, year_id)
+    SOURCE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd, file_path = tempfile.mkstemp(prefix="source_", suffix=suffix, dir=SOURCE_DIR)
+    stored = Path(file_path)
+    size = 0
+    digest = hashlib.sha256()
+    try:
+        with os.fdopen(fd, "wb") as output:
+            while True:
+                chunk = await source.read(1024 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    raise HTTPException(413, "File troppo grande: massimo 32 MB")
+                digest.update(chunk)
+                output.write(chunk)
+        if not size:
+            raise HTTPException(422, "File vuoto")
+        try:
+            check_signature(stored, suffix)
+            sheets = await run_in_threadpool(inspect_workbook, stored)
+        except Exception as exc:
+            raise HTTPException(422, "Excel non leggibile o non supportato") from exc
+
+        with closing(connect()) as cx:
+            ensure_year(cx, year_id)
+            previous = cx.execute(
+                "SELECT id FROM source_imports WHERE year_id=? AND kind=? AND sha256=?",
+                (year_id, kind, digest.hexdigest()),
+            ).fetchone()
+            if previous is not None:
+                raise HTTPException(409, "Questo stesso report è già stato acquisito per l'anno selezionato")
+            cursor = cx.execute(
+                """INSERT INTO source_imports(
+                   year_id,kind,original_name,stored_name,sha256,size_bytes,
+                   sheets_json,status,created_at,actor_id) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                (year_id, kind, original_name, stored.name, digest.hexdigest(), size,
+                 json.dumps(sheets, ensure_ascii=False), "acquisito_da_mappare",
+                 int(time.time()), actor["id"]),
+            )
+            record(cx, actor["id"], "import_source", "source_import", cursor.lastrowid)
+            cx.commit()
+        os.chmod(stored, 0o600)
+        return {
+            "id": cursor.lastrowid, "kind": kind, "size_bytes": size,
+            "status": "acquisito_da_mappare", "sheets": sheets,
+        }
+    except Exception:
+        stored.unlink(missing_ok=True)
+        raise
+    finally:
+        await source.close()
