@@ -106,7 +106,7 @@ def validate_rules(rules):
 
 
 def apply_workload(planned, typology, course, taf, rules):
-    """Return (hours, matching_rule_index, issue). No matched rule => zero."""
+    """Return (hours, matching_rule_index, issue). Without a rule, use planned hours."""
     matches = []
     for i, rule in enumerate(rules):
         if any(
@@ -121,7 +121,14 @@ def apply_workload(planned, typology, course, taf, rules):
         specificity = sum(bool(rule[key]) for key in ("tipologia", "cds", "taf"))
         matches.append((specificity, i, rule))
     if not matches:
-        return 0, None, None
+        if is_missing_planned_hours(planned):
+            return 0, None, "TOT ORE PREVISTE mancante: carico mantenuto a 0"
+        original = decimal_hours(planned)
+        if original is None:
+            return 0, None, "TOT ORE PREVISTE non numerico o negativo: correggere la fonte o l'associazione"
+        if original > 99999999:
+            return 0, None, "TOT ORE PREVISTE superiore al limite delle ore ammesse"
+        return float(original), None, None
     highest = max(match[0] for match in matches)
     selected = [m for m in matches if m[0] == highest]
     if len(selected) > 1:
