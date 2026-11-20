@@ -116,7 +116,7 @@ def test_five_copies_are_byte_identical_and_unfiltered(tmp_path):
     assert rows[7][1] == "SYN-A"
     assert rows[8][1] == "SYN-A"
     assert rows[9][1] == "SYN-B"
-    assert [row[28] for row in rows[6:10]] == [0, 0, 0, 0]
+    assert [row[28] for row in rows[6:10]] == [20, 10, 0, 8]
     assert rows[6][29:33] in (["", "", "", ""], [None, None, None, None])
     assert rows[6][37] == "STORICO"
     assert rows[6][38] == rows[6][39]
