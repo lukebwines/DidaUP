@@ -161,3 +161,10 @@ La regola è applicata sia all'estrazione delle annualità sia alla generazione 
 ## Persistenza della mappatura — CORREZIONE TECNICA
 
 La mappatura salvata è associata all'ID del report e persistita nel database privato. **Rileggere l'anteprima, tornare alla schermata precedente o cambiare vista non deve resettare scelte già salvate**. Le correzioni non ancora salvate sono mantenute quando si torna allo stesso report durante la sessione corrente; al salvataggio viene eseguita una nuova lettura dal database per verificarne la persistenza. Le modifiche non salvate non sono equivalenti a una mappatura persistente: prima di uscire dall'app occorre esplicitamente salvarle.
+
+
+## Rettifica successiva: A.A. del report prevalente sui singoli valori di riga — CONFERMATO
+
+L'utente ha chiarito che, **per direttiva**, tutte le attività presenti nel report ufficiale identificato come offerta **2026/27** sono da gestire come attività dell'A.A. **2026/27**, anche se nella singola riga compare un A.A. diverso (incluso il caso convenzionale delle Scuole di specializzazione). **Non è quindi necessario né corretto bloccare singole righe in base alla corrispondenza dell'A.A.**
+
+DidaUP deve usare come riferimento l'**anno accademico dell'archivio/report selezionato all'importazione**; il campo A.A. originale di ciascuna riga resta visibile e **immutato** quale dato storico. Il controllo sull'archivio di appartenenza del report resta attivo: il report scelto per la generazione deve appartenere all'A.A. selezionato e al corretto tipo di fonte. Non introdurre interpretazioni per tipologia di corso e non applicare il precedente blocco differenziato sulle Scuole di specializzazione. Questa regola **sostituisce la precedente verifica dell'A.A. per singola riga**, mantenendo integra la fonte.
