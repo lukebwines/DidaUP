@@ -335,14 +335,28 @@ const workloadUI = (() => {
           ["workload-total", Number(result.total_effective_hours).toLocaleString("it-IT", {
             maximumFractionDigits: 2
           })],
-          ["workload-count-errors", result.errors.length]
+          ["workload-count-missing", result.rows_with_missing_planned_hours || 0],
+          ["workload-count-errors", result.error_count ?? result.errors.length]
         ];
         for (const [id, value] of counts) document.getElementById(id).textContent = String(value);
         const issues = result.errors.slice(0, 25).map(
           issue => "Riga " + issue.excel_row + ": " + issue.reason
         );
+        const missing = Number(result.rows_with_missing_planned_hours || 0);
+        const missingExamples = (result.missing_planned_hours_examples || [])
+          .slice(0, 30).map(item => String(item.excel_row));
+        document.getElementById("workload-missing-warnings").textContent = missing
+          ? "ATTENZIONE: " + missing + " righe con TOT ORE PREVISTE vuoto, " +
+            "lasciate a 0 senza applicare la regola. Righe del report (prime " +
+            missingExamples.length + "): " + missingExamples.join(", ") +
+            ". Verificare che i dati mancanti siano corretti."
+          : "Nessuna cella vuota in TOT ORE PREVISTE tra le righe intercettate dalle regole.";
+        const errorCount = Number(result.error_count ?? result.errors.length);
         document.getElementById("workload-errors").textContent =
-          issues.length ? "Anomalie da correggere: " + issues.join("; ") : "Nessuna anomalia di calcolo.";
+          issues.length
+            ? errorCount + " errori bloccanti (primi " + issues.length + "): " +
+              issues.join("; ")
+            : "Nessun errore bloccante di calcolo.";
         const table = document.getElementById("workload-rule-summary");
         table.replaceChildren();
         for (let index = 0; index < stateLocal.rules.length; index++) {
@@ -354,8 +368,9 @@ const workloadUI = (() => {
         document.getElementById("workload-preview-status").textContent =
           result.included_rows + " righe incluse; " + result.excluded_rows +
           " righe escluse dai file. " + (result.blocked
-            ? "Calcolo BLOCCATO: risolvere i conflitti prima di generare gli Excel."
-            : "Anteprima completata: il calcolo sarà replicato nei cinque Excel.");
+            ? "Calcolo BLOCCATO: correggere i valori non numerici/negativi, i conflitti e le quote fisse eccedenti prima di generare gli Excel."
+            : "Anteprima completata: il calcolo sarà replicato nei cinque Excel." +
+              (missing ? " ATTENZIONE: " + missing + " righe senza ore previste restano a 0 e richiedono verifica." : ""));
       } catch (error) {
         document.getElementById("workload-preview-status").textContent = error.message;
         showNotice(error.message, true);
