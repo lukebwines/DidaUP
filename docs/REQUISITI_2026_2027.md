@@ -96,7 +96,7 @@ Decisioni esplicite dell'utilizzatore (definizioni funzionali; **nessuna modific
 
 Esempio fittizio: storico A=20 ore, B=10 ore; proposta di trasferire 12 ore da A a C, con risultato A=8, B=10, C=12. Ipotesi di inserimento sul record storico A: **Tipo variazione=Sostituzione parziale, Nuovo docente=C, Ore=12**. In tale ipotesi, il campo Ore indica le **ore trasferite**; per evitare ambiguità dovrebbe essere obbligatorio e maggiore di zero e minore delle ore storiche del docente interessato. **Regola confermata dall'utente:** in sostituzione parziale il campo **Ore indica le ore trasferite al nuovo docente**, non quelle residue del docente storico. I dati storici non vengono modificati. I controlli di coerenza (ore trasferite, ore residue e totale) dovranno essere implementati prima del reimport. Il valore vuoto delle ore nella sostituzione **totale** manterrebbe la regola concordata: assumere `TOT ORE EFFETTIVE` della singola riga docente; non dell'intero modulo.
 
-È ancora da definire la semantica del campo Ore nelle **aggiunte** e nelle **modifiche ore** (ore finali oppure differenza); nessuna assunzione automatica su questi due casi finché non confermata.
+Nelle **aggiunte**, è confermato che il campo **Ore** esprime le ore **cedute dal docente storico indicato nella riga**, non le ore residue né un incremento del totale. Nelle **modifiche ore** non collegate a un trasferimento, la semantica rimane **[DA DEFINIRE]**; non applicare interpretazioni automatiche non confermate.
 
 **Esempio di calcolo confermato:** `TOT ORE EFFETTIVE` docente storico A = 20; sostituzione parziale con nuovo docente C e Ore = 12; proposta: A rimane per 8 ore, C assume 12 ore. La riga del docente B, eventualmente presente nello stesso modulo, resta autonoma. Il totale storico deve restare verificabile, senza applicare modifiche al report fonte.
 
@@ -106,6 +106,17 @@ Decisione esplicita dell'utilizzatore: quando un referente propone di **aggiunge
 
 Esempio esclusivamente illustrativo (dati fittizi): docente storico A con `TOT ORE EFFETTIVE` = 20; proposta di aggiunta del docente C con `Ore` = 8; se le ore sono prelevate da A, la distribuzione proposta è A=12 e C=8, totale invariato 20. Il dato storico A=20 rimane immutato nella fonte.
 
-Controlli da prevedere per l'elaborazione: ore trasferite positive, non superiori alle ore disponibili nel/i docente/i di origine, saldo delle ore proposte corrispondente al saldo storico dell'attività/modulo, segnalazione di incongruenze o ambiguità prima dell'approvazione. **Non dedurre automaticamente il docente di origine quando vi sono più coperture:** la modalità con cui indicare una o più righe di origine è ancora **[DA DEFINIRE]**.
+Controlli da prevedere per l'elaborazione: ore trasferite positive, non superiori alle ore disponibili nel/i docente/i di origine, saldo delle ore proposte corrispondente al saldo storico dell'attività/modulo, segnalazione di incongruenze o ambiguità prima dell'approvazione. **Regola confermata:** le ore del nuovo docente possono provenire anche da **più docenti storici**. Il referente deve indicare esplicitamente le ore cedute **da ciascun docente di origine**. DidaUP non può scegliere automaticamente i cedenti. La rappresentazione esatta delle cessioni nell'Excel a quattro colonne editabili rimane **[DA CONFERMARE]**.
 
 Per evitare ambiguità terminologiche, `Aggiunta` e `Sostituzione parziale` possono avere lo stesso effetto aritmetico (redistribuzione) ma rappresentare intenzioni amministrative differenti, da conservare nel campo `Tipo variazione` **[DA PRECISARE]**. Nessuna modifica al database degli affidamenti né approvazione automatica discende da questa definizione.
+
+
+### Aggiunta da più docenti storici — CONFERMATO (regola quantitativa)
+
+La proposta di aggiunta di un docente può raccogliere ore da più righe di copertura storica, nel medesimo modulo/attività identificati dalla fonte. Le ore cedute devono essere attribuite singolarmente a ciascuna riga di origine; sono vietate deduzioni automatiche basate soltanto sul totale del modulo.
+
+**Esempio puramente fittizio:** storico docente A = 20 ore, docente B = 10 ore. Si propone di assegnare al nuovo docente C 12 ore, cedute 8 da A e 4 da B. Esito proposto: A = 12, B = 6, C = 12, totale = 30 ore, identico allo storico. I dati sorgente A = 20 e B = 10 restano intatti e tracciabili.
+
+**Controlli funzionali previsti:** per ciascun cedente, ore cedute ≤ `TOT ORE EFFETTIVE` disponibili; la somma dei trasferimenti verso la stessa nuova copertura deve essere calcolata una sola volta, senza creare duplicati; la somma delle ore proposte deve restare uguale alla somma storica; bloccare o segnalare proposte ambigue, negative o prive di identificazione univoca dell'attività e dei cedenti. Nessuna approvazione automatica.
+
+**Rappresentazione nell'Excel — [DA CONFERMARE]:** possibile compilare `Tipo variazione = Aggiunta`, `Nuovo docente = C`, `Ore = 8` sulla riga storica A e analogamente `Ore = 4` su quella B. DidaUP aggrega il nuovo docente C in un'unica copertura proposta da 12 ore, mantenendo la tracciabilità delle due cessioni. Questa scelta di interfaccia non è stata ancora confermata dall'utente.
