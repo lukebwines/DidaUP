@@ -234,47 +234,136 @@ def test_import_retains_file_privately_and_rejects_duplicate(client, tmp_path):
     assert invalid.status_code == 422
 
 
-def test_archive_reset_requires_admin_password_and_text(client, tmp_path):
+
+def test_archive_reset_preserves_sources_mappings_and_exclusions(client, tmp_path):
+    """Scoped reset must NOT delete reference data, even if work files exist."""
     csrf = signed_in(client)
-    fixture = synthetic_xlsx()
-    added = client.post(
-        "/api/years/1/imports", headers=csrf, data={"kind": "docenti", "test_data_only": "true"},
-        files={"source": ("fake-staff.xlsx", fixture, "application/octet-stream")},
+    imported = client.post(
+        "/api/years/1/imports", headers=csrf,
+        data={"kind": "offerta", "test_data_only": "true"},
+        files={"source": (
+            "source-synthetic.xlsx", synthetic_xlsx(), "application/octet-stream"
+        )},
     )
-    assert added.status_code == 200, added.text
+    assert imported.status_code == 200, imported.text
+    report_id = imported.json()["id"]
+    mapping = client.put(f"/api/imports/{report_id}/mapping", headers=csrf, json={
+        "sheet_name": "Sintetico", "header_row": 1,
+        "assigned": {"ssd_insegnamento_originale": 0, "docente_nome": 1},
+        "expected_version": 0,
+    })
+    assert mapping.status_code == 200, mapping.text
+    cohort = client.post("/api/years/1/cohorts", headers=csrf, json={
+        "course_code": "SYN01", "course_name": "Corso sintetico",
+        "campus": "Sede sintetica", "study_year": 2,
+    })
+    assert cohort.status_code == 200, cohort.text
+    excluded = client.patch(
+        f"/api/cohorts/{cohort.json()['id']}", headers=csrf,
+        json={
+            "included": False, "reason": "Anno non gestito nel test",
+            "expected_version": 1,
+        },
+    )
+    assert excluded.status_code == 200, excluded.text
+
+    from app.main import connect, WORK_DIR, SOURCE_DIR
+    with connect() as cx:
+        year = cx.execute("SELECT id FROM academic_years WHERE code='2026/27'").fetchone()
+        cx.execute(
+            "INSERT INTO working_artifacts(year_id,stored_name,kind,generated_at) "
+            "VALUES(?,?,?,?)",
+            (year["id"], "artifact_synthetic_output.xlsx", "synthetic_test", 1),
+        )
+        cx.commit()
+    WORK_DIR.mkdir(parents=True, exist_ok=True)
+    (WORK_DIR / "artifact_synthetic_output.xlsx").write_bytes(b"synthetic-only")
+    old_source = list(SOURCE_DIR.glob("source_*.xlsx"))
+    assert len(old_source) == 1
+    original_bytes = old_source[0].read_bytes()
 
     wrong = client.post("/api/admin/archive/reset", headers=csrf, json={
         "scope": "year", "year_id": 1,
-        "confirmation": "AZZERA 2026/27", "password": "wrong"
+        "confirmation": "AZZERA LAVORAZIONE 2026/27", "password": "wrong"
     })
     assert wrong.status_code == 403
     wrong_phrase = client.post("/api/admin/archive/reset", headers=csrf, json={
         "scope": "year", "year_id": 1,
-        "confirmation": "AZZERA", "password": "SyntheticTestingPass!2026"
+        "confirmation": "AZZERA 2026/27",
+        "password": "SyntheticTestingPass!2026"
     })
     assert wrong_phrase.status_code == 422
 
-    cleared = client.post("/api/admin/archive/reset", headers=csrf, json={
+    response = client.post("/api/admin/archive/reset", headers=csrf, json={
         "scope": "year", "year_id": 1,
-        "confirmation": "AZZERA 2026/27", "password": "SyntheticTestingPass!2026"
-    })
-    assert cleared.status_code == 200, cleared.text
-    assert client.get("/api/years/1/imports").json() == []
-    assert list((tmp_path / "sources").iterdir()) == []
-    # Users and the selected academic year survive the reset.
-    assert any(x["code"] == "2026/27" for x in client.get("/api/years").json())
-    assert any(x["username"] == "admin" for x in client.get("/api/users").json())
-
-
-def test_reset_all_keeps_accounts_and_initial_year(client):
-    csrf = signed_in(client)
-    client.post("/api/years", headers=csrf, json={"code": "2027/28"})
-    cleared = client.post("/api/admin/archive/reset", headers=csrf, json={
-        "scope": "all", "confirmation": "AZZERA ARCHIVIO",
+        "confirmation": "AZZERA LAVORAZIONE 2026/27",
         "password": "SyntheticTestingPass!2026"
     })
-    assert cleared.status_code == 200, cleared.text
-    assert [x["code"] for x in client.get("/api/years").json()] == ["2026/27"]
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["deleted_working_items"] == 1
+    assert payload["protected"]["column_mappings"]
+    assert payload["protected"]["course_year_exclusions"]
+    assert not (WORK_DIR / "artifact_synthetic_output.xlsx").exists()
+    assert old_source[0].read_bytes() == original_bytes
+
+    after_sources = client.get("/api/years/1/imports").json()
+    assert len(after_sources) == 1
+    after_mapping = client.get(f"/api/imports/{report_id}/mapping").json()
+    assert after_mapping["mapping"]["assigned"] == {
+        "ssd_insegnamento_originale": 0, "docente_nome": 1
+    }
+    after_cohorts = client.get("/api/years/1/cohorts").json()
+    assert len(after_cohorts) == 1
+    assert after_cohorts[0]["included"] == 0
+    assert after_cohorts[0]["exclusion_reason"] == "Anno non gestito nel test"
+    assert any(x["code"] == "2026/27" for x in client.get("/api/years").json())
+    assert any(x["username"] == "admin" for x in client.get("/api/users").json())
+    summary = client.get("/api/admin/archive/summary").json()
+    assert summary[0]["mappings"] == 1
+    assert summary[0]["excluded"] == 1
+    assert summary[0]["working_items"] == 0
+
+    # Restart must keep protected settings and source data intact.
+    import app.main as main
+    main.startup()
+    assert client.get(f"/api/imports/{report_id}/mapping").json()["mapping"]
+    assert client.get("/api/years/1/cohorts").json()[0]["included"] == 0
+
+
+def test_reset_all_preserves_every_year_and_its_cohort_choices(client):
+    csrf = signed_in(client)
+    added = client.post("/api/years", headers=csrf, json={"code": "2027/28"})
+    assert added.status_code == 200, added.text
+    later_id = added.json()["id"]
+    earlier = client.post("/api/years/1/cohorts", headers=csrf, json={
+        "course_code": "SYN01", "course_name": "Corso fittizio A",
+        "campus": "Sede 1", "study_year": 1,
+    })
+    later = client.post(f"/api/years/{later_id}/cohorts", headers=csrf, json={
+        "course_code": "SYN02", "course_name": "Corso fittizio B",
+        "campus": "Sede 2", "study_year": 3,
+    })
+    assert earlier.status_code == 200 and later.status_code == 200
+    assert client.patch(f"/api/cohorts/{later.json()['id']}", headers=csrf, json={
+        "included": False, "reason": "Non in gestione nella simulazione",
+        "expected_version": 1
+    }).status_code == 200
+
+    result = client.post("/api/admin/archive/reset", headers=csrf, json={
+        "scope": "all", "confirmation": "AZZERA LAVORAZIONI",
+        "password": "SyntheticTestingPass!2026"
+    })
+    assert result.status_code == 200, result.text
+    assert result.json()["deleted_working_items"] == 0
+    assert {x["code"] for x in client.get("/api/years").json()} == {
+        "2026/27", "2027/28"
+    }
+    assert len(client.get("/api/years/1/cohorts").json()) == 1
+    restored = client.get(f"/api/years/{later_id}/cohorts").json()
+    assert len(restored) == 1
+    assert restored[0]["included"] == 0
+    assert restored[0]["exclusion_reason"] == "Non in gestione nella simulazione"
     assert len(client.get("/api/users").json()) == 1
 
 
