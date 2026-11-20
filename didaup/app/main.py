@@ -1190,7 +1190,7 @@ async def generate_department_workbooks(
         if mapping is None:
             raise HTTPException(409, "Salvare prima la mappatura del report")
         cohort_rows = cx.execute(
-            "SELECT course_code,campus,study_year,included FROM cohorts "
+            "SELECT course_code,course_name,campus,study_year,included FROM cohorts "
             "WHERE year_id=?", (year_id,),
         ).fetchall()
         excluded = {
@@ -1201,6 +1201,10 @@ async def generate_department_workbooks(
             (r["course_code"], r["campus"], r["study_year"])
             for r in cohort_rows if r["included"]
         }
+        cohort_names = {
+            (r["course_code"], r["campus"], r["study_year"]): r["course_name"]
+            for r in cohort_rows
+        }
         source_path = SOURCE_DIR / source["stored_name"]
         assigned = json.loads(mapping["fields_json"])
         # Snapshot values for optimistic concurrency checks after generation.
@@ -1210,7 +1214,7 @@ async def generate_department_workbooks(
         archive, summary = await run_in_threadpool(
             build_five_workbooks,
             source_path, source_sha, mapping["sheet_name"], mapping["header_row"],
-            assigned, year["code"], excluded, included,
+            assigned, year["code"], excluded, included, cohort_names,
         )
     except WorkbookGenerationError as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -1238,7 +1242,7 @@ async def generate_department_workbooks(
                 (body.import_id,),
             ).fetchone()
             current_cohorts = cx.execute(
-                "SELECT course_code,campus,study_year,included FROM cohorts "
+                "SELECT course_code,course_name,campus,study_year,included FROM cohorts "
                 "WHERE year_id=?", (year_id,),
             ).fetchall()
             now_excluded = {
@@ -1251,7 +1255,11 @@ async def generate_department_workbooks(
             }
             if (source_now is None or source_now["sha256"] != source_sha
                 or mapping_now is None or mapping_now["version"] != mapping_version
-                or now_excluded != excluded or now_included != included):
+                or now_excluded != excluded or now_included != included
+                or {
+                    (r["course_code"], r["campus"], r["study_year"]): r["course_name"]
+                    for r in current_cohorts
+                } != cohort_names):
                 cx.rollback()
                 raise HTTPException(
                     409, "Fonte, mappatura o annualità cambiate: rigenerare dopo il controllo"
@@ -1347,7 +1355,7 @@ async def preview_five_department_proposals(
         if source is None or mapping is None:
             raise HTTPException(409, "Report storico o mappatura non disponibili")
         cohort_rows = cx.execute(
-            "SELECT course_code,campus,study_year,included FROM cohorts "
+            "SELECT course_code,course_name,campus,study_year,included FROM cohorts "
             "WHERE year_id=?", (year_id,)
         ).fetchall()
         excluded = {
@@ -1357,6 +1365,10 @@ async def preview_five_department_proposals(
         included = {
             (r["course_code"], r["campus"], r["study_year"])
             for r in cohort_rows if r["included"]
+        }
+        cohort_names = {
+            (r["course_code"], r["campus"], r["study_year"]): r["course_name"]
+            for r in cohort_rows
         }
         assigned = json.loads(mapping["fields_json"])
         mapping_version = mapping["version"]
@@ -1390,7 +1402,7 @@ async def preview_five_department_proposals(
             summary = await run_in_threadpool(
                 review_five_workbooks, SOURCE_DIR / source["stored_name"],
                 source["sha256"], mapping["sheet_name"], mapping["header_row"],
-                assigned, year["code"], temp_files, excluded, included,
+                assigned, year["code"], temp_files, excluded, included, cohort_names,
             )
         except ReviewError as exc:
             raise HTTPException(422, str(exc)) from exc
@@ -1402,7 +1414,7 @@ async def preview_five_department_proposals(
                 (import_id,),
             ).fetchone()
             now_cohorts = cx.execute(
-                "SELECT course_code,campus,study_year,included FROM cohorts "
+                "SELECT course_code,course_name,campus,study_year,included FROM cohorts "
                 "WHERE year_id=?", (year_id,),
             ).fetchall()
             if (check is None or check["version"] != mapping_version
@@ -1413,7 +1425,11 @@ async def preview_five_department_proposals(
                 or {
                     (r["course_code"], r["campus"], r["study_year"])
                     for r in now_cohorts if r["included"]
-                } != included):
+                } != included
+                or {
+                    (r["course_code"], r["campus"], r["study_year"]): r["course_name"]
+                    for r in now_cohorts
+                } != cohort_names):
                 raise HTTPException(409, "Mappatura o esclusioni cambiate durante la revisione")
             record(cx, actor["id"], "review_five_department_proposals",
                    "source_import", import_id)
