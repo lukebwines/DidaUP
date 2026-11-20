@@ -350,7 +350,9 @@ async function saveCohortSelections() {
       result.excluded + " escluse, " + result.added + " nuove voci.");
     await refreshYears(data.year_id);
     await refreshCohorts();
-    // Refresh saved row versions and exclusions while preserving the quick search.
+    // The server has just acknowledged this exact selection: refresh without
+    // warning that the newly saved choices are still unsaved edits.
+    cohortReview.saved = new Set(cohortReview.selected);
     cohortReview.loading = false;
     await loadCohortCandidates();
   } catch (error) {
