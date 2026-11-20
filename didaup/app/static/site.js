@@ -604,6 +604,13 @@ function hookForms() {
         }) + ". " +
         (Number(workload.rules || 0) === 0
           ? "ATTENZIONE: nessuna regola di carico salvata, tutte le ore sono 0. "
+          : "") +
+        (Number(workload.rows_with_missing_planned_hours || 0)
+          ? "ATTENZIONE: " + Number(workload.rows_with_missing_planned_hours) +
+            " righe intercettate da regole hanno TOT ORE PREVISTE vuoto e sono rimaste a 0. " +
+            "Righe del report (prime 15): " +
+            (workload.missing_planned_hours_examples || []).slice(0, 15)
+              .map(item => item.excel_row).join(", ") + ". Verificare prima di distribuire. "
           : "");
       showNotice("Generati cinque file identici con " +
         result.historical_rows + " righe storiche ciascuno; nessun filtro dipartimentale. " +
@@ -614,7 +621,7 @@ function hookForms() {
         " (non sostituisce gli Excel già presenti su OneDrive)." +
         warningMessage + missingCodeMessage + missedMessage +
         matchedByNameInfo + mixedYearsInfo + residualInfo + mutInfo,
-        Boolean(residual || missed || mixedYears));
+        Boolean(residual || missed || mixedYears || workload.rows_with_missing_planned_hours));
       el("workbook-progress").textContent =
         "Revisione " + (result.export_revision || "—") +
         ". Escluse " + excludedRows + " righe, tutte presenti nel sesto Excel interno. " +
