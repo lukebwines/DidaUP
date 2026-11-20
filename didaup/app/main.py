@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from .source_import import MAX_UPLOAD_BYTES, check_signature, inspect_workbook
-from .column_mapping import fields_for, preview as read_mapping_preview, evaluate_mapping
+from .column_mapping import fields_for, preview as read_mapping_preview, evaluate_mapping, autodetect_workbook
 
 BASE = Path(__file__).resolve().parent
 DATA = Path(os.environ.get("DIDAUP_DATA_DIR", "/data"))
@@ -755,6 +755,20 @@ def get_mapping(import_id: int, request: Request):
             "status": mapping["status"], "version": mapping["version"],
         },
     }
+
+
+@app.get("/api/imports/{import_id}/autodetect")
+async def automatic_column_suggestion(import_id: int, request: Request):
+    current_user(request)
+    with closing(connect()) as cx:
+        source = get_source_record(cx, import_id)
+    file_path = SOURCE_DIR / source["stored_name"]
+    if not file_path.is_file():
+        raise HTTPException(404, "File sorgente non presente nell'archivio")
+    try:
+        return await run_in_threadpool(autodetect_workbook, file_path, source["kind"])
+    except Exception as exc:
+        raise HTTPException(422, "Riconoscimento automatico non riuscito") from exc
 
 
 @app.get("/api/imports/{import_id}/preview")
