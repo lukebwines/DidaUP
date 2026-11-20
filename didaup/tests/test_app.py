@@ -773,7 +773,9 @@ def test_five_workbooks_screen_replaces_coming_soon(client):
     """Regression: avoid an old SSD-only placeholder after updating DidaUP."""
     html = client.get("/").text
     js = client.get("/static/site.js").text
-    assert "Cinque Excel identici e completi" in html
+    assert "Cinque Excel per i referenti + registro delle righe escluse" in html
+    assert "6 file XLSX in ZIP" in html
+    assert "Genera 5 Excel + righe escluse" in html
     assert 'id="workbook-generate-form"' in html
     assert 'id="workbook-review-form"' in html
     assert "Generazione Excel per SSD" not in html
