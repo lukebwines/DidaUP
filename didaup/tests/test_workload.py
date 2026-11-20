@@ -301,3 +301,23 @@ def test_workload_multiselect_controls_are_visible_in_section(client):
     assert "Seleziona visibili" in page
     assert "Deseleziona tutte" in page
     assert "filteredOptions" in js and "groups.typologia.selected" in js
+
+
+def test_workload_api_persists_multiselections_and_reloads_them(client):
+    csrf = signed_in(client)
+    saved = client.put(
+        "/api/years/1/workload", headers=csrf,
+        json={"expected_version": 0, "rules": [
+            rule(tipologia=["Magistrale", "Laurea"], cds=["SYN-B", "SYN-A"],
+                 taf=["B", "A"], mode="percentuale", value="35")
+        ]},
+    )
+    assert saved.status_code == 200, saved.text
+    expected = saved.json()["rules"][0]
+    assert expected["tipologia"] == ["Laurea", "Magistrale"]
+    assert expected["cds"] == ["SYN-A", "SYN-B"]
+    assert expected["taf"] == ["A", "B"]
+    current = client.get("/api/years/1/workload")
+    assert current.status_code == 200
+    assert current.json()["rules"] == [expected]
+    assert current.json()["version"] == 1
