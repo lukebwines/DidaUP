@@ -101,3 +101,23 @@ td small{display:block;color:#718398}td button{padding:7px 11px!important;font-s
 @media(max-width:920px){.import-fields{grid-template-columns:1fr 1fr}.import-fields button{grid-column:1/-1}}
 @media(max-width:620px){.import-fields{grid-template-columns:1fr}.import-fields button{grid-column:auto}}
 .import-consent{grid-column:1/-1!important;display:flex!important;flex-direction:row!important;align-items:center;gap:9px!important;color:#64748b!important}.import-consent input{width:17px!important;height:17px;min-height:0;accent-color:#2563eb}
+
+/* Read-only source column mapping */
+.mapping-top{display:flex;justify-content:space-between;align-items:center;gap:12px;background:#f3f7fd;border:1px solid #dce8f7;border-radius:12px;padding:14px 16px;margin:16px 0}
+.mapping-source{display:grid;gap:4px}.mapping-source p{margin:0}.mapping-source strong{font-size:1rem;overflow-wrap:anywhere}.mapping-source small{color:#7e94a8}
+.mapping-settings{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:16px 0}
+.mapping-settings label{display:grid;gap:6px;font-weight:650;font-size:.8rem;color:#526c82}
+.mapping-settings input{width:115px}
+.mapping-settings select{min-width:240px;max-width:400px}
+.mapping-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin:17px 0 25px}
+.mapping-field{display:grid;gap:6px;font-size:.82rem;color:#3d5772;font-weight:630}
+.mapping-field select{width:100%;font-weight:400}
+.mapping-table{max-height:340px;border:1px solid #e1e8f3;border-radius:10px}
+.mapping-table table{min-width:950px}
+.mapping-table th{position:sticky;top:0;z-index:1;min-width:105px;max-width:220px}
+.mapping-table td{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-theme="dark"] .mapping-top{background:#1b344f;border-color:#3c5878}
+[data-theme="dark"] .mapping-source small{color:#a2bad4}
+[data-theme="dark"] .mapping-settings label,[data-theme="dark"] .mapping-field{color:#bfcee2}
+[data-theme="dark"] .mapping-table{border-color:#3b546f}
+@media(max-width:720px){.mapping-grid{grid-template-columns:1fr}.mapping-settings{align-items:stretch;flex-direction:column}.mapping-settings label,.mapping-settings select{width:100%;max-width:100%}}
