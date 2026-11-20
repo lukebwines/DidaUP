@@ -20,7 +20,6 @@ import xlsxwriter
 
 from .column_mapping import OFFER_HEADER_TO_FIELD, source_header_conflicts
 from .row_identity import source_row_id
-from .academic_year_rules import classify_source_year
 
 # Order of the pre-existing outgoing referent layout (not the 110-col source).
 HISTORIC_HEADERS = [
@@ -181,21 +180,9 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         if (course, campus, year_int) in excluded:
             excluded_count += 1
             continue
-        explicit_aa = _display(get("anno_accademico_report"))
-        if explicit_aa:
-            relation = classify_source_year(
-                explicit_aa, history_year,
-                course_type=get("cds_tipologia"),
-                course_name=get("cds_nome"),
-            )
-            if relation == "invalid":
-                raise WorkbookGenerationError(
-                    f"Riga {excel_row}: A.A. {explicit_aa!r} non coerente con "
-                    f"{history_year!r}; lo scarto di un anno è ammesso solo "
-                    "per Scuole di specializzazione riconoscibili dalla fonte"
-                )
-            # Preserve original A.A. in the exported historical column.
-            # A conventionally earlier year is not an administrative anomaly.
+        # The year of reference is the imported report's archived year, not
+        # a per-row equality check. Keep the original A.A. value unchanged,
+        # including conventions used by Schools of Specialization.
         effective = get("ore_effettive_totali")
         if _display(effective) and (
             isinstance(effective, bool) or
