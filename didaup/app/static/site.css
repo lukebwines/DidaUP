@@ -207,3 +207,27 @@ td small{display:block;color:#718398}td button{padding:7px 11px!important;font-s
 #cohort-assignment-options{max-height:255px}
 @media(max-width:980px){.cohort-facet-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:590px){.cohort-facet-grid{grid-template-columns:1fr}}
+
+/* Carico didattico: regole per tipologia, CdS e TAF. */
+.workload-source{display:flex;gap:15px;align-items:end;flex-wrap:wrap;margin:15px 0 26px}
+.workload-source label{display:grid;gap:6px;flex:1 1 350px;font-weight:650;color:#526c82;font-size:.82rem}
+.workload-source label select{width:100%}
+.workload-source .muted{flex:2 1 340px}
+.workload-fields{display:grid;grid-template-columns:repeat(3,minmax(160px,1fr));align-items:end;gap:13px;margin:18px 0}
+.workload-fields label{min-width:0}
+.workload-fields button{width:max-content}
+.workload-table{min-width:750px!important}
+.workload-table td:last-child{min-width:145px}
+.workload-table td button{margin:0 5px 5px 0}
+.workload-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:20px}
+.workload-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin:20px 0}
+.workload-stats>div{border:1px solid #dbe6ef;border-radius:9px;padding:12px;background:#f5f9fd}
+.workload-stats small{display:block;color:#566d85}
+.workload-stats strong{display:block;font-size:1.45rem;color:#173858}
+.workload-error-list{white-space:normal;overflow-wrap:anywhere}
+[data-theme="dark"] .workload-source label{color:#d4e5f5}
+[data-theme="dark"] .workload-stats>div{background:#1c304b;border-color:#3b536c}
+[data-theme="dark"] .workload-stats small{color:#bad0e5}
+[data-theme="dark"] .workload-stats strong{color:#eef6ff}
+@media(max-width:900px){.workload-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.workload-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.workload-fields{grid-template-columns:1fr}.workload-stats{grid-template-columns:1fr}}
