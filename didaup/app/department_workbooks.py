@@ -214,6 +214,23 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     else:
         taf_mapping_mode = "campo TAF non associato e intestazione esatta assente"
 
+    # Check the source's MUTUAZIONE column independently of prior drafts.
+    # It may have been left unmapped by a legacy version. Only an exact,
+    # unique header is a safe fallback; never invent a Boolean default.
+    mutuazione_positions = [
+        i for i, heading in enumerate(rows[header_row - 1])
+        if normalize_header(heading) == "MUTUAZIONE"
+    ]
+    if "mutuazione" in assigned:
+        mutuazione_mapping_mode = "mappatura salvata"
+    elif len(mutuazione_positions) == 1:
+        assigned = {**assigned, "mutuazione": mutuazione_positions[0]}
+        mutuazione_mapping_mode = "intestazione MUTUAZIONE esatta, recuperata per export"
+    elif mutuazione_positions:
+        mutuazione_mapping_mode = "intestazione MUTUAZIONE ambigua: non associata"
+    else:
+        mutuazione_mapping_mode = "campo MUTUAZIONE non associato e intestazione esatta assente"
+
     excluded_keys = {_normalized_cohort_key(*item) for item in excluded}
     excluded_keys.discard(None)
     included_keys = {
@@ -276,6 +293,10 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     missing_activity_code_examples = []
     taf_rows_with_value = 0
     taf_rows_without_value = 0
+    mutuazione_true_count = 0
+    mutuazione_false_count = 0
+    mutuazione_other_count = 0
+    mutuazione_blank_count = 0
     for excel_row, row in enumerate(rows[header_row:], start=header_row + 1):
         if not any(_display(x) for x in row):
             continue
@@ -295,6 +316,18 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         raw_mutuazione = data.get("MUTUAZIONE")
         if isinstance(raw_mutuazione, bool):
             data["MUTUAZIONE"] = "VERO" if raw_mutuazione else "FALSO"
+        normalized_mutuazione = _display(data.get("MUTUAZIONE"))
+        mutuazione_value = normalized_mutuazione.casefold()
+        if mutuazione_value in ("vero", "true"):
+            mutuazione_true_count += 1
+        elif mutuazione_value in ("falso", "false"):
+            mutuazione_false_count += 1
+        elif not normalized_mutuazione:
+            mutuazione_blank_count += 1
+        else:
+            # Preserve unexpected raw text instead of silently assuming a
+            # truth value. The summary flags it for verification.
+            mutuazione_other_count += 1
         data.setdefault("Ins. Erogante", get("insegnamento_erogante"))
         # Do not attribute or filter by department. Only previously recorded
         # CdS annuality exclusions may suppress matching rows.
@@ -398,6 +431,8 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         len(partial_year_rows), partial_year_rows,
         residual_excluded_title_count, residual_excluded_title_examples,
         taf_mapping_mode, taf_rows_with_value, taf_rows_without_value,
+        mutuazione_mapping_mode, mutuazione_true_count,
+        mutuazione_false_count, mutuazione_other_count, mutuazione_blank_count,
     )
 
 
@@ -415,7 +450,9 @@ def build_five_workbooks(
      unmatched_exclusions_count, unmatched_exclusion_examples,
      fallback_count, fallback_examples, partial_count, partial_examples,
      residual_count, residual_examples,
-     taf_mapping_mode, taf_rows_with_value, taf_rows_without_value) = _prepare(
+     taf_mapping_mode, taf_rows_with_value, taf_rows_without_value,
+     mutuazione_mapping_mode, mutuazione_true_count,
+     mutuazione_false_count, mutuazione_other_count, mutuazione_blank_count) = _prepare(
         source, source_sha256, sheet_name, header_row, assigned,
         history_year, excluded or set(), included, cohort_names,
     )
@@ -547,6 +584,11 @@ def build_five_workbooks(
         "taf_mapping_mode": taf_mapping_mode,
         "taf_rows_with_value": taf_rows_with_value,
         "taf_rows_without_value": taf_rows_without_value,
+        "mutuazione_mapping_mode": mutuazione_mapping_mode,
+        "mutuazione_true_rows": mutuazione_true_count,
+        "mutuazione_false_rows": mutuazione_false_count,
+        "mutuazione_other_rows": mutuazione_other_count,
+        "mutuazione_empty_rows": mutuazione_blank_count,
         "unresolved_annuality_rows_included": unresolved_count,
         "unresolved_annuality_example_rows": unresolved_examples,
         "missing_activity_codes_rows_included": missing_code_count,
