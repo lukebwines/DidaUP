@@ -780,3 +780,20 @@ def test_five_workbooks_screen_replaces_coming_soon(client):
     assert '<span class="soon">Prossimamente</span>' not in html
     assert 'Cinque file completi per dipartimento' in js
     assert 'function refreshWorkbooks()' in js
+
+
+def test_cohort_multiselect_ui_exposes_filters_and_draft_status(client):
+    html = client.get("/").text
+    for marker in (
+        'id="cohort-cds-filter"', 'id="cohort-cds-options"',
+        'id="cohort-campus-filter"', 'id="cohort-campus-options"',
+        'id="cohort-year-filter"', 'id="cohort-year-options"',
+        'id="cohort-review-pending"', 'id="cohort-review-saved"',
+        'id="cohort-discard-pending"', 'id="cohort-clear-filters"',
+        'id="cohort-registry-search"', 'id="cohort-registry-status"',
+        'value="changed"',
+    ):
+        assert marker in html
+    assert "Escludi tutte le annualità visualizzate" in html
+    assert "Registro delle annualità già salvate" in html
+
