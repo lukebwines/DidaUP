@@ -56,6 +56,7 @@ OFFER_FIELDS: list[tuple[str, str]] = [
     ("periodo_inizio", "Periodo inizio"),
     ("periodo_fine", "Periodo fine"),
     ("titolo_affidamento", "Titolo affidamento storico"),
+    ("dipartimento_docente", "Dipartimento afferenza docente storico"),
     ("proposta_docente", "VARIAZIONE · Nuovo docente"),
     ("proposta_ore", "VARIAZIONE · Ore"),
     ("proposta_note", "VARIAZIONE · Note"),
@@ -181,7 +182,7 @@ OFFER_HEADER_TO_FIELD = {
     "NOTE": "proposta_note",
     "PERIODO INIZIO": "periodo_inizio",
     "PERIODO FINE": "periodo_fine",
-    "DIPARTIMENTO AFFERENZA DOCENTE": "dipartimento",
+    "DIPARTIMENTO AFFERENZA DOCENTE": "dipartimento_docente",
     "TITOLO AFFIDAMENTO": "titolo_affidamento",
 }
 PROPOSAL_FIELDS = ("proposta_docente", "proposta_ore", "proposta_note")
