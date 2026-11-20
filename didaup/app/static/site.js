@@ -485,6 +485,15 @@ function hookForms() {
     try {
       const result = await api("years/" + state.selected + "/department-workbooks",
         "POST", {import_id: sourceId});
+      const excludedRows = Number(result.excluded_rows || 0);
+      const missed = Number(result.unmatched_exclusion_count || 0);
+      const missedDetails = (result.unmatched_exclusion_examples || []).slice(0, 8)
+        .map(x => x.course_code + " (" + x.campus + ", anno " + x.study_year + ")")
+        .join("; ");
+      const missedMessage = missed
+        ? " VERIFICARE: " + missed + " annualità escluse non hanno trovato " +
+          "corrispondenza certa nelle righe del report: " + missedDetails + "."
+        : "";
       const warnings = Number(result.unresolved_annuality_rows_included || 0);
       const warningMessage = warnings
         ? " ATTENZIONE: " + warnings +
@@ -504,11 +513,14 @@ function hookForms() {
         : "";
       showNotice("Generati cinque file identici con " +
         result.historical_rows + " righe storiche ciascuno; nessun filtro dipartimentale. " +
-        "Il pacchetto ZIP è disponibile per il download." + warningMessage + missingCodeMessage);
-      el("workbook-progress").textContent = warnings
-        ? warnings + " righe mantenute per impossibilità di verificare l'annualità: " +
-          "generazione conclusa, verifica non bloccante."
-        : "Generazione completata senza annualità indeterminate.";
+        "Righe escluse: " + excludedRows + ". " +
+        "Il pacchetto ZIP è disponibile per il download." +
+        warningMessage + missingCodeMessage + missedMessage);
+      el("workbook-progress").textContent =
+        "Escluse " + excludedRows + " righe. " +
+        (missed ? missed + " annualità escluse senza corrispondenza nel report. " : "") +
+        (warnings ? warnings + " righe con annualità incompleta mantenute. " : "") +
+        "Generazione completata.";
       await refreshWorkbooks();
     } catch (error) {
       showNotice(error.message, true);
