@@ -244,7 +244,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         effective_rules = validate_rules(workload_rules or [])
     except WorkloadRuleError as exc:
         raise WorkbookGenerationError(str(exc)) from exc
-    if effective_rules and "ore_previste" not in assigned:
+    if "ore_previste" not in assigned:
         raise WorkbookGenerationError(
             "Calcolo carico: associare TOT ORE PREVISTE prima di generare i file"
         )
@@ -444,7 +444,10 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         )
         data["TOT ORE EFFETTIVE"] = effective
         if matched_index is None and rule_issue is None:
+            # No matching rule: carry the explicitly mapped planned hours,
+            # never the obsolete historic effective-hour value.
             workload_unmatched += 1
+            workload_total += effective
         elif rule_issue and is_missing_planned_hours(planned_hours):
             # A documented exception, not an inferred number. Empty planned
             # hours always yield ZERO even when a fixed-hours rule matches.
@@ -453,7 +456,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
                 workload_missing_warnings.append({
                     "excel_row": excel_row,
                     "reason": rule_issue,
-                    "rule_number": matched_index + 1,
+                    "rule_number": matched_index + 1 if matched_index is not None else None,
                 })
         elif rule_issue:
             workload_error_count += 1
@@ -497,6 +500,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         "rules": len(effective_rules),
         "rows_calculated": workload_matches,
         "rows_without_rule": workload_unmatched,
+        "rows_using_planned_hours": workload_unmatched,
         "total_effective_hours": round(workload_total, 2),
         "per_rule_rows": workload_by_rule,
         "rows_with_missing_planned_hours": workload_missing_count,
