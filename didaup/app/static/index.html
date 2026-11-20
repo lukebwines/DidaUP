@@ -112,27 +112,66 @@
             </div>
             <div id="cohort-review-body" hidden>
               <div id="cohort-review-notice" class="import-warning" role="status" aria-live="polite"></div>
+              <h4 class="cohort-filter-title">Filtra le annualità</h4>
               <div class="cohort-search-row">
                 <label class="cohort-search">
-                  <span>Ricerca rapida</span>
+                  <span>Ricerca per nome o codice</span>
                   <input id="cohort-review-search" type="search" placeholder="Cerca CdS, codice, sede o anno…" autocomplete="off">
                 </label>
-                <label>Mostra
+                <label>Stato della selezione
                   <select id="cohort-review-filter">
-                    <option value="all">Tutte le annualità</option>
-                    <option value="excluded">Solo quelle spuntate</option>
-                    <option value="included">Solo quelle non spuntate</option>
+                    <option value="all">Tutte</option>
+                    <option value="excluded">Da escludere (spunta attiva)</option>
+                    <option value="included">Da includere (spunta assente)</option>
+                    <option value="changed">Solo modifiche non salvate</option>
                   </select>
                 </label>
               </div>
-              <div class="cohort-count-row">
+              <div class="cohort-facet-grid">
+                <details class="cohort-multiselect" id="cohort-cds-filter">
+                  <summary id="cohort-cds-summary">Corsi di Studio · Tutti</summary>
+                  <div class="cohort-filter-popup">
+                    <label for="cohort-cds-search">Cerca tra i corsi</label>
+                    <input type="search" id="cohort-cds-search" placeholder="Nome o codice CdS…" autocomplete="off">
+                    <div class="cohort-filter-actions">
+                      <button type="button" class="secondary" id="cohort-cds-pick">Seleziona risultati</button>
+                      <button type="button" class="secondary" id="cohort-cds-clear">Azzera filtro</button>
+                    </div>
+                    <div class="cohort-filter-values" id="cohort-cds-options" role="group" aria-label="Corsi di Studio"></div>
+                  </div>
+                </details>
+                <details class="cohort-multiselect" id="cohort-campus-filter">
+                  <summary id="cohort-campus-summary">Sedi · Tutte</summary>
+                  <div class="cohort-filter-popup">
+                    <div class="cohort-filter-actions">
+                      <button type="button" class="secondary" id="cohort-campus-clear">Azzera filtro</button>
+                    </div>
+                    <div class="cohort-filter-values" id="cohort-campus-options" role="group" aria-label="Sedi"></div>
+                  </div>
+                </details>
+                <details class="cohort-multiselect" id="cohort-year-filter">
+                  <summary id="cohort-year-summary">Anni di corso · Tutti</summary>
+                  <div class="cohort-filter-popup">
+                    <div class="cohort-filter-actions">
+                      <button type="button" class="secondary" id="cohort-year-clear">Azzera filtro</button>
+                    </div>
+                    <div class="cohort-filter-values" id="cohort-year-options" role="group" aria-label="Anni di corso"></div>
+                  </div>
+                </details>
+                <button class="secondary" type="button" id="cohort-clear-filters">Ripristina tutti i filtri</button>
+              </div>
+              <div class="cohort-count-row" aria-live="polite">
                 <span id="cohort-review-count" class="chip"></span>
                 <span id="cohort-review-selected" class="chip"></span>
+                <span id="cohort-review-saved" class="chip"></span>
+                <span id="cohort-review-pending" class="chip"></span>
               </div>
               <div class="cohort-batch-actions write-only">
-                <button class="secondary" type="button" id="cohort-check-visible">Spunta risultati visibili</button>
-                <button class="secondary" type="button" id="cohort-uncheck-visible">Togli spunta ai risultati visibili</button>
+                <button class="secondary" type="button" id="cohort-check-visible">Escludi tutte le annualità visualizzate</button>
+                <button class="secondary" type="button" id="cohort-uncheck-visible">Includi tutte le annualità visualizzate</button>
+                <button class="secondary" type="button" id="cohort-discard-pending">Annulla modifiche non salvate</button>
               </div>
+              <p class="muted">I filtri si combinano tra loro. Le azioni multiple interessano <strong>solo le righe visualizzate</strong>, non quelle nascoste dai filtri. Le selezioni rimangono in bozza finché non premi «Salva».</p>
               <div class="table-wrap cohort-list-wrap">
                 <table aria-label="Annualità da escludere">
                   <thead>
@@ -146,18 +185,31 @@
                 <label>Motivazione delle nuove esclusioni
                   <input id="cohort-review-reason" value="Annualità non più in gestione" maxlength="500">
                 </label>
-                <button class="primary" type="button" id="cohort-review-save">Salva le esclusioni selezionate</button>
+                <button class="primary" type="button" id="cohort-review-save">Salva selezione e inclusioni</button>
               </div>
-              <p class="muted">Le spunte sono soltanto una selezione fino al salvataggio. I risultati nascosti dalla ricerca mantengono la propria spunta. Al salvataggio vengono censite anche le annualità non escluse.</p>
+              <p class="muted">Le spunte sono una bozza fino al salvataggio. Anche le righe nascoste dai filtri mantengono lo stato. Il riepilogo prima del salvataggio distingue nuove esclusioni e ripristini.</p>
             </div>
             <p id="cohort-review-placeholder" class="empty">Seleziona il report importato e premi «Ricava elenco dal report» per visualizzare le annualità.</p>
           </div>
           <div class="panel">
             <div class="panel-heading">
-              <div><h3>Annualità dei Corsi di Studio</h3><p>Le esclusioni incidono solo sulla futura generazione dei file: la fonte storica resta intatta.</p></div>
+              <div><h3>Registro delle annualità già salvate</h3><p>Stato effettivo nel database, distinto dalle selezioni in bozza qui sopra. La fonte storica resta intatta.</p></div>
               <span class="chip" id="cohort-count">0 record</span>
             </div>
-            <div class="table-wrap">
+            <div class="cohort-registry-filters">
+              <label>Ricerca nel registro
+                <input id="cohort-registry-search" type="search" placeholder="Nome CdS, codice o sede…" autocomplete="off">
+              </label>
+              <label>Stato registrato
+                <select id="cohort-registry-status">
+                  <option value="all">Tutte</option>
+                  <option value="excluded">Solo escluse</option>
+                  <option value="included">Solo incluse</option>
+                </select>
+              </label>
+              <span id="cohort-registry-visible" class="chip"></span>
+            </div>
+            <div class="table-wrap cohort-registry-list">
               <table><thead><tr><th>CdS</th><th>Sede</th><th>Anno</th><th>Inclusione</th><th>Motivazione</th><th>Azione</th></tr></thead><tbody id="cohorts-body"></tbody></table>
               <p id="empty-cohorts" class="empty">Nessuna annualità censita. Le righe verranno acquisite dal report ufficiale; puoi inserire una voce sintetica per collaudo.</p>
             </div>
