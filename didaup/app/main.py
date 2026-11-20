@@ -26,7 +26,8 @@ from starlette.concurrency import run_in_threadpool
 from .source_import import MAX_UPLOAD_BYTES, check_signature, inspect_workbook
 from .column_mapping import fields_for, preview as read_mapping_preview, evaluate_mapping, autodetect_workbook, source_header_conflicts
 from .cohort_import import CohortExtractionError, extract_cohorts
-from .department_workbooks import build_five_workbooks, WorkbookGenerationError
+from .department_workbooks import build_five_workbooks, WorkbookGenerationError, _prepare
+from .workload import WorkloadRuleError, validate_rules, source_choices
 from .department_review import review_five_workbooks, ReviewError
 
 BASE = Path(__file__).resolve().parent
@@ -177,6 +178,11 @@ def startup():
               anomaly_count INTEGER NOT NULL,
               actor_id INTEGER NOT NULL REFERENCES users(id),
               created_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS workload_profiles(
+              year_id INTEGER PRIMARY KEY REFERENCES academic_years(id),
+              rules_json TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,
+              updated_at INTEGER NOT NULL, actor_id INTEGER NOT NULL REFERENCES users(id)
             );
             CREATE TABLE IF NOT EXISTS working_artifacts(
               id INTEGER PRIMARY KEY,
@@ -1159,6 +1165,139 @@ async def apply_cohort_exclusions(
 
 
 
+
+# ----- Regole di carico: per anno accademico, senza alterare il report storico -----
+
+class WorkloadProfileUpdate(BaseModel):
+    expected_version: int = Field(ge=0)
+    rules: list[dict] = Field(max_length=500)
+
+
+@app.get("/api/years/{year_id}/workload")
+def get_workload_profile(year_id: int, request: Request):
+    current_user(request)
+    with closing(connect()) as cx:
+        ensure_year(cx, year_id)
+        row = cx.execute(
+            "SELECT rules_json,version,updated_at FROM workload_profiles WHERE year_id=?",
+            (year_id,),
+        ).fetchone()
+    return {
+        "rules": json.loads(row["rules_json"]) if row else [],
+        "version": row["version"] if row else 0,
+        "updated_at": row["updated_at"] if row else None,
+    }
+
+
+@app.put("/api/years/{year_id}/workload")
+def update_workload_profile(year_id: int, body: WorkloadProfileUpdate, request: Request):
+    actor = current_user(request, ("admin",))
+    require_write(request, actor)
+    try:
+        checked = validate_rules(body.rules)
+    except WorkloadRuleError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    with closing(connect()) as cx:
+        cx.execute("BEGIN IMMEDIATE")
+        ensure_year(cx, year_id)
+        current = cx.execute(
+            "SELECT version FROM workload_profiles WHERE year_id=?",
+            (year_id,),
+        ).fetchone()
+        version = current["version"] if current else 0
+        if version != body.expected_version:
+            raise HTTPException(409, "Regole modificate da un altro operatore: ricaricare")
+        if current:
+            cx.execute(
+                "UPDATE workload_profiles SET rules_json=?,version=version+1,"
+                "updated_at=?,actor_id=? WHERE year_id=?",
+                (json.dumps(checked, ensure_ascii=False), int(time.time()),
+                 actor["id"], year_id),
+            )
+        else:
+            cx.execute(
+                "INSERT INTO workload_profiles(year_id,rules_json,version,updated_at,actor_id)"
+                " VALUES(?,?,1,?,?)",
+                (year_id, json.dumps(checked, ensure_ascii=False),
+                 int(time.time()), actor["id"]),
+            )
+        record(cx, actor["id"], "update_workload_profile", "academic_year", year_id)
+        cx.commit()
+    return {"version": version + 1, "rules": checked}
+
+
+def workload_source_snapshot(cx, year_id, import_id):
+    ensure_year(cx, year_id)
+    report = cx.execute(
+        "SELECT * FROM source_imports WHERE id=? AND year_id=? AND kind='offerta'",
+        (import_id, year_id),
+    ).fetchone()
+    if report is None:
+        raise HTTPException(404, "Report offerta non trovato nell'anno selezionato")
+    mapping = cx.execute(
+        "SELECT * FROM source_mappings WHERE import_id=?", (import_id,),
+    ).fetchone()
+    if mapping is None:
+        raise HTTPException(409, "Mappatura del report non disponibile")
+    return report, mapping
+
+
+@app.get("/api/years/{year_id}/workload/choices")
+async def get_workload_choices(year_id: int, import_id: int, request: Request):
+    current_user(request)
+    with closing(connect()) as cx:
+        source, mapping = workload_source_snapshot(cx, year_id, import_id)
+        assigned = json.loads(mapping["fields_json"])
+    try:
+        return await run_in_threadpool(
+            source_choices, SOURCE_DIR / source["stored_name"],
+            mapping["sheet_name"], mapping["header_row"], assigned,
+        )
+    except WorkloadRuleError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(422, "Impossibile leggere i valori dal report") from exc
+
+
+@app.get("/api/years/{year_id}/workload/preview")
+async def preview_workload(year_id: int, import_id: int, request: Request):
+    current_user(request)
+    with closing(connect()) as cx:
+        source, mapping = workload_source_snapshot(cx, year_id, import_id)
+        year = cx.execute("SELECT code FROM academic_years WHERE id=?", (year_id,)).fetchone()
+        selections = cx.execute(
+            "SELECT course_code,course_name,campus,study_year,included FROM cohorts "
+            "WHERE year_id=?", (year_id,),
+        ).fetchall()
+        included = {(x["course_code"], x["campus"], x["study_year"])
+                    for x in selections if x["included"]}
+        excluded = {(x["course_code"], x["campus"], x["study_year"])
+                    for x in selections if not x["included"]}
+        names = {(x["course_code"], x["campus"], x["study_year"]): x["course_name"]
+                 for x in selections}
+        saved = cx.execute(
+            "SELECT rules_json,version FROM workload_profiles WHERE year_id=?", (year_id,),
+        ).fetchone()
+        rules = json.loads(saved["rules_json"]) if saved else []
+        version = saved["version"] if saved else 0
+        assigned = json.loads(mapping["fields_json"])
+    try:
+        prepared = await run_in_threadpool(
+            _prepare, SOURCE_DIR / source["stored_name"], source["sha256"],
+            mapping["sheet_name"], mapping["header_row"], assigned, year["code"],
+            excluded, included, names, rules, False,
+        )
+    except WorkbookGenerationError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    summary = prepared[-1]
+    return {
+        **summary,
+        "saved_version": version, "included_rows": len(prepared[0]),
+        "excluded_rows": prepared[1],
+        "notice": "Anteprima solo sulle righe incluse; la fonte originale resta invariata.",
+    }
+
+
 # ----- Five identical, complete workbooks: NO department-specific row filtering -----
 # Deliberately NOT a OneDrive publishing endpoint. This release exports five
 # review workbooks from a source previously accepted for synthetic-only testing.
@@ -1207,6 +1346,12 @@ async def generate_department_workbooks(
         }
         source_path = SOURCE_DIR / source["stored_name"]
         assigned = json.loads(mapping["fields_json"])
+        workload_row = cx.execute(
+            "SELECT rules_json,version FROM workload_profiles WHERE year_id=?",
+            (year_id,),
+        ).fetchone()
+        workload_rules = json.loads(workload_row["rules_json"]) if workload_row else []
+        workload_version = workload_row["version"] if workload_row else 0
         # Snapshot values for optimistic concurrency checks after generation.
         mapping_version = mapping["version"]
         source_sha = source["sha256"]
@@ -1214,7 +1359,7 @@ async def generate_department_workbooks(
         archive, summary = await run_in_threadpool(
             build_five_workbooks,
             source_path, source_sha, mapping["sheet_name"], mapping["header_row"],
-            assigned, year["code"], excluded, included, cohort_names,
+            assigned, year["code"], excluded, included, cohort_names, workload_rules,
         )
     except WorkbookGenerationError as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -1241,6 +1386,10 @@ async def generate_department_workbooks(
                 "SELECT version FROM source_mappings WHERE import_id=?",
                 (body.import_id,),
             ).fetchone()
+            workload_now = cx.execute(
+                "SELECT version FROM workload_profiles WHERE year_id=?", (year_id,)
+            ).fetchone()
+            current_workload_version = workload_now["version"] if workload_now else 0
             current_cohorts = cx.execute(
                 "SELECT course_code,course_name,campus,study_year,included FROM cohorts "
                 "WHERE year_id=?", (year_id,),
@@ -1255,6 +1404,7 @@ async def generate_department_workbooks(
             }
             if (source_now is None or source_now["sha256"] != source_sha
                 or mapping_now is None or mapping_now["version"] != mapping_version
+                or current_workload_version != workload_version
                 or now_excluded != excluded or now_included != included
                 or {
                     (r["course_code"], r["campus"], r["study_year"]): r["course_name"]
@@ -1372,6 +1522,12 @@ async def preview_five_department_proposals(
         }
         assigned = json.loads(mapping["fields_json"])
         mapping_version = mapping["version"]
+        workload_row = cx.execute(
+            "SELECT rules_json,version FROM workload_profiles WHERE year_id=?",
+            (year_id,),
+        ).fetchone()
+        workload_rules = json.loads(workload_row["rules_json"]) if workload_row else []
+        workload_version = workload_row["version"] if workload_row else 0
     temp_files = []
     try:
         for uploaded in files:
@@ -1403,6 +1559,7 @@ async def preview_five_department_proposals(
                 review_five_workbooks, SOURCE_DIR / source["stored_name"],
                 source["sha256"], mapping["sheet_name"], mapping["header_row"],
                 assigned, year["code"], temp_files, excluded, included, cohort_names,
+                workload_rules,
             )
         except ReviewError as exc:
             raise HTTPException(422, str(exc)) from exc
@@ -1413,11 +1570,16 @@ async def preview_five_department_proposals(
                 "SELECT version FROM source_mappings WHERE import_id=?",
                 (import_id,),
             ).fetchone()
+            workload_now = cx.execute(
+                "SELECT version FROM workload_profiles WHERE year_id=?", (year_id,)
+            ).fetchone()
+            current_workload_version = workload_now["version"] if workload_now else 0
             now_cohorts = cx.execute(
                 "SELECT course_code,course_name,campus,study_year,included FROM cohorts "
                 "WHERE year_id=?", (year_id,),
             ).fetchall()
             if (check is None or check["version"] != mapping_version
+                or current_workload_version != workload_version
                 or {
                     (r["course_code"], r["campus"], r["study_year"])
                     for r in now_cohorts if not r["included"]
@@ -1430,7 +1592,7 @@ async def preview_five_department_proposals(
                     (r["course_code"], r["campus"], r["study_year"]): r["course_name"]
                     for r in now_cohorts
                 } != cohort_names):
-                raise HTTPException(409, "Mappatura o esclusioni cambiate durante la revisione")
+                raise HTTPException(409, "Mappatura, esclusioni o regole di carico cambiate durante la revisione")
             record(cx, actor["id"], "review_five_department_proposals",
                    "source_import", import_id)
             cx.commit()
