@@ -1284,6 +1284,11 @@ async def get_workload_choices(year_id: int, import_id: int, request: Request):
             source_sha256=source["sha256"], allowed_source_ids=kept_ids,
         )
         result["excluded_rows"] = prepared[1]
+        # The export deliberately retains ambiguous/mixed source rows. Expose
+        # these cases so an apparently excluded CdS can be investigated.
+        result["unmatched_exclusion_count"] = prepared[7]
+        result["mixed_annuality_rows_retained"] = prepared[11]
+        result["excluded_course_titles_still_present"] = prepared[13]
         return result
     except (WorkloadRuleError, WorkbookGenerationError) as exc:
         raise HTTPException(422, str(exc)) from exc
