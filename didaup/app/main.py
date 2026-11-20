@@ -26,6 +26,7 @@ from starlette.concurrency import run_in_threadpool
 from .source_import import MAX_UPLOAD_BYTES, check_signature, inspect_workbook
 from .column_mapping import fields_for, preview as read_mapping_preview, evaluate_mapping, autodetect_workbook
 from .cohort_import import CohortExtractionError, extract_cohorts
+from .department_workbooks import build_five_workbooks, WorkbookGenerationError
 
 BASE = Path(__file__).resolve().parent
 DATA = Path(os.environ.get("DIDAUP_DATA_DIR", "/data"))
@@ -1132,3 +1133,152 @@ async def apply_cohort_exclusions(
         "anomaly_count": extracted["anomaly_count"],
         "message": "Ambito annualità salvato senza modificare il report originale",
     }
+
+
+
+# ----- Five identical, complete workbooks: NO department-specific row filtering -----
+# Deliberately NOT a OneDrive publishing endpoint. This release exports five
+# review workbooks from a source previously accepted for synthetic-only testing.
+
+class DepartmentWorkbookRequest(BaseModel):
+    import_id: int = Field(ge=1)
+
+
+@app.post("/api/years/{year_id}/department-workbooks")
+async def generate_department_workbooks(
+    year_id: int, body: DepartmentWorkbookRequest, request: Request,
+):
+    actor = current_user(request, ("admin", "operatore"))
+    require_write(request, actor)
+    with closing(connect()) as cx:
+        ensure_year(cx, year_id)
+        year = cx.execute(
+            "SELECT code FROM academic_years WHERE id=?", (year_id,)
+        ).fetchone()
+        source = cx.execute(
+            "SELECT * FROM source_imports WHERE id=? AND year_id=? AND kind='offerta'",
+            (body.import_id, year_id),
+        ).fetchone()
+        if source is None:
+            raise HTTPException(404, "Report di offerta didattica non presente per l'anno")
+        mapping = cx.execute(
+            "SELECT * FROM source_mappings WHERE import_id=?", (body.import_id,)
+        ).fetchone()
+        if mapping is None:
+            raise HTTPException(409, "Salvare prima la mappatura del report")
+        excluded_rows = cx.execute(
+            "SELECT course_code,campus,study_year FROM cohorts "
+            "WHERE year_id=? AND included=0",
+            (year_id,),
+        ).fetchall()
+        excluded = {(r["course_code"], r["campus"], r["study_year"]) for r in excluded_rows}
+        source_path = SOURCE_DIR / source["stored_name"]
+        assigned = json.loads(mapping["fields_json"])
+        # Snapshot values for optimistic concurrency checks after generation.
+        mapping_version = mapping["version"]
+        source_sha = source["sha256"]
+    try:
+        archive, summary = await run_in_threadpool(
+            build_five_workbooks,
+            source_path, source_sha, mapping["sheet_name"], mapping["header_row"],
+            assigned, year["code"], excluded,
+        )
+    except WorkbookGenerationError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        # Unexpected parser or XLSX writer faults are not disclosed to clients.
+        raise HTTPException(422, "Generazione dei file non riuscita: controllare il report") from exc
+    if len(archive) > 120 * 1024 * 1024:
+        raise HTTPException(413, "Archivio troppo grande per la generazione")
+
+    filename = "artifact_five_departments_" + secrets.token_hex(16) + ".zip"
+    output_path = WORK_DIR / filename
+    WORK_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        with output_path.open("xb") as output:
+            output.write(archive)
+        os.chmod(output_path, 0o600)
+        with closing(connect()) as cx:
+            cx.execute("BEGIN IMMEDIATE")
+            source_now = cx.execute(
+                "SELECT sha256 FROM source_imports WHERE id=? AND year_id=?",
+                (body.import_id, year_id),
+            ).fetchone()
+            mapping_now = cx.execute(
+                "SELECT version FROM source_mappings WHERE import_id=?",
+                (body.import_id,),
+            ).fetchone()
+            current_exclusions = cx.execute(
+                "SELECT course_code,campus,study_year FROM cohorts "
+                "WHERE year_id=? AND included=0", (year_id,),
+            ).fetchall()
+            now_excluded = {
+                (r["course_code"], r["campus"], r["study_year"])
+                for r in current_exclusions
+            }
+            if (source_now is None or source_now["sha256"] != source_sha
+                or mapping_now is None or mapping_now["version"] != mapping_version
+                or now_excluded != excluded):
+                cx.rollback()
+                raise HTTPException(
+                    409, "Fonte, mappatura o annualità cambiate: rigenerare dopo il controllo"
+                )
+            row = cx.execute(
+                "INSERT INTO working_artifacts(year_id,stored_name,kind,generated_at) "
+                "VALUES(?,?,?,?)",
+                (year_id, filename, "five_department_workbooks", int(time.time())),
+            )
+            record(cx, actor["id"], "generate_five_identical_workbooks",
+                   "working_artifact", row.lastrowid)
+            cx.commit()
+            artifact_id = row.lastrowid
+    except Exception:
+        output_path.unlink(missing_ok=True)
+        raise
+    return {
+        "id": artifact_id,
+        **summary,
+        "download_url": f"api/years/{year_id}/department-workbooks/{artifact_id}/download",
+        "notice": "Cinque file uguali nell'archivio. Nessuna pubblicazione su OneDrive effettuata.",
+    }
+
+
+@app.get("/api/years/{year_id}/department-workbooks")
+def list_department_workbooks(year_id: int, request: Request):
+    current_user(request, ("admin", "operatore"))
+    with closing(connect()) as cx:
+        ensure_year(cx, year_id)
+        rows = cx.execute(
+            "SELECT id,generated_at FROM working_artifacts "
+            "WHERE year_id=? AND kind='five_department_workbooks' "
+            "ORDER BY id DESC LIMIT 30", (year_id,),
+        ).fetchall()
+    return [
+        {"id": row["id"], "generated_at": row["generated_at"],
+         "download_url": f"api/years/{year_id}/department-workbooks/{row['id']}/download"}
+        for row in rows
+    ]
+
+
+@app.get("/api/years/{year_id}/department-workbooks/{artifact_id}/download")
+def download_department_workbooks(year_id: int, artifact_id: int, request: Request):
+    current_user(request, ("admin", "operatore"))
+    with closing(connect()) as cx:
+        ensure_year(cx, year_id)
+        row = cx.execute(
+            "SELECT stored_name FROM working_artifacts "
+            "WHERE id=? AND year_id=? AND kind='five_department_workbooks'",
+            (artifact_id, year_id),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(404, "Pacchetto non presente")
+    name = row["stored_name"]
+    if not re.fullmatch(r"artifact_five_departments_[a-f0-9]{32}\.zip", name):
+        raise HTTPException(409, "Nome archivio non valido")
+    path = WORK_DIR / name
+    if not path.is_file() or not path.resolve().is_relative_to(WORK_DIR.resolve()):
+        raise HTTPException(404, "Pacchetto non più disponibile")
+    return FileResponse(
+        path, filename="DidaUP_5_file_completi.zip",
+        media_type="application/zip",
+    )
