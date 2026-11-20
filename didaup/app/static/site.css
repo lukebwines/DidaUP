@@ -54,3 +54,49 @@ td small{display:block;color:#718398}td button{padding:7px 11px!important;font-s
 @media(max-width:920px){.shell{grid-template-columns:1fr}.sidebar{min-height:auto;padding:13px 18px}.sidebar nav{display:flex;overflow:auto;gap:6px}.sidebar-caption,.sidebar-bottom{display:none}.nav-item{white-space:nowrap}.content{padding:23px 18px}.row-fields{grid-template-columns:1fr 1fr}}
 @media(max-width:620px){.metrics{grid-template-columns:1fr}.hero-graphic{display:none}.hero{padding:24px}.row-fields{grid-template-columns:1fr}.top-actions{width:100%}.login-card{padding:23px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+
+/* DidaUP light/dark appearance and workbook-import views */
+.theme-toggle{border:1px solid #c7d7e9;background:#fff;color:#315477;border-radius:9px;padding:9px 12px;font-size:.82rem;font-weight:650;white-space:nowrap}
+.theme-toggle:hover{background:#ebf4ff}.theme-login{display:block;margin-left:auto}
+.import-fields{grid-template-columns:minmax(200px,1.2fr) minmax(230px,2fr) auto;align-items:end}
+.import-warning{border-left:3px solid #d6a238;background:#fff7e8;color:#775018;border-radius:6px;padding:12px 15px;margin:12px 0 24px}
+.import-warning strong{color:inherit}
+.danger-panel{border-color:#edc3c0;background:#fffafa}
+.danger-panel h3{color:#ab332d}
+.danger-button{border:1px solid #b93530;border-radius:8px;color:#fff;background:#c23731;padding:11px 16px;font-weight:700}
+.danger-button:hover{background:#a92f2a}
+.reset-prompt{background:#fff0f0;color:#93332d;border-radius:8px;padding:10px 12px;margin:0}
+#reset-required{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;color:inherit}
+:root[data-theme="dark"]{color-scheme:dark;background:#0d1523;color:#e6eefb}
+[data-theme="dark"] body{background:#0d1523;color:#e6eefb}
+[data-theme="dark"] .content{background:#0d1523}
+[data-theme="dark"] .sidebar{background:#091524}
+[data-theme="dark"] .panel,[data-theme="dark"] .metric{background:#152339;border-color:#284057;box-shadow:none}
+[data-theme="dark"] .panel h3,[data-theme="dark"] .topbar h1,[data-theme="dark"] h1,[data-theme="dark"] .metric strong{color:#eef5ff}
+[data-theme="dark"] p,[data-theme="dark"] .panel p{color:#a2b6ce}
+[data-theme="dark"] .metric small,[data-theme="dark"] .muted,[data-theme="dark"] .empty{color:#92a9c3!important}
+[data-theme="dark"] .year-label,[data-theme="dark"] .fields label,[data-theme="dark"] .inline-form label{color:#c3d3e5}
+[data-theme="dark"] input,[data-theme="dark"] select{background:#0d1a2e;color:#e7f1ff;border-color:#37516d}
+[data-theme="dark"] input:focus,[data-theme="dark"] select:focus{box-shadow:0 0 0 3px #14427b;border-color:#4898fa}
+[data-theme="dark"] .theme-toggle,[data-theme="dark"] button.secondary{background:#1d3552;color:#d6eaff;border-color:#3a5879}
+[data-theme="dark"] .theme-toggle:hover,[data-theme="dark"] button.secondary:hover{background:#29496c}
+[data-theme="dark"] .user-pill,[data-theme="dark"] .chip{background:#203752;border-color:#395672;color:#bed8f3}
+[data-theme="dark"] th{background:#1c304b;color:#acc3df;border-bottom-color:#375371}
+[data-theme="dark"] td{border-bottom-color:#263e58;color:#e0e8f7}
+[data-theme="dark"] td small{color:#9ab1cf}
+[data-theme="dark"] .status{color:#73d6a3}
+[data-theme="dark"] .status.off{color:#f2ba84}
+[data-theme="dark"] .notice{background:#173b2c;border-color:#2d7854;color:#a4f3c2}
+[data-theme="dark"] .notice.bad{background:#452423;border-color:#82423c;color:#ffbbb6}
+[data-theme="dark"] .login-shell{background:radial-gradient(circle at 12% 12%,#1c4c77 0%,transparent 38%),#080f1e}
+[data-theme="dark"] .login-card{background:#16243a;box-shadow:0 30px 75px #040915b0}
+[data-theme="dark"] .login-card .brand{color:#f4f8ff}
+[data-theme="dark"] .login-card .fields label{color:#bbd0e9}
+[data-theme="dark"] .import-warning{background:#403219;color:#ffe0a9;border-left-color:#d9aa4f}
+[data-theme="dark"] .danger-panel{background:#2a1d25;border-color:#71454c}
+[data-theme="dark"] .danger-panel h3{color:#ffaaa4}
+[data-theme="dark"] .reset-prompt{background:#48262e;color:#ffc0bb}
+[data-theme="dark"] .placeholder-steps span{background:#1f3856;color:#b6d5f5}
+@media(max-width:920px){.import-fields{grid-template-columns:1fr 1fr}.import-fields button{grid-column:1/-1}}
+@media(max-width:620px){.import-fields{grid-template-columns:1fr}.import-fields button{grid-column:auto}}
