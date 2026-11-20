@@ -24,6 +24,3 @@ schema:
   bootstrap_username: str
   bootstrap_password: password?
   secure_cookies: bool
-map:
-  - type: data
-    read_only: false
