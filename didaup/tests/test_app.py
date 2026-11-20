@@ -208,7 +208,7 @@ def test_import_retains_file_privately_and_rejects_duplicate(client, tmp_path):
     report = client.post(
         "/api/years/1/imports",
         headers=csrf,
-        data={"kind": "offerta"},
+        data={"kind": "offerta", "test_data_only": "true"},
         files={"source": ("test-synthetic.xlsx", fixture, "application/octet-stream")},
     )
     assert report.status_code == 200, report.text
@@ -221,14 +221,14 @@ def test_import_retains_file_privately_and_rejects_duplicate(client, tmp_path):
     assert len(private_files) == 1
 
     duplicate = client.post(
-        "/api/years/1/imports", headers=csrf, data={"kind": "offerta"},
+        "/api/years/1/imports", headers=csrf, data={"kind": "offerta", "test_data_only": "true"},
         files={"source": ("test-synthetic.xlsx", fixture, "application/octet-stream")},
     )
     assert duplicate.status_code == 409
     assert len(list((tmp_path / "sources").glob("source_*.xlsx"))) == 1
 
     invalid = client.post(
-        "/api/years/1/imports", headers=csrf, data={"kind": "docenti"},
+        "/api/years/1/imports", headers=csrf, data={"kind": "docenti", "test_data_only": "true"},
         files={"source": ("fake.xls", b"not-really-an-excel-file", "application/octet-stream")},
     )
     assert invalid.status_code == 422
@@ -238,7 +238,7 @@ def test_archive_reset_requires_admin_password_and_text(client, tmp_path):
     csrf = signed_in(client)
     fixture = synthetic_xlsx()
     added = client.post(
-        "/api/years/1/imports", headers=csrf, data={"kind": "docenti"},
+        "/api/years/1/imports", headers=csrf, data={"kind": "docenti", "test_data_only": "true"},
         files={"source": ("fake-staff.xlsx", fixture, "application/octet-stream")},
     )
     assert added.status_code == 200, added.text
