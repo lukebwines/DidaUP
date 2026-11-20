@@ -337,7 +337,7 @@
             <div class="import-warning">
               Una sola regola per riga: prevale la combinazione più specifica di tipologia, CdS e TAF.
               Regole ugualmente specifiche che intercettano la stessa riga sono un conflitto e bloccano la generazione.
-              Senza regola le ore restano a 0; una quota fissa superiore alle ore previste viene segnalata.
+              Senza regola le ore restano a 0. Se TOT ORE PREVISTE è vuoto, il carico rimane 0 e la riga compare tra gli avvisi di verifica, senza bloccare il calcolo. Valori non numerici o negativi, conflitti e quote fisse superiori alle ore previste continuano a bloccare la generazione.
             </div>
             <div class="workload-source">
               <label>Report di offerta associato
@@ -429,8 +429,10 @@
                 <div><small>Righe con regola</small><strong id="workload-count-matched">0</strong></div>
                 <div><small>Righe a zero (senza regola)</small><strong id="workload-count-unmatched">0</strong></div>
                 <div><small>Ore di carico complessive</small><strong id="workload-total">0</strong></div>
-                <div><small>Anomalie</small><strong id="workload-count-errors">0</strong></div>
+                <div><small>Righe con ore previste vuote · carico 0</small><strong id="workload-count-missing">0</strong></div>
+                <div><small>Errori bloccanti</small><strong id="workload-count-errors">0</strong></div>
               </div>
+              <p id="workload-missing-warnings" class="workload-error-list"></p>
               <p id="workload-errors" class="workload-error-list"></p>
               <div class="table-wrap">
                 <table>
