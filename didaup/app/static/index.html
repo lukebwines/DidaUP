@@ -246,10 +246,28 @@
 
         <section id="view-workbook" class="screen" hidden>
           <div class="panel">
-            <h3>Generazione Excel per SSD</h3>
-            <p>Questa funzione sarà attivata dopo la mappatura del report 2026/27. Il file manterrà immutabili gli elementi dell'insegnamento e le coperture storiche; il referente compilerà solo le variazioni.</p>
-            <div class="placeholder-steps">
-              <span>01 · Importazione</span><span>02 · Selezione SSD</span><span>03 · Anteprima</span><span>04 · XLSX protetto</span>
+            <div class="panel-heading">
+              <div><h3>Cinque Excel identici e completi</h3>
+                <p>Un solo tracciato storico, cinque copie senza alcun filtro per dipartimento. Ogni Excel contiene tutti i CdS e gli SSD; le proposte 2027/28 sono distinte dallo storico 2026/27.</p>
+              </div><span class="chip">5 file XLSX in ZIP</span>
+            </div>
+            <div class="import-warning">
+              <strong>Fase di collaudo, solo dati sintetici.</strong>
+              DidaUP genera e conserva il pacchetto nell'archivio privato; non pubblica i file su OneDrive.
+              Non usare report reali prima della validazione dell'ambiente e dei controlli.
+              Il pulsante «+ Aggiungi variazione» richiede ancora il collaudo Office Scripts su Microsoft 365 d'Ateneo.
+            </div>
+            <form id="workbook-generate-form" class="fields row-fields write-only">
+              <label>Report di offerta storica mappato
+                <select id="workbook-import-id" required></select>
+              </label>
+              <button id="workbook-generate-button" class="primary" type="submit">Genera 5 Excel identici</button>
+            </form>
+            <p id="workbook-progress" class="muted" aria-live="polite"></p>
+            <p class="muted">Le colonne storiche sono bloccate; solo Tipo variazione, Nuovo docente, Ore e Note sono compilabili. Le esclusioni di annualità già deliberate in DidaUP restano applicate, ma non c'è ripartizione dipartimentale.</p>
+            <div class="table-wrap">
+              <table><thead><tr><th>Pacchetto</th><th>Generato</th><th>Download</th></tr></thead>
+                <tbody id="workbook-archives"></tbody></table>
             </div>
           </div>
         </section>
