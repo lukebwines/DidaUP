@@ -346,16 +346,56 @@
               <span id="workload-mapping-status" class="muted" role="status"></span>
             </div>
             <h3>Regole di calcolo</h3>
+            <p class="muted">Puoi selezionare più tipologie, CdS e TAF nella stessa regola. All'interno di ogni gruppo è sufficiente una corrispondenza; tra gruppi differenti devono corrispondere tutti i criteri impostati. Nessuna selezione significa «Tutti».</p>
             <form id="workload-rule-form" class="fields workload-fields admin-only">
-              <label>Tipologia CdS
-                <select id="workload-typologia"><option value="">Tutte le tipologie</option></select>
-              </label>
-              <label>Corso di studio
-                <select id="workload-cds"><option value="">Tutti i CdS</option></select>
-              </label>
-              <label>TAF
-                <select id="workload-taf"><option value="">Tutte le TAF</option></select>
-              </label>
+              <div class="workload-multi" id="workload-typologia-multi">
+                <span class="workload-multi-label">Tipologia CdS</span>
+                <button id="workload-typologia-toggle" class="workload-multi-toggle" type="button"
+                  aria-expanded="false" aria-controls="workload-typologia-panel">Tutte le tipologie</button>
+                <div class="workload-multi-panel" id="workload-typologia-panel" hidden>
+                  <label class="workload-multi-search-label" for="workload-typologia-search">Cerca
+                    <input id="workload-typologia-search" type="search" placeholder="Filtra valori..." autocomplete="off">
+                  </label>
+                  <div class="workload-multi-actions">
+                    <button id="workload-typologia-all" type="button" class="secondary">Seleziona visibili</button>
+                    <button id="workload-typologia-clear" type="button" class="secondary">Deseleziona tutte</button>
+                  </div>
+                  <div class="workload-multi-options" id="workload-typologia-options" role="group" aria-label="Opzioni Tipologia CdS"></div>
+                  <p class="workload-multi-help" id="workload-typologia-count">Nessun valore selezionato: tutti</p>
+                </div>
+              </div>
+              <div class="workload-multi" id="workload-cds-multi">
+                <span class="workload-multi-label">Corso di studio</span>
+                <button id="workload-cds-toggle" class="workload-multi-toggle" type="button"
+                  aria-expanded="false" aria-controls="workload-cds-panel">Tutti i CdS</button>
+                <div class="workload-multi-panel" id="workload-cds-panel" hidden>
+                  <label class="workload-multi-search-label" for="workload-cds-search">Cerca
+                    <input id="workload-cds-search" type="search" placeholder="Filtra valori..." autocomplete="off">
+                  </label>
+                  <div class="workload-multi-actions">
+                    <button id="workload-cds-all" type="button" class="secondary">Seleziona visibili</button>
+                    <button id="workload-cds-clear" type="button" class="secondary">Deseleziona tutte</button>
+                  </div>
+                  <div class="workload-multi-options" id="workload-cds-options" role="group" aria-label="Opzioni Corso di studio"></div>
+                  <p class="workload-multi-help" id="workload-cds-count">Nessun valore selezionato: tutti</p>
+                </div>
+              </div>
+              <div class="workload-multi" id="workload-taf-multi">
+                <span class="workload-multi-label">TAF</span>
+                <button id="workload-taf-toggle" class="workload-multi-toggle" type="button"
+                  aria-expanded="false" aria-controls="workload-taf-panel">Tutte le TAF</button>
+                <div class="workload-multi-panel" id="workload-taf-panel" hidden>
+                  <label class="workload-multi-search-label" for="workload-taf-search">Cerca
+                    <input id="workload-taf-search" type="search" placeholder="Filtra valori..." autocomplete="off">
+                  </label>
+                  <div class="workload-multi-actions">
+                    <button id="workload-taf-all" type="button" class="secondary">Seleziona visibili</button>
+                    <button id="workload-taf-clear" type="button" class="secondary">Deseleziona tutte</button>
+                  </div>
+                  <div class="workload-multi-options" id="workload-taf-options" role="group" aria-label="Opzioni TAF"></div>
+                  <p class="workload-multi-help" id="workload-taf-count">Nessun valore selezionato: tutti</p>
+                </div>
+              </div>
               <label>Metodo
                 <select id="workload-mode">
                   <option value="percentuale">Percentuale sulle ore previste</option>
