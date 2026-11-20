@@ -18,15 +18,15 @@ const context = vm.createContext({
 vm.runInContext(code, context, {filename: "cohort_review.js"});
 const first = {
   course_code: "SYN01", course_name: "Tecniche sintetiche", campus: "Sede A",
-  study_year: 1, source_rows: 2
+  study_year: 1, source_rows: 2, assignment_titles: ["Interno", "Esterno"]
 };
 const second = {
   course_code: "SYN01", course_name: "Tecniche sintetiche", campus: "Sede A",
-  study_year: 2, source_rows: 3
+  study_year: 2, source_rows: 3, assignment_titles: ["Esterno"]
 };
 const third = {
   course_code: "SYN02", course_name: "Esempio artificiale", campus: "Sede B",
-  study_year: 1, source_rows: 1
+  study_year: 1, source_rows: 1, assignment_titles: ["Convenzione"]
 };
 assert.notEqual(context.cohortKey(first), context.cohortKey(second));
 assert.equal(
@@ -85,4 +85,12 @@ assert.equal(context.visibleCohortCandidates()[0].study_year, 2);
 controls["cohort-review-filter"].value = "all";
 // Do not classify the filter choice as an administrative exclusion.
 assert.equal(context.cohortFacetOptions("courses").length, 2);
+// The title filter operates on all historic activities grouped in an
+// annuality. A matched title DOES NOT turn into a partial exclusion.
+vm.runInContext("cohortReview.filters.assignments.add('Esterno');", context);
+assert.equal(context.visibleCohortCandidates().length, 2);
+assert.equal(context.visibleCohortCandidates()[0].course_code, "SYN01");
+assert.equal(context.cohortFacetOptions("assignments").length, 3);
+vm.runInContext("cohortReview.filters.assignments.clear();", context);
+assert.equal(context.visibleCohortCandidates().length, 3);
 console.log("DidaUP cohort checklist multiselect and draft-persistence tests: PASS");
