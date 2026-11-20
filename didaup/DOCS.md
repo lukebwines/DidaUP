@@ -1,4 +1,4 @@
-# DidaUP — Installazione e collaudo (0.1.1-alpha1)
+# DidaUP — Installazione e collaudo (0.1.2-alpha1)
 
 > Versione iniziale di sviluppo **non collaudata su una specifica istanza di Home Assistant**. Usare soltanto dati sintetici. Non caricare file reali dell'Ateneo.
 
@@ -44,6 +44,28 @@ La password e il suo valore non vanno inseriti in GitHub, messaggi, screenshot o
 
 **Non creare un URL pubblico anonimo per DidaUP.** L'applicazione richiede comunque il proprio login, anche quando il browser passa da Ingress o da Cloudflare Access.
 
+## Importazione Excel e tema
+
+1. Aprire DidaUP e selezionare **2026/27** o un altro A.A. nel selettore superiore.
+2. Aprire **Importa report** dal menu laterale.
+3. Selezionare **Offerta didattica e coperture storiche** per il report principale, oppure **Docenti di competenza** per il report carichi.
+4. Caricare il file in formato `.xls` o `.xlsx`, massimo **32 MB**. Al termine compaiono l'elenco dei fogli, numero di righe e colonne e stato **Acquisito · Da mappare**.
+5. L'importazione registra hash, data, anno e categoria; se il file identico è già stato acquisito nella medesima categoria/A.A., il sistema lo segnala e non lo duplica.
+
+L'importazione **non ha ancora una mappatura semantica** dei docenti, SSD o incarichi. Conserva l'originale nel volume privato dell'add-on e rende disponibili i metadati; i successivi controlli amministrativi saranno introdotti dopo la verifica del tracciato effettivo. Non caricare file dell'Ateneo nel laboratorio domestico, anche se protetto da password.
+
+La modalità chiara/scura si cambia dal pulsante **Tema** in alto (anche sulla schermata di accesso). La preferenza è memorizzata nel browser, non nel database o su GitHub.
+
+## Azzeramento archivio
+
+Menu **Archivio** (solo amministratore):
+- **Solo anno selezionato**: elimina le annualità censite e i report archiviati per l'A.A. corrente, senza cambiare altri anni.
+- **Tutto l'archivio**: elimina dati e report di tutti gli anni e ripristina il contenitore iniziale vuoto 2026/27.
+- Entrambe le modalità richiedono **conferma testuale esatta**, **password amministratore** e una finestra di conferma finale.
+- **Account, permessi e registro tecnico** non vengono cancellati.
+
+**Attenzione:** azzeramento irreversibile, non sostituisce una strategia di backup. Salvare eventuali copie necessarie su un sistema autorizzato prima di procedere. Eliminare il file sorgente dall'app non modifica l'originale conservato altrove (es. OneDrive/SharePoint).
+
 ## Utenti e ruoli
 
 - **Amministratore**: crea account, modifica ruoli e abilita/disabilita gli utenti, gestisce gli A.A. e i dati di lavoro.
@@ -56,7 +78,7 @@ Il backend applica i permessi agli endpoint, indipendentemente dagli elementi mo
 ## Limiti attuali
 
 La versione 0.1 è un **primo nucleo tecnico**, non l'applicazione finale:
-- non legge ancora il report `.xls` né importa gli incarichi;
+- acquisisce e ispeziona il file `.xls`, ma **non mappa ancora gli incarichi e le assegnazioni**;
 - non genera né acquisisce XLSX dei referenti SSD;
 - non automatizza la distribuzione via email o SharePoint;
 - non integra ancora regole e avvertenze del regolamento;
