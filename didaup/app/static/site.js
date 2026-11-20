@@ -184,16 +184,22 @@ async function refreshArchive() {
   updateResetPhrase();
 }
 
-async function refreshCohorts() {
-  const tbody = el("cohorts-body");
-  tbody.replaceChildren();
-  if (!state.selected) return;
-  const items = await api("years/" + state.selected + "/cohorts");
-  setText("cohort-count", items.length + " record");
-  el("empty-cohorts").hidden = items.length > 0;
-  const writable = state.user.role !== "lettura";
-  for (const row of items) {
-    const tr = tbody.insertRow();
+function renderSavedCohorts() {
+  const body = el("cohorts-body");
+  body.replaceChildren();
+  const items = state.registeredCohorts || [];
+  const search = el("cohort-registry-search").value.trim().toLocaleLowerCase("it-IT");
+  const statusFilter = el("cohort-registry-status").value;
+  const displayed = items.filter(item => {
+    if (statusFilter === "excluded" && item.included) return false;
+    if (statusFilter === "included" && !item.included) return false;
+    return !search || [item.course_name, item.course_code, item.campus, item.study_year]
+      .join(" ").toLocaleLowerCase("it-IT").includes(search);
+  });
+  setText("cohort-registry-visible", displayed.length + " visualizzate");
+  const writable = state.user?.role !== "lettura";
+  for (const row of displayed) {
+    const tr = body.insertRow();
     const code = tr.insertCell();
     code.textContent = row.course_name;
     const codeDetail = document.createElement("small");
@@ -223,15 +229,37 @@ async function refreshCohorts() {
           });
           await refreshYears(state.selected);
           await refreshCohorts();
-          showNotice(row.included ? "Annualità esclusa: storico conservato" : "Annualità ripristinata");
+          // The guided checklist is now stale: it must be explicitly reloaded
+          // before saving, otherwise revision validation would reject it.
+          showNotice(row.included
+            ? "Annualità esclusa e registrata. Selezione guidata da aggiornare."
+            : "Annualità ripristinata. Selezione guidata da aggiornare.");
         } catch (error) {
           showNotice(error.message, true);
           await refreshCohorts();
         }
       });
       actions.appendChild(button);
-    } else actions.textContent = "Sola lettura";
+    } else {
+      actions.textContent = "Sola lettura";
+    }
   }
+}
+
+async function refreshCohorts() {
+  if (!state.selected) {
+    state.registeredCohorts = [];
+    renderSavedCohorts();
+    return;
+  }
+  const yearId = state.selected;
+  const items = await api("years/" + yearId + "/cohorts");
+  if (yearId !== state.selected) return;
+  state.registeredCohorts = items;
+  setText("cohort-count", items.length + " record (" +
+    items.filter(x => !x.included).length + " escluse)");
+  el("empty-cohorts").hidden = items.length > 0;
+  renderSavedCohorts();
 }
 
 async function refreshUsers() {
@@ -348,6 +376,9 @@ async function refreshWorkbooks() {
 }
 
 function hookForms() {
+  el("cohort-registry-search").addEventListener("input", renderSavedCohorts);
+  el("cohort-registry-status").addEventListener("change", renderSavedCohorts);
+
   el("login-form").addEventListener("submit", async event => {
     event.preventDefault();
     el("login-error").textContent = "";
