@@ -594,9 +594,20 @@ function hookForms() {
           "Righe del report (esempi): " +
           (result.missing_activity_codes_example_rows || []).slice(0, 8).join(", ") + "."
         : "";
+      const workload = result.workload || {};
+      const workloadInfo = " Carico didattico: " +
+        Number(workload.rows_calculated || 0) + " righe con regola, " +
+        Number(workload.rows_without_rule || 0) + " righe rimaste a 0 senza regola. " +
+        "Totale ore effettive calcolate: " +
+        Number(workload.total_effective_hours || 0).toLocaleString("it-IT", {
+          maximumFractionDigits: 2
+        }) + ". " +
+        (Number(workload.rules || 0) === 0
+          ? "ATTENZIONE: nessuna regola di carico salvata, tutte le ore sono 0. "
+          : "");
       showNotice("Generati cinque file identici con " +
         result.historical_rows + " righe storiche ciascuno; nessun filtro dipartimentale. " +
-        "Righe escluse: " + excludedRows + ". " +
+        "Righe escluse: " + excludedRows + ". " + workloadInfo +
         "Il pacchetto ZIP con 6 Excel è disponibile per il download. " +
         auditInfo +
         "Revisione: " + (result.export_revision || "non disponibile") +
