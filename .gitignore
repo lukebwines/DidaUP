@@ -221,3 +221,62 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+# DidaUP: dati amministrativi e personali esclusi dal repository
+# Nessun documento operativo o export deve entrare in Git.
+*.xls
+*.xlsx
+*.xlsm
+*.xlsb
+*.ods
+*.csv
+*.tsv
+*.pdf
+*.doc
+*.docx
+*.eml
+*.msg
+*.zip
+*.7z
+*.rar
+*.sqlite
+*.sqlite3
+*.db
+*.db-*
+*.bak
+*.backup
+*.dump
+*.sql
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+*.log
+*.log.*
+# Credenziali e configurazioni personali
+.env.*
+secrets.yaml
+credentials.json
+token.json
+*.token
+# Cartelle persistenti e di lavorazione, a qualsiasi livello
+**/data/
+**/uploads/
+**/imports/
+**/exports/
+**/output/
+**/input/
+**/archive/
+**/archives/
+**/backups/
+**/storage/
+**/logs/
+**/private/
+**/secrets/
+# Temporanei locali
+~$*
+.DS_Store
+Thumbs.db
