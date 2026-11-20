@@ -366,3 +366,99 @@ def test_mapping_deleted_with_archive_but_account_retained(client):
     }).status_code == 200
     assert client.get(f"/api/imports/{import_id}/mapping").status_code == 404
     assert len(client.get("/api/users").json()) == 1
+
+
+
+def test_user_supplied_referent_template_recognized_with_three_editable_fields():
+    from app.column_mapping import OFFER_HEADER_TO_FIELD, suggest_fields, evaluate_mapping
+
+    # Synthetic header layout only. No teachers, courses or assignments.
+    headers = list(OFFER_HEADER_TO_FIELD.keys())
+    assert len(headers) == 36
+    result = suggest_fields(headers, "offerta")
+    assert result["matched"] == 36
+    assert not result["ambiguous"]
+    assert not result["missing_proposal_fields"]
+    assert len(result["proposal_columns"]) == 3
+    assert result["assigned"]["proposta_docente"] == headers.index("NUOVO DOCENTE")
+    assert result["assigned"]["proposta_ore"] == headers.index("ORE")
+    assert result["assigned"]["proposta_note"] == headers.index("NOTE")
+    assert result["assigned"]["ore_previste"] == headers.index("TOT ORE PREVISTE")
+    assert result["assigned"]["ore_prevlez"] == headers.index("OREPREVLEZ")
+    assert result["assigned"]["ore_effettive_totali"] == headers.index("TOT ORE EFFETTIVE")
+    assert result["assigned"]["ssd_insegnamento_originale"] == headers.index("SSD INSEGNAMENTO")
+    assert "ssd_insegnamento_vecchio" not in result["assigned"]
+    assert "ssd_insegnamento_nuovo" not in result["assigned"]
+    assert "SSD dell'insegnamento (vecchio o nuovo)" not in evaluate_mapping("offerta", result["assigned"])
+
+
+def test_duplicate_headers_require_manual_decision():
+    from app.column_mapping import suggest_fields
+    result = suggest_fields(["NUOVO DOCENTE", "Ore", " ORE ", "Note"], "offerta")
+    assert result["matched"] == 2
+    assert result["ambiguous"]["proposta_ore"] == [1, 2]
+    assert "proposta_ore" in result["missing_proposal_fields"]
+    assert result["proposal_columns"]["proposta_docente"] == 0
+
+
+def make_synthetic_header_workbook():
+    """Extend an existing tiny synthetic workbook with user-supplied header names."""
+    import io
+    import zipfile
+    from xml.sax.saxutils import escape
+    from app.column_mapping import OFFER_HEADER_TO_FIELD
+
+    source = synthetic_xlsx()
+    original = io.BytesIO(source)
+    output = io.BytesIO()
+    headers = list(OFFER_HEADER_TO_FIELD.keys())
+    cells = []
+    for i, label in enumerate(headers):
+        # Exactly 36 headers A:AJ; both cells and content are synthetic.
+        col = ""
+        x = i + 1
+        while x:
+            x, rem = divmod(x - 1, 26)
+            col = chr(65 + rem) + col
+        cells.append(
+            '<c r="' + col + '1" t="inlineStr"><is><t>' +
+            escape(label) + '</t></is></c>'
+        )
+    worksheet_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        '<sheetData><row r="1">' + "".join(cells) +
+        '</row><row r="2"><c r="A2" t="inlineStr"><is><t>TEST-SEDE</t></is></c></row></sheetData>'
+        '</worksheet>'
+    )
+    with zipfile.ZipFile(original, "r") as infile, zipfile.ZipFile(output, "w") as outfile:
+        for item in infile.infolist():
+            data = (worksheet_xml.encode("utf-8") if item.filename == "xl/worksheets/sheet1.xml"
+                    else infile.read(item.filename))
+            outfile.writestr(item.filename, data)
+    return output.getvalue()
+
+
+def test_auto_mapping_reads_synthetic_template_without_saving_automatically(client):
+    csrf = signed_in(client)
+    fixture = make_synthetic_header_workbook()
+    imported = client.post(
+        "/api/years/1/imports", headers=csrf,
+        data={"kind": "offerta", "test_data_only": "true"},
+        files={"source": ("synthetic-layout.xlsx", fixture, "application/octet-stream")},
+    )
+    assert imported.status_code == 200, imported.text
+    import_id = imported.json()["id"]
+    guessed = client.get(f"/api/imports/{import_id}/autodetect")
+    assert guessed.status_code == 200, guessed.text
+    result = guessed.json()
+    assert result["recognized"] is True
+    assert result["matched"] == 36
+    assert result["proposal_columns"] == {
+        "proposta_docente": 29, "proposta_ore": 30, "proposta_note": 31
+    }
+    assert result["header_row"] == 1
+    # Recognition is just a suggestion: original data and saved mapping untouched.
+    record = client.get(f"/api/imports/{import_id}/mapping").json()
+    assert record["mapping"] is None
+    assert record["available_fields"]
