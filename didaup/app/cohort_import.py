@@ -82,6 +82,7 @@ def extract_cohorts(
     rows = sheet.to_python(skip_empty_area=False)
     groups: dict[tuple[str, str, int], dict] = {}
     names: dict[tuple[str, str, int], set[str]] = defaultdict(set)
+    typologies: dict[tuple[str, str, int], set[str]] = defaultdict(set)
     anomalies: list[dict] = []
     total_invalid = 0
     blank_rows = 0
@@ -104,6 +105,7 @@ def extract_cohorts(
         code = field("cds_codice")
         name = field("cds_nome")
         campus = field("sede")
+        typology = field("cds_tipologia")
         year_raw = field("anno_corso")
         study_year = course_year(year_raw)
         if not code or not name or not campus or study_year is None:
@@ -112,7 +114,7 @@ def extract_cohorts(
         if not re.fullmatch(r"[A-Za-z0-9._-]{1,40}", code):
             issue(number, "Codice CdS non compatibile con il formato del registro")
             continue
-        if len(name) < 2 or len(name) > 120 or len(campus) > 80:
+        if len(name) < 2 or len(name) > 500 or len(campus) > 80:
             issue(number, "Descrizione CdS o sede fuori dai limiti ammessi")
             continue
         # The report is already linked by the operator to the selected
@@ -128,6 +130,7 @@ def extract_cohorts(
             entry = groups[key]
         entry["source_rows"] += 1
         names[key].add(name)
+        typologies[key].add(typology)
         valid_rows += 1
         if len(groups) > MAX_COHORTS:
             raise CohortExtractionError("Troppe annualità distinte nel file")
@@ -139,6 +142,9 @@ def extract_cohorts(
             ambiguous_groups += 1
             issue(0, "Denominazioni CdS discordanti per lo stesso codice, sede e anno: da riconciliare")
         else:
+            # Preserve every source typology for a CdS/year, including blank values.
+            # One annuality may appear in activities with different typologies.
+            entry["course_types"] = sorted(typologies[key], key=str.casefold)
             filtered.append(entry)
     filtered.sort(key=lambda v: (v["course_name"].casefold(), v["campus"].casefold(),
                                  v["study_year"], v["course_code"]))
@@ -153,6 +159,7 @@ def extract_cohorts(
         "ambiguous_groups": ambiguous_groups,
         "cohorts": filtered,
         "cohort_count": len(filtered),
+        "typology_mapped": "cds_tipologia" in assigned,
         "notice": (
             "Anteprima non distruttiva. Le anomalie sono escluse dall'elenco "
             "e devono essere risolte oppure esplicitamente accettate dall'amministratore."
