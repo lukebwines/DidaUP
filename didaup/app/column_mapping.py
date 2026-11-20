@@ -36,6 +36,30 @@ OFFER_FIELDS: list[tuple[str, str]] = [
     ("ore_previste", "Ore previste dall'attività"),
     ("cfu", "CFU"),
     ("stato_copertura", "Stato della copertura"),
+    ("ssd_insegnamento_originale", "SSD insegnamento · come indicato nel report"),
+    ("docente_cognome", "Cognome docente storico"),
+    ("ore_prevlez", "Ore previste di lezione (OREPREVLEZ)"),
+    ("ore_effettive_totali", "Totale ore effettive"),
+    ("codice_ugov", "Codice UGOV"),
+    ("discriminante_oi", "Discriminante OI"),
+    ("discriminante_modulo", "Discriminante modulo"),
+    ("ul", "Unità logistica UL"),
+    ("anno_accademico_report", "Anno accademico come da report"),
+    ("cfu_totali_ins", "CFU totali insegnamento"),
+    ("tipo_erogazione", "Tipo erogazione"),
+    ("mutuazione", "Mutuazione"),
+    ("insegnamento_erogante", "Insegnamento erogante"),
+    ("taf", "TAF"),
+    ("fuori_piano", "Fuori piano"),
+    ("moodle", "Moodle"),
+    ("crediti_tirocinio", "Crediti tirocinio"),
+    ("periodo_inizio", "Periodo inizio"),
+    ("periodo_fine", "Periodo fine"),
+    ("titolo_affidamento", "Titolo affidamento storico"),
+    ("proposta_docente", "VARIAZIONE · Nuovo docente"),
+    ("proposta_ore", "VARIAZIONE · Ore"),
+    ("proposta_note", "VARIAZIONE · Note"),
+
 ]
 
 TEACHER_FIELDS: list[tuple[str, str]] = [
@@ -116,3 +140,115 @@ def evaluate_mapping(kind: str, assigned: dict[str, int]) -> list[str]:
         if not any(key in assigned for key in ("ssd_docente_vecchio", "ssd_docente_nuovo")):
             missing.append("SSD del docente")
     return missing
+
+
+# Exact, user-supplied 2026/27 header labels. They define a technical
+# workbook *layout*, not a specific teacher, assignment or legal rule.
+# "SSD INSEGNAMENTO" has no old/new qualifier; never infer either version.
+OFFER_HEADER_TO_FIELD = {
+    "SEDE CORSO": "sede",
+    "CODICE CORSO": "cds_codice",
+    "CDS": "cds_nome",
+    "ANNO ACCADEMICO": "anno_accademico_report",
+    "CFU TOTALI INS": "cfu_totali_ins",
+    "CODICE INS": "codice_insegnamento",
+    "TIPOEROGAZIONE": "tipo_erogazione",
+    "INSEGNAMENTO": "insegnamento",
+    "CODICE UGOV": "codice_ugov",
+    "DISCRIMINANTE DI OI": "discriminante_oi",
+    "MODULO": "modulo",
+    "UL": "ul",
+    "DISCRIMINANTE MODULO": "discriminante_modulo",
+    "ANNO": "anno_corso",
+    "MUTUAZIONE": "mutuazione",
+    "INS. EROGANTE": "insegnamento_erogante",
+    "TAF": "taf",
+    "FUORI PIANO": "fuori_piano",
+    "SSD INSEGNAMENTO": "ssd_insegnamento_originale",
+    "CFU": "cfu",
+    "MOODLE": "moodle",
+    "MATRICOLA DOCENTE": "docente_identificativo",
+    "NOME DOCENTE": "docente_nome",
+    "COGNOME DOCENTE": "docente_cognome",
+    "OREPREVLEZ": "ore_prevlez",
+    "CREDITITIR": "crediti_tirocinio",
+    "CODICE SSD DOCENTE NUOVO": "ssd_docente_nuovo",
+    "TOT ORE PREVISTE": "ore_previste",
+    "TOT ORE EFFETTIVE": "ore_effettive_totali",
+    "NUOVO DOCENTE": "proposta_docente",
+    "ORE": "proposta_ore",
+    "NOTE": "proposta_note",
+    "PERIODO INIZIO": "periodo_inizio",
+    "PERIODO FINE": "periodo_fine",
+    "DIPARTIMENTO AFFERENZA DOCENTE": "dipartimento",
+    "TITOLO AFFIDAMENTO": "titolo_affidamento",
+}
+PROPOSAL_FIELDS = ("proposta_docente", "proposta_ore", "proposta_note")
+
+
+def normalize_header(value: Any) -> str:
+    # Ignore capitalization, accents on common Italian words and whitespace.
+    import re
+    import unicodedata
+
+    value = unicodedata.normalize("NFKD", str(value or ""))
+    value = "".join(character for character in value if not unicodedata.combining(character))
+    value = re.sub(r"\\s+", " ", value.upper().strip())
+    return value
+
+
+def suggest_fields(headers: list[Any], kind: str) -> dict[str, Any]:
+    # Never guess a field from partial matches, and never assign one
+    # source column to multiple semantic fields.
+    mapping_table = OFFER_HEADER_TO_FIELD if kind == "offerta" else {}
+    locations: dict[str, list[int]] = {}
+    for index, text in enumerate(headers):
+        normalized = normalize_header(text)
+        if normalized and normalized in mapping_table:
+            locations.setdefault(mapping_table[normalized], []).append(index)
+    assigned = {field: positions[0] for field, positions in locations.items() if len(positions) == 1}
+    ambiguous = {
+        field: positions for field, positions in locations.items()
+        if len(positions) > 1
+    }
+    editable = {field: assigned[field] for field in PROPOSAL_FIELDS if field in assigned}
+    missing_proposal = [field for field in PROPOSAL_FIELDS if field not in assigned]
+    return {
+        "assigned": assigned, "matched": len(assigned),
+        "ambiguous": ambiguous, "proposal_columns": editable,
+        "missing_proposal_fields": missing_proposal,
+        "unmatched_source_columns": [
+            index for index, label in enumerate(headers)
+            if str(label or "").strip() and index not in assigned.values()
+        ],
+        "confidence": "exact_header" if assigned else "unrecognized",
+    }
+
+
+def autodetect_workbook(path: Path, kind: str) -> dict[str, Any]:
+    """Look for the supplied Excel-for-referents layout in the first 40 rows.
+
+    The result is a *suggestion*; never persists or validates assignments.
+    """
+    workbook = CalamineWorkbook.from_path(path)
+    best: dict[str, Any] | None = None
+    for name in workbook.sheet_names[:100]:
+        sheet = workbook.get_sheet_by_name(name)
+        if sheet.width > MAX_PREVIEW_COLUMNS or sheet.height < 1:
+            continue
+        first = sheet.to_python(skip_empty_area=False, nrows=min(MAX_PREVIEW_ROW, sheet.height))
+        for index, row in enumerate(first):
+            result = suggest_fields(list(row), kind)
+            if best is None or result["matched"] > best["matched"]:
+                best = {
+                    **result, "sheet_name": name, "header_row": index + 1,
+                    "column_count": sheet.width,
+                }
+    if best is None or best["matched"] < (8 if kind == "offerta" else 3):
+        return {
+            "recognized": False, "message": "Tracciato non riconosciuto con sufficiente certezza; verificare le intestazioni manualmente",
+        }
+    return {
+        **best, "recognized": True,
+        "message": "Corrispondenze proposte automaticamente dalle intestazioni esatte. Richiedono verifica.",
+    }
