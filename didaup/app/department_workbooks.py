@@ -18,7 +18,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from python_calamine import CalamineWorkbook
 import xlsxwriter
 
-from .column_mapping import OFFER_HEADER_TO_FIELD
+from .column_mapping import OFFER_HEADER_TO_FIELD, source_header_conflicts
 from .row_identity import source_row_id
 
 # Order of the pre-existing outgoing referent layout (not the 110-col source).
@@ -144,6 +144,14 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     ):
         raise WorkbookGenerationError("Mappatura non valida")
     rows = sheet.to_python(skip_empty_area=False)
+    # Old saved drafts may predate the new safeguard. Check them too.
+    conflicts = source_header_conflicts(
+        "offerta", assigned, rows[header_row - 1]
+    )
+    if conflicts:
+        raise WorkbookGenerationError(
+            "Mappatura salvata da correggere: " + "; ".join(conflicts[:5])
+        )
     prepared = []
     excluded_count = 0
     for excel_row, row in enumerate(rows[header_row:], start=header_row + 1):
