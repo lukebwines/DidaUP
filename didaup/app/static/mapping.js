@@ -123,16 +123,13 @@ async function autoMap() {
     el("mapping-sheet").value = result.sheet_name;
     el("mapping-header-row").value = result.header_row;
     await loadMappingPreview();
-    const missing = result.missing_proposal_fields || [];
-    const complete = missing.length === 0;
     const warnings = Object.keys(result.ambiguous || {}).length;
-    setText("mapping-auto-status", "Riconosciute " + result.matched +
-      " colonne dalla struttura dichiarata; " +
-      (complete ? "tutti i 3 campi di variazione individuati." :
-        "campi di variazione mancanti: " + missing.length + ".") +
-      (warnings ? " Colonne ambigue: " + warnings + "." : "") +
-      " Controlla l'anteprima e salva come bozza.");
-    if (warnings || !complete) el("mapping-advanced").open = true;
+    setText("mapping-auto-status", "Riconosciute automaticamente " +
+      result.matched + " colonne del report originale." +
+      (warnings ? " Da verificare " + warnings + " associazioni ambigue." : "") +
+      " Le tre colonne Nuovo docente, Ore e Note saranno aggiunte SOLO negli Excel per i referenti." +
+      " Controlla la proposta e salva la mappatura in bozza.");
+    if (warnings) el("mapping-advanced").open = true;
   } finally {
     trigger.disabled = false;
   }
