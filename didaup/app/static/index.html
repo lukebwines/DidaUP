@@ -9,6 +9,7 @@
   <script src="static/site.js" defer></script>
   <script src="static/mapping.js" defer></script>
   <script src="static/cohort_review.js" defer></script>
+  <script src="static/workload.js" defer></script>
 </head>
 <body>
   <section id="login-view" class="login-shell" hidden>
@@ -36,6 +37,7 @@
         <button type="button" class="nav-item active" data-view="dashboard"><span class="nav-icon">▦</span> Panoramica</button>
         <button type="button" class="nav-item" data-view="cohorts"><span class="nav-icon">☷</span> Annualità CdS</button>
         <button type="button" class="nav-item" data-view="imports"><span class="nav-icon">⇪</span> Importa report</button>
+        <button type="button" class="nav-item" data-view="workload"><span class="nav-icon">∑</span> Calcolo carico</button>
         <button type="button" class="nav-item" data-view="workbook"><span class="nav-icon">▤</span> Prepara Excel</button>
         <button type="button" class="nav-item admin-only" data-view="users"><span class="nav-icon">♙</span> Utenti</button>
         <button type="button" class="nav-item admin-only" data-view="archive"><span class="nav-icon">⌫</span> Archivio</button>
@@ -320,6 +322,83 @@
           <div class="panel">
             <div class="panel-heading"><div><h3>Anteprima della struttura</h3><p>Intestazioni e prime righe del foglio selezionato. I nomi delle colonne sono disponibili anche nei menu di associazione.</p></div></div>
             <div class="table-wrap mapping-table"><table id="mapping-preview-table"><thead></thead><tbody></tbody></table></div>
+          </div>
+        </section>
+
+        <section id="view-workload" class="screen" hidden>
+          <div class="panel">
+            <div class="panel-heading">
+              <div>
+                <h3>Calcolo del carico didattico · TOT ORE EFFETTIVE</h3>
+                <p>Le ore effettive del report originale sono ignorate: ogni nuova generazione parte da zero. Le regole calcolano il carico sulla base della colonna TOT ORE PREVISTE, senza modificare il file sorgente.</p>
+              </div>
+              <span class="chip">Regole per anno accademico</span>
+            </div>
+            <div class="import-warning">
+              Una sola regola per riga: prevale la combinazione più specifica di tipologia, CdS e TAF.
+              Regole ugualmente specifiche che intercettano la stessa riga sono un conflitto e bloccano la generazione.
+              Senza regola le ore restano a 0; una quota fissa superiore alle ore previste viene segnalata.
+            </div>
+            <div class="workload-source">
+              <label>Report di offerta associato
+                <select id="workload-source"></select>
+              </label>
+              <span id="workload-mapping-status" class="muted" role="status"></span>
+            </div>
+            <h3>Regole di calcolo</h3>
+            <form id="workload-rule-form" class="fields workload-fields admin-only">
+              <label>Tipologia CdS
+                <select id="workload-typologia"><option value="">Tutte le tipologie</option></select>
+              </label>
+              <label>Corso di studio
+                <select id="workload-cds"><option value="">Tutti i CdS</option></select>
+              </label>
+              <label>TAF
+                <select id="workload-taf"><option value="">Tutte le TAF</option></select>
+              </label>
+              <label>Metodo
+                <select id="workload-mode">
+                  <option value="percentuale">Percentuale sulle ore previste</option>
+                  <option value="fissa">Quota fissa di ore</option>
+                </select>
+              </label>
+              <label>Valore
+                <input id="workload-value" type="number" min="0" max="1000" step="0.01" required placeholder="Es. 50">
+              </label>
+              <button class="primary" id="workload-add" type="submit">Aggiungi regola</button>
+              <button class="secondary" id="workload-cancel" type="button" hidden>Annulla modifica</button>
+            </form>
+            <div class="table-wrap">
+              <table class="workload-table">
+                <thead><tr><th>Tipologia</th><th>CdS</th><th>TAF</th><th>Metodo</th><th>Valore</th><th>Operazioni</th></tr></thead>
+                <tbody id="workload-rules"></tbody>
+              </table>
+            </div>
+            <p id="workload-save-status" class="muted" role="status"></p>
+            <div class="workload-actions">
+              <button class="primary admin-only" type="button" id="workload-save">Salva regole</button>
+              <button class="secondary" type="button" id="workload-preview">Calcola anteprima</button>
+              <span class="muted" id="workload-preview-help">L'anteprima usa le regole salvate e le righe non escluse.</span>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Anteprima del carico</h3>
+            <p id="workload-preview-status" class="muted" role="status">Seleziona un report e calcola l'anteprima.</p>
+            <div id="workload-results" hidden>
+              <div class="workload-stats">
+                <div><small>Righe con regola</small><strong id="workload-count-matched">0</strong></div>
+                <div><small>Righe a zero (senza regola)</small><strong id="workload-count-unmatched">0</strong></div>
+                <div><small>Ore di carico complessive</small><strong id="workload-total">0</strong></div>
+                <div><small>Anomalie</small><strong id="workload-count-errors">0</strong></div>
+              </div>
+              <p id="workload-errors" class="workload-error-list"></p>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Regola</th><th>Righe interessate</th></tr></thead>
+                  <tbody id="workload-rule-summary"></tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </section>
 
