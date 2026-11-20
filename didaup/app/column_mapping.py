@@ -131,6 +131,7 @@ STRICT_SOURCE_FIELDS = {
     "docente_nome": "NOME DOCENTE",
     "docente_cognome": "COGNOME DOCENTE",
     "ssd_docente_nuovo": "CODICE SSD DOCENTE NUOVO",
+    "taf": "TAF",
 }
 
 
