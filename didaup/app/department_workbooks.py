@@ -287,6 +287,14 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
             for header in HISTORIC_HEADERS
             if header.upper() in OFFER_HEADER_TO_FIELD
         }
+        # Calamine returns Excel TRUE/FALSE cells as Python bool. A generic
+        # display helper intentionally treated booleans as empty, causing
+        # MUTUAZIONE to disappear from all five workbooks. Convert only this
+        # confirmed yes/no field, keeping the original truth value explicit.
+        # Both export and reimport review use this same normalized snapshot.
+        raw_mutuazione = data.get("MUTUAZIONE")
+        if isinstance(raw_mutuazione, bool):
+            data["MUTUAZIONE"] = "VERO" if raw_mutuazione else "FALSO"
         data.setdefault("Ins. Erogante", get("insegnamento_erogante"))
         # Do not attribute or filter by department. Only previously recorded
         # CdS annuality exclusions may suppress matching rows.
