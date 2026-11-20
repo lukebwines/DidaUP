@@ -272,24 +272,25 @@
 
         <section id="view-archive" class="screen" hidden>
           <div class="panel">
-            <div class="panel-heading"><div><h3>Stato dell'archivio</h3><p>Le annualità e i report sono indipendenti per anno accademico.</p></div></div>
-            <div class="table-wrap"><table><thead><tr><th>Anno accademico</th><th>Annualità censite</th><th>File acquisiti</th></tr></thead><tbody id="archive-summary-body"></tbody></table></div>
+            <div class="panel-heading"><div><h3>Archivio permanente e lavorazioni</h3><p>Le esclusioni e le mappature sono impostazioni protette dell'anno accademico e non vengono azzerate.</p></div></div>
+            <div class="table-wrap"><table><thead><tr><th>Anno accademico</th><th>Annualità censite</th><th>Escluse</th><th>Report conservati</th><th>Mappature conservate</th><th>Elaborazioni azzerabili</th></tr></thead><tbody id="archive-summary-body"></tbody></table></div>
           </div>
           <div class="panel danger-panel">
-            <h3>Azzeramento archivio</h3>
-            <p><strong>Operazione irreversibile:</strong> cancella le annualità censite e i file Excel acquisiti nell'ambito selezionato. Gli account degli operatori vengono mantenuti.</p>
-            <p class="muted">Se desideri conservare i report, procurati prima una copia di sicurezza in un ambiente autorizzato.</p>
+            <h3>Azzeramento delle sole elaborazioni</h3>
+            <p><strong>Protetti e conservati:</strong> anni accademici, esclusioni delle annualità e motivazioni, mappature delle colonne, file Excel sorgenti, cronologia delle selezioni e account.</p>
+            <p>Questa funzione cancella soltanto eventuali <strong>file di lavoro rigenerabili</strong> prodotti dalle elaborazioni. Nella versione attuale non sono ancora previsti file generati da azzerare: se non ce ne sono, non viene cancellato nulla.</p>
+            <p class="muted">La conservazione nel database non sostituisce il backup Home Assistant. Eliminare l'app, cancellare /data o ripristinare un vecchio backup può comunque far perdere gli aggiornamenti successivi.</p>
             <form id="archive-reset-form" class="fields narrow-fields">
-              <label>Ambito dell'azzeramento
+              <label>Ambito delle elaborazioni
                 <select id="reset-scope">
-                  <option value="year">Solo anno accademico selezionato</option>
-                  <option value="all">Tutto l'archivio (tutti gli anni)</option>
+                  <option value="year">Solo elaborazioni dell'A.A. selezionato</option>
+                  <option value="all">Elaborazioni di tutti gli A.A.</option>
                 </select>
               </label>
               <p class="reset-prompt">Per confermare, digita esattamente: <strong id="reset-required"></strong></p>
               <label>Conferma testuale<input id="reset-confirmation" autocomplete="off" spellcheck="false" required></label>
               <label>Password amministratore<input id="reset-password" type="password" autocomplete="current-password" required></label>
-              <button class="danger-button" type="submit">Azzeramento definitivo</button>
+              <button class="danger-button" type="submit">Azzera soltanto le elaborazioni</button>
             </form>
           </div>
         </section>
