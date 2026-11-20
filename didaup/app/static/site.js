@@ -486,6 +486,14 @@ function hookForms() {
       const result = await api("years/" + state.selected + "/department-workbooks",
         "POST", {import_id: sourceId});
       const excludedRows = Number(result.excluded_rows || 0);
+      const mutTrue = Number(result.mutuazione_true_rows || 0);
+      const mutFalse = Number(result.mutuazione_false_rows || 0);
+      const mutOther = Number(result.mutuazione_other_rows || 0);
+      const mutBlank = Number(result.mutuazione_empty_rows || 0);
+      const mutInfo = " MUTUAZIONE (" +
+        (result.mutuazione_mapping_mode || "associazione non verificata") +
+        "): VERO " + mutTrue + ", FALSO " + mutFalse +
+        ", altri " + mutOther + ", vuoti " + mutBlank + ".";
       const residual = Number(result.excluded_course_titles_still_present || 0);
       const residualInfo = residual
         ? " VERIFICA NECESSARIA: " + residual +
@@ -541,7 +549,7 @@ function hookForms() {
         "Righe escluse: " + excludedRows + ". " +
         "Il pacchetto ZIP è disponibile per il download." +
         warningMessage + missingCodeMessage + missedMessage +
-        matchedByNameInfo + mixedYearsInfo + residualInfo,
+        matchedByNameInfo + mixedYearsInfo + residualInfo + mutInfo,
         Boolean(residual || missed || mixedYears));
       el("workbook-progress").textContent =
         "Escluse " + excludedRows + " righe. " +
@@ -550,7 +558,9 @@ function hookForms() {
         (mixedYears ? mixedYears + " righe miste incluse/escluse DA VERIFICARE. " : "") +
         (residual ? residual + " righe con nomi di corsi esclusi ancora presenti DA VERIFICARE. " : "") +
         (warnings ? warnings + " righe con annualità incompleta mantenute. " : "") +
-        "Generazione completata.";
+        "MUTUAZIONE: VERO " + mutTrue + ", FALSO " + mutFalse +
+        ", altri " + mutOther + ", vuoti " + mutBlank +
+        ". Generazione completata.";
       await refreshWorkbooks();
     } catch (error) {
       showNotice(error.message, true);
