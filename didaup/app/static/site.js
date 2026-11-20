@@ -588,12 +588,15 @@ function hookForms() {
       showNotice("Generati cinque file identici con " +
         result.historical_rows + " righe storiche ciascuno; nessun filtro dipartimentale. " +
         "Righe escluse: " + excludedRows + ". " +
-        "Il pacchetto ZIP è disponibile per il download." +
+        "Il pacchetto ZIP è disponibile per il download. " +
+        "Revisione: " + (result.export_revision || "non disponibile") +
+        " (non sostituisce gli Excel già presenti su OneDrive)." +
         warningMessage + missingCodeMessage + missedMessage +
         matchedByNameInfo + mixedYearsInfo + residualInfo + mutInfo,
         Boolean(residual || missed || mixedYears));
       el("workbook-progress").textContent =
-        "Escluse " + excludedRows + " righe. " +
+        "Revisione " + (result.export_revision || "—") +
+        ". Escluse " + excludedRows + " righe. " +
         (missed ? missed + " annualità escluse senza corrispondenza nel report. " : "") +
         (matchedByName ? matchedByName + " riconciliate per denominazione univoca. " : "") +
         (mixedYears ? mixedYears + " righe miste incluse/escluse DA VERIFICARE. " : "") +
