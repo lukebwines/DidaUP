@@ -175,3 +175,10 @@ DidaUP deve usare come riferimento l'**anno accademico dell'archivio/report sele
 Una riga del report con codice CdS, sede oppure anno di corso assente/non interpretabile **non deve fermare la generazione delle cinque copie**. Quando esistono annualità esplicitamente escluse, DidaUP applica l'esclusione **solo in caso di corrispondenza certa** di codice CdS + sede + anno; tutte le altre righe sono **mantenute** nel file, senza attribuzioni presunte. Il riepilogo comunica il **numero di righe mantenute con identificativo di annualità incompleto** e riporta esempi dei numeri di riga del report, così l'operatore può esaminarle in seguito. Il report sorgente non viene modificato.
 
 La regola riguarda le anomalie amministrative classificatorie delle annualità. Rimangono distinti gli errori di integrità tecnica della fonte (es. hash diverso, tracciato/associazioni incompatibili), da non occultare perché impedirebbero di ricostruire correttamente i dati.
+
+
+## Generazione non bloccante in assenza dei codici di insegnamento — CONFERMATO
+
+Se una riga del report non contiene né **CODICE INS** né **CODICE UGOV**, DidaUP **non blocca la generazione dei cinque Excel** e non scarta la riga. La mantiene e le attribuisce esclusivamente un **identificativo tecnico derivato dall'ID univoco della riga dello snapshot storico** (stabile fra le cinque copie e al reimport, ma non equivalente a un codice ufficiale di insegnamento). Non inventa né completa i codici mancanti.
+
+Il riepilogo dell'esportazione mostra quante righe sono state mantenute senza codici e alcuni numeri di riga sorgente, da verificare in sede istruttoria. **Non aggregare automaticamente** tra loro più righe senza codici, nemmeno se denominazione, SSD o docente sono simili. La loro eventuale appartenenza allo stesso modulo/attività è **[DA VERIFICARE]** prima di una riconciliazione amministrativa. La validazione di identificativi e dati storici al reimport resta obbligatoria. Questa scelta riguarda la generazione, non autorizza la ricostruzione automatica di coperture dubbie.
