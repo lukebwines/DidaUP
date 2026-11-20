@@ -486,6 +486,16 @@ function hookForms() {
       const result = await api("years/" + state.selected + "/department-workbooks",
         "POST", {import_id: sourceId});
       const excludedRows = Number(result.excluded_rows || 0);
+      const residual = Number(result.excluded_course_titles_still_present || 0);
+      const residualInfo = residual
+        ? " VERIFICA NECESSARIA: " + residual +
+          " righe con denominazioni di CdS registrati come interamente esclusi " +
+          "sono ancora presenti. Esempi (riga del report, CdS, codice sorgente): " +
+          (result.excluded_course_title_examples || []).slice(0, 6)
+            .map(x => x.excel_row + " · " + x.course_name + " · " + x.source_code)
+            .join("; ") +
+          ". Non distribuire gli Excel finché non sono state riconciliate."
+        : "";
       const matchedByName = Number(result.cohorts_matched_by_unique_name_rows || 0);
       const mixedYears = Number(result.mixed_annuality_rows_retained || 0);
       const matchedByNameInfo = matchedByName
@@ -531,12 +541,14 @@ function hookForms() {
         "Righe escluse: " + excludedRows + ". " +
         "Il pacchetto ZIP è disponibile per il download." +
         warningMessage + missingCodeMessage + missedMessage +
-        matchedByNameInfo + mixedYearsInfo);
+        matchedByNameInfo + mixedYearsInfo + residualInfo,
+        Boolean(residual || missed || mixedYears));
       el("workbook-progress").textContent =
         "Escluse " + excludedRows + " righe. " +
         (missed ? missed + " annualità escluse senza corrispondenza nel report. " : "") +
         (matchedByName ? matchedByName + " riconciliate per denominazione univoca. " : "") +
         (mixedYears ? mixedYears + " righe miste incluse/escluse DA VERIFICARE. " : "") +
+        (residual ? residual + " righe con nomi di corsi esclusi ancora presenti DA VERIFICARE. " : "") +
         (warnings ? warnings + " righe con annualità incompleta mantenute. " : "") +
         "Generazione completata.";
       await refreshWorkbooks();
