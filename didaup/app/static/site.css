@@ -135,3 +135,7 @@ td small{display:block;color:#718398}td button{padding:7px 11px!important;font-s
 [data-theme="dark"] #mapping-advanced summary{color:#a9d0f5}
 [data-theme="dark"] .proposal-field{background:#193b59;border-left-color:#68b0ff}
 [data-theme="dark"] .proposal-field span{color:#d1e9ff}
+
+.mapping-field.mapping-conflict{border:1px solid #d65050;border-radius:8px;padding:7px;background:#fff1f1}
+.mapping-field.mapping-conflict select{border-color:#c74747}
+[data-theme='dark'] .mapping-field.mapping-conflict{border-color:#ff8888;background:#4b242b}
