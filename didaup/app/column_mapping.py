@@ -28,7 +28,7 @@ OFFER_FIELDS: list[tuple[str, str]] = [
     ("modulo", "Denominazione modulo"),
     ("ssd_insegnamento_vecchio", "SSD insegnamento · precedente codifica"),
     ("ssd_insegnamento_nuovo", "SSD insegnamento · nuova codifica"),
-    ("id_copertura", "Identificativo della copertura storica"),
+    ("id_copertura", "ID copertura ufficiale (solo se presente nel report)"),
     ("docente_identificativo", "Identificativo del docente storico"),
     ("docente_nome", "Docente storico · nominativo"),
     ("ssd_docente_vecchio", "SSD docente · precedente codifica"),
@@ -130,8 +130,6 @@ def evaluate_mapping(kind: str, assigned: dict[str, int]) -> list[str]:
                 or assigned.get("ssd_insegnamento_nuovo") is not None
                 or assigned.get("ssd_insegnamento_originale") is not None):
             missing.append("SSD dell'insegnamento (vecchio o nuovo)")
-        if "id_copertura" not in assigned:
-            missing.append("ID copertura storica: da verificare prima della riconciliazione")
     elif kind == "docenti":
         if not any(key in assigned for key in (
             "docente_identificativo", "docente_cognome", "docente_nome"
