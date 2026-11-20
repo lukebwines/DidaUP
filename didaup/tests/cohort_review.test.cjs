@@ -93,4 +93,21 @@ assert.equal(context.visibleCohortCandidates()[0].course_code, "SYN01");
 assert.equal(context.cohortFacetOptions("assignments").length, 3);
 vm.runInContext("cohortReview.filters.assignments.clear();", context);
 assert.equal(context.visibleCohortCandidates().length, 3);
+
+// ANNO is a text filter: "1" and "1,2,3" are distinct source values.
+vm.runInContext("cohortReview.filters.years.clear();", context);
+vm.runInContext("cohortReview.data.source_year_filter_values = ['1','2','1,2,3'];", context);
+vm.runInContext("cohortReview.data.cohorts[0].source_year_values = ['1,2,3'];", context);
+vm.runInContext("cohortReview.data.cohorts[1].source_year_values = ['2'];", context);
+vm.runInContext("cohortReview.data.cohorts[2].source_year_values = ['1'];", context);
+assert.deepEqual(
+  Array.from(context.cohortFacetOptions("years"), x => x.value),
+  ["1", "1,2,3", "2"],
+  "All literal source-year strings must be available, without merging"
+);
+vm.runInContext("cohortReview.filters.years.add('1,2,3');", context);
+assert.equal(context.visibleCohortCandidates().length, 1);
+assert.equal(context.visibleCohortCandidates()[0].course_code, "SYN01");
+vm.runInContext("cohortReview.filters.years.clear();", context);
+assert.equal(context.visibleCohortCandidates().length, 3);
 console.log("DidaUP cohort checklist multiselect and draft-persistence tests: PASS");
