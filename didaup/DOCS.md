@@ -125,3 +125,19 @@ Nel report originale potrebbe **non esistere** una colonna che contenga un ID uf
 Se disponibile, un ID ufficiale potrà essere associato come campo opzionale. La funzione `source_row_id` prepara un identificativo tecnico univoco **all'interno del singolo report importato**, calcolato da hash del file, nome foglio e numero di riga originale. Non costituisce identificativo UGOV e **non è ancora applicato ai dati storici** nell'attuale alpha.
 
 Per identificare le *coperture* e riconciliarle tra estrazioni differenti sarà necessaria una fase successiva di validazione delle chiavi effettive del report (attività, modulo, discriminanti, docenti, ore). Le righe identiche o le coperture multiple non devono essere unite automaticamente. Nessun identificativo ufficiale viene inventato.
+
+## 0.1.7-alpha1 — associazioni duplicate dopo il riconoscimento
+
+In alcune mappature salvate in precedenza, dopo **Riconosci automaticamente** rimanevano impostati anche campi non riconosciuti dal tracciato, perché l'interfaccia combinava la vecchia bozza con il nuovo suggerimento. Questo poteva far associare la stessa colonna contemporaneamente a più campi (es. SSD originale e SSD precedente).
+
+**Correzione:** il riconoscimento automatico ora sostituisce completamente la selezione della bozza corrente. I campi non riconosciuti rimangono vuoti; un campo con un'etichetta generica non viene attribuito arbitrariamente alla codifica vecchia o nuova. Non è necessario eliminare i report acquisiti e il file sorgente rimane integro.
+
+Al salvataggio, il controllo segnala ora la colonna e i nomi dei campi in conflitto, prima di inviare la modifica al server; il server mantiene un'ulteriore verifica indipendente. I vecchi abbinamenti vengono modificati solo quando l'operatore sceglie **Salva mappatura in bozza**.
+
+Per ripartire da una mappatura che visualizza il conflitto:
+1. aggiornare l'add-on alla **0.1.7-alpha1**;
+2. aprire **Importa report → Mappa colonne** sul report già acquisito;
+3. selezionare **Riconosci automaticamente**;
+4. verificare che i campi non supportati siano **Non associata**, poi premere **Salva mappatura in bozza**.
+
+L'aggiornamento non genera ancora incarichi né Excel per SSD: corregge esclusivamente la preparazione delle colonne.
