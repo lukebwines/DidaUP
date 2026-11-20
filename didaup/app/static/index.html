@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <title>DidaUP · Programmazione didattica</title>
   <link rel="stylesheet" href="static/site.css">
   <script src="static/site.js" defer></script>
@@ -11,6 +11,7 @@
 <body>
   <section id="login-view" class="login-shell" hidden>
     <div class="login-card">
+      <button class="theme-toggle theme-login" type="button" data-theme-toggle aria-label="Cambia tema">◐ Tema scuro</button>
       <div class="brand big"><span class="brand-mark">D</span><span>Dida<span class="accent">UP</span></span></div>
       <p class="eyebrow">PROGRAMMAZIONE DIDATTICA</p>
       <h1>Accesso operatori</h1>
@@ -32,8 +33,10 @@
       <nav aria-label="Menu principale">
         <button type="button" class="nav-item active" data-view="dashboard"><span class="nav-icon">▦</span> Panoramica</button>
         <button type="button" class="nav-item" data-view="cohorts"><span class="nav-icon">☷</span> Annualità CdS</button>
+        <button type="button" class="nav-item" data-view="imports"><span class="nav-icon">⇪</span> Importa report</button>
         <button type="button" class="nav-item" data-view="workbook"><span class="nav-icon">▤</span> Prepara Excel <span class="soon">Prossimamente</span></button>
         <button type="button" class="nav-item admin-only" data-view="users"><span class="nav-icon">♙</span> Utenti</button>
+        <button type="button" class="nav-item admin-only" data-view="archive"><span class="nav-icon">⌫</span> Archivio</button>
         <button type="button" class="nav-item" data-view="security"><span class="nav-icon">◇</span> Sicurezza</button>
       </nav>
       <div class="sidebar-bottom">
@@ -51,6 +54,7 @@
         <div class="top-actions">
           <label for="academic-select" class="year-label">Anno accademico</label>
           <select id="academic-select" aria-label="Anno accademico"></select>
+          <button class="theme-toggle" type="button" data-theme-toggle aria-label="Cambia tema">◐ Tema scuro</button>
           <span id="user-pill" class="user-pill"></span>
         </div>
       </header>
@@ -74,7 +78,8 @@
           <div class="panel">
             <div class="panel-heading"><div><h3>Avvio del lavoro</h3><p>Seleziona un anno accademico e gestisci l'ambito dei CdS.</p></div></div>
             <div class="quick-actions">
-              <button class="primary" type="button" id="go-cohorts">Gestisci annualità CdS</button>
+              <button class="primary" type="button" id="go-imports">Importa report 2026/27</button>
+              <button class="secondary" type="button" id="go-cohorts">Gestisci annualità CdS</button>
               <span class="muted">Import report XLS: previsto nella fase successiva</span>
             </div>
           </div>
@@ -112,6 +117,36 @@
           </div>
         </section>
 
+        <section id="view-imports" class="screen" hidden>
+          <div class="panel">
+            <div class="panel-heading">
+              <div><h3>Importazione report Excel</h3><p>Il file viene conservato nell'archivio privato dell'anno selezionato. Questa fase acquisisce il documento e legge la struttura, senza assegnare automaticamente docenti o insegnamenti.</p></div>
+              <span class="chip">XLS · XLSX</span>
+            </div>
+            <div class="import-warning"><strong>Collaudo:</strong> utilizzare soltanto file sintetici. Non caricare report reali dell'Ateneo in un Home Assistant domestico non autorizzato.</div>
+            <form id="import-form" class="fields import-fields write-only">
+              <label>Tipo di report
+                <select id="import-kind" required>
+                  <option value="offerta">Offerta didattica e coperture storiche</option>
+                  <option value="docenti">Docenti di competenza (carichi)</option>
+                </select>
+              </label>
+              <label>File Excel (massimo 32 MB)
+                <input id="import-file" type="file" accept=".xls,.xlsx" required>
+              </label>
+              <button class="primary" type="submit" id="import-submit">Acquisisci report</button>
+            </form>
+            <p id="import-progress" class="muted" aria-live="polite"></p>
+          </div>
+          <div class="panel">
+            <div class="panel-heading"><div><h3>File acquisiti nell'anno selezionato</h3><p>Documenti in attesa di mappatura amministrativa e di verifica delle colonne.</p></div><span id="imports-count" class="chip">0 file</span></div>
+            <div class="table-wrap">
+              <table><thead><tr><th>Documento</th><th>Tipo</th><th>Fogli</th><th>Dimensione</th><th>Stato</th></tr></thead><tbody id="imports-body"></tbody></table>
+              <p id="imports-empty" class="empty">Non è ancora stato acquisito alcun report per questo A.A.</p>
+            </div>
+          </div>
+        </section>
+
         <section id="view-workbook" class="screen" hidden>
           <div class="panel">
             <h3>Generazione Excel per SSD</h3>
@@ -134,6 +169,30 @@
               <label>Ruolo<select id="new-role"><option value="operatore">Operatore</option><option value="lettura">Sola lettura</option><option value="admin">Amministratore</option></select></label>
               <label>Password iniziale<input type="password" id="new-user-password" minlength="12" maxlength="128" required autocomplete="new-password"></label>
               <button class="secondary" type="submit">Crea account</button>
+            </form>
+          </div>
+        </section>
+
+        <section id="view-archive" class="screen" hidden>
+          <div class="panel">
+            <div class="panel-heading"><div><h3>Stato dell'archivio</h3><p>Le annualità e i report sono indipendenti per anno accademico.</p></div></div>
+            <div class="table-wrap"><table><thead><tr><th>Anno accademico</th><th>Annualità censite</th><th>File acquisiti</th></tr></thead><tbody id="archive-summary-body"></tbody></table></div>
+          </div>
+          <div class="panel danger-panel">
+            <h3>Azzeramento archivio</h3>
+            <p><strong>Operazione irreversibile:</strong> cancella le annualità censite e i file Excel acquisiti nell'ambito selezionato. Gli account degli operatori vengono mantenuti.</p>
+            <p class="muted">Se desideri conservare i report, procurati prima una copia di sicurezza in un ambiente autorizzato.</p>
+            <form id="archive-reset-form" class="fields narrow-fields">
+              <label>Ambito dell'azzeramento
+                <select id="reset-scope">
+                  <option value="year">Solo anno accademico selezionato</option>
+                  <option value="all">Tutto l'archivio (tutti gli anni)</option>
+                </select>
+              </label>
+              <p class="reset-prompt">Per confermare, digita esattamente: <strong id="reset-required"></strong></p>
+              <label>Conferma testuale<input id="reset-confirmation" autocomplete="off" spellcheck="false" required></label>
+              <label>Password amministratore<input id="reset-password" type="password" autocomplete="current-password" required></label>
+              <button class="danger-button" type="submit">Azzeramento definitivo</button>
             </form>
           </div>
         </section>
