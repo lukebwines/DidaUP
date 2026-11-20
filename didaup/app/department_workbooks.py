@@ -171,8 +171,10 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         raise WorkbookGenerationError("Il report storico non corrisponde al suo hash registrato")
     if not 1 <= header_row <= 40:
         raise WorkbookGenerationError("Riga intestazioni fuori intervallo")
+    # TOT ORE EFFETTIVE is an output-only calculated field. The input
+    # association is optional and historical values must not be reused.
     required = (
-        "cds_codice", "sede", "anno_corso", "ore_effettive_totali",
+        "cds_codice", "sede", "anno_corso",
     )
     missing = [key for key in required if key not in assigned]
     if missing:
@@ -401,15 +403,11 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         # The year of reference is the imported report's archived year, not
         # a per-row equality check. Keep the original A.A. value unchanged,
         # including conventions used by Schools of Specialization.
-        effective = get("ore_effettive_totali")
-        if _display(effective) and (
-            isinstance(effective, bool) or
-            not isinstance(effective, (float, int)) or
-            not math.isfinite(float(effective)) or effective < 0
-        ):
-            raise WorkbookGenerationError(
-                f"Riga {excel_row}: TOT ORE EFFETTIVE non numerico o negativo"
-            )
+        # Start every retained line at zero, irrespective of any old mapping
+        # or old effective-hour values. The future workload rule engine will
+        # populate this field from TOT ORE PREVISTE; the source is unchanged.
+        # Excluded rows above retain their source values in the internal audit.
+        data["TOT ORE EFFETTIVE"] = 0
         historical_id = source_row_id(source_sha256, sheet_name, excel_row)
         if _display(data.get("TAF")):
             taf_rows_with_value += 1
@@ -526,7 +524,8 @@ def build_five_workbooks(
     sheet.merge_range(
         3, 0, 3, 36,
         "La colonna Ore è una QUOTA CEDUTA dal docente storico per le aggiunte/"
-        "sostituzioni parziali; TOT ORE EFFETTIVE è l'unico riferimento.",
+        "sostituzioni parziali. TOT ORE EFFETTIVE parte da 0 e attende "
+        "il calcolo del carico didattico; non cedere ore prima del calcolo.",
         subtitle,
     )
     sheet.merge_range(
