@@ -4,6 +4,7 @@ async function openMapping(importId) {
   const data = await api("imports/" + importId + "/mapping");
   state.mapping = data;
   state.preview = null;
+  el("mapping-save").disabled = state.user?.role === "lettura";
   setText("mapping-source-name", data.original_name);
   setText("mapping-source-kind", data.kind === "offerta"
     ? "Offerta didattica e coperture storiche" : "Elenco dei docenti di competenza");
@@ -112,6 +113,11 @@ function renderMappingWarnings(warnings) {
 
 async function saveMapping() {
   if (!state.mapping || !state.preview) return;
+  if (state.preview.sheet !== el("mapping-sheet").value ||
+      state.preview.header_row !== Number(el("mapping-header-row").value)) {
+    showNotice("Il foglio o la riga intestazioni è cambiato: premi prima Leggi colonne.", true);
+    return;
+  }
   const assigned = {};
   for (const field of el("mapping-fields").querySelectorAll("select[data-field-key]")) {
     if (field.value !== "") assigned[field.dataset.fieldKey] = Number(field.value);
@@ -134,6 +140,12 @@ async function saveMapping() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  const markOutdated = () => {
+    state.preview = null;
+    setText("mapping-info", "La scelta delle colonne è cambiata: premi Leggi colonne prima di salvare.");
+  };
+  el("mapping-sheet").addEventListener("change", markOutdated);
+  el("mapping-header-row").addEventListener("change", markOutdated);
   el("back-to-imports").addEventListener("click", () => switchView("imports"));
   el("mapping-load").addEventListener("click", () =>
     loadMappingPreview().catch(error => showNotice(error.message, true)));
