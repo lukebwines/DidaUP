@@ -219,9 +219,9 @@ def test_multiselection_or_inside_each_filter_and_and_between_filters():
     assert rules[0]["taf"] == ["A", "C"]
     assert apply_workload(20, "Laurea", "SYN-B", "C", rules) == (8.0, 0, None)
     assert apply_workload(20, "Magistrale", "SYN-A", "A", rules) == (8.0, 0, None)
-    assert apply_workload(20, "Altro", "SYN-A", "C", rules) == (0, None, None)
-    assert apply_workload(20, "Laurea", "SYN-C", "C", rules) == (0, None, None)
-    assert apply_workload(20, "Laurea", "SYN-A", "B", rules) == (0, None, None)
+    assert apply_workload(20, "Altro", "SYN-A", "C", rules) == (20.0, None, None)
+    assert apply_workload(20, "Laurea", "SYN-C", "C", rules) == (20.0, None, None)
+    assert apply_workload(20, "Laurea", "SYN-A", "B", rules) == (20.0, None, None)
 
 
 def test_multiselection_duplicate_sets_and_values_are_rejected():
@@ -321,3 +321,69 @@ def test_workload_api_persists_multiselections_and_reloads_them(client):
     assert current.status_code == 200
     assert current.json()["rules"] == [expected]
     assert current.json()["version"] == 1
+
+
+def test_nd_mode_is_explicit_text_and_never_zero_hours():
+    checked = validate_rules([
+        rule(cds=["SYN-A", "SYN-B"], taf=["TAF-X"], mode="non_disponibile", value="")
+    ])
+    assert checked[0]["value"] == "N.D."
+    assert apply_workload(20, "Qualsiasi", "SYN-A", "TAF-X", checked) == (
+        "N.D.", 0, None
+    )
+    # N.D. is deliberate even when planned hours are blank or malformed.
+    assert apply_workload("", "Qualsiasi", "SYN-A", "TAF-X", checked) == (
+        "N.D.", 0, None
+    )
+    assert apply_workload("valore errato", "Qualsiasi", "SYN-A", "TAF-X", checked) == (
+        "N.D.", 0, None
+    )
+    # Unmatched activities retain their planned hours rather than becoming N.D.
+    assert apply_workload(23, "Qualsiasi", "SYN-C", "TAF-X", checked) == (
+        23.0, None, None
+    )
+    with pytest.raises(WorkloadRuleError, match="N.D."):
+        validate_rules([rule(mode="non_disponibile", value="10")])
+    with pytest.raises(WorkloadRuleError):
+        validate_rules([rule(mode="non_disponibile", value="Non applicabile")])
+
+
+def test_nd_is_written_as_excel_text_in_all_five_files_not_counted(tmp_path):
+    source = tmp_path / "nd-synthetic.xlsx"
+    assigned = make_source(source)
+    assigned.pop("ore_effettive_totali")
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    rules = validate_rules([
+        rule(cds=["SYN-A"], mode="non_disponibile", value="N.D."),
+    ])
+    package, info = build_five_workbooks(
+        source, digest, "Offerta sintetica", 1, assigned, "2026/27",
+        workload_rules=rules,
+    )
+    assert info["workload"]["rows_not_available"] == 3
+    assert info["workload"]["rows_calculated"] == 3
+    assert info["workload"]["rows_using_planned_hours"] == 1
+    assert info["workload"]["total_effective_hours"] == 8
+    assert info["workload"]["error_count"] == 0
+    with ZipFile(io.BytesIO(package)) as archive:
+        names = referent_names(archive)
+        assert len(names) == 5
+        assert len(set(archive.read(name) for name in names)) == 1
+        output = tmp_path / "nd-output.xlsx"
+        output.write_bytes(archive.read(names[0]))
+    rows = CalamineWorkbook.from_path(output).get_sheet_by_name(
+        "Proposte SSD"
+    ).to_python(skip_empty_area=False)
+    assert [row[28] for row in rows[6:10]] == ["N.D.", "N.D.", "N.D.", 8]
+    # Source still untouched.
+    assert hashlib.sha256(source.read_bytes()).hexdigest() == digest
+
+
+def test_nd_mode_is_visible_in_user_interface(client):
+    html = client.get("/").text
+    js = client.get("/static/workload.js").text
+    assert '<option value="non_disponibile">' in html
+    assert 'id="workload-count-nd"' in html
+    assert 'id="workload-value-wrapper"' in html
+    assert 'workload-count-nd' in js
+    assert 'input.required = !unavailable' in js
