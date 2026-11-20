@@ -2,7 +2,7 @@
 
 **Add-on per la predisposizione di file Excel evoluti destinati ai referenti SSD.**
 
-> Stato: **0.1.0-alpha1 (primo nucleo tecnico)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. Non utilizzare dati reali dell'Ateneo durante il collaudo.
+> Stato: **0.1.2-alpha1 (primo nucleo tecnico)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. Non utilizzare dati reali dell'Ateneo durante il collaudo.
 
 ## Obiettivo
 Partire dall'offerta e dalle coperture storiche **2026/27** per costruire un archivio di riferimento verificabile. Quando saranno disponibili le estrazioni ufficiali, predisporre i fogli di programmazione **2027/28** senza trasporre automaticamente come valide assegnazioni, codici o nominativi precedenti.
@@ -34,13 +34,16 @@ Repository privato **solo per codice e documentazione tecnica priva di dati pers
 
 Nella cartella [`didaup/`](didaup/) è presente la prima versione:
 - interfaccia grafica con **selettore multi-A.A.**, archivio iniziale 2026/27 e creazione degli A.A. successivi;
+- **modalità chiara/scura**, con preferenza locale nel browser;
+- nuova sezione **Importa report**: acquisizione sicura di file .xls/.xlsx nella cartella privata /data/sources, associati all'A.A. e classificati come offerta/coperture o docenti di competenza; lettura della struttura e verifica duplicati;
+- **Archivio**: azzeramento dell'A.A. selezionato o dell'intero archivio, solo admin, con password e doppia conferma; gli account sono preservati;
 - gestione manuale per collaudo delle annualità dei CdS, con **esclusione/ripristino senza cancellazione**;
 - multi-account con ruoli **admin**, **operatore** e **sola lettura**;
 - login e sessioni proprie, autorizzazioni lato server, cookie HttpOnly e CSRF;
 - accesso sia da **Home Assistant Ingress** sia dalla porta dedicata **8097/tcp**, utilizzabile da Cloudflare Tunnel protetto da Access;
 - database SQLite persistente separato dal repository.
 
-**Non implementati in questa versione:** import XLS del report 2026/27, generazione e reimportazione XLSX, gestione dei referenti SSD e avvisi regolamentari.
+**Non implementati in questa versione:** mappatura semantica delle colonne del report importato, generazione e reimportazione XLSX per SSD, gestione dei referenti SSD e avvisi regolamentari. L'importazione attuale archivia il file e ne legge la struttura; **non importa ancora le assegnazioni nel modello didattico**.
 
 I controlli su GitHub includono test sintetici, verifica sintattica Python e build dell'immagine Docker. La riuscita della build **non sostituisce** il collaudo su Home Assistant e sul tunnel.
 
