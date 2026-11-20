@@ -79,9 +79,7 @@ def extract_cohorts(
     if sheet.height < 2:
         raise CohortExtractionError("Il report non contiene righe di dati")
 
-    from .academic_year_rules import classify_source_year
     rows = sheet.to_python(skip_empty_area=False)
-    convention_rows = 0
     groups: dict[tuple[str, str, int], dict] = {}
     names: dict[tuple[str, str, int], set[str]] = defaultdict(set)
     anomalies: list[dict] = []
@@ -117,18 +115,9 @@ def extract_cohorts(
         if len(name) < 2 or len(name) > 120 or len(campus) > 80:
             issue(number, "Descrizione CdS o sede fuori dai limiti ammessi")
             continue
-        source_aa = field("anno_accademico_report")
-        if "anno_accademico_report" in assigned:
-            year_relation = classify_source_year(
-                source_aa, expected_aa,
-                course_type=field("cds_tipologia"),
-                course_name=name,
-            )
-            if year_relation == "invalid":
-                issue(number, "Anno accademico del report assente, non riconosciuto o diverso dall'A.A. selezionato")
-                continue
-            if year_relation == "specialization_convention":
-                convention_rows += 1
+        # The report is already linked by the operator to the selected
+        # archive year. Row-level A.A. is historic context, not an exclusion
+        # criterion (including school-of-specialization conventions).
         key = (code, campus, study_year)
         entry = groups.get(key)
         if entry is None:
@@ -158,7 +147,6 @@ def extract_cohorts(
         "header_row": header_row,
         "source_rows": sheet.height - header_row,
         "valid_rows": valid_rows,
-        "specialization_convention_rows": convention_rows,
         "blank_rows": blank_rows,
         "anomaly_count": total_invalid,
         "anomaly_examples": anomalies,
