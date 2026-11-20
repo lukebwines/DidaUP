@@ -1,5 +1,11 @@
 # DidaUP — Architettura funzionale preliminare
 
+## Ambito iniziale
+Referenti SSD dell'area medica della Facoltà di Medicina e Chirurgia, secondo il materiale già condiviso; riconferma delle designazioni nel 2027/28 **[DA VERIFICARE]**.
+
+## Regolamento
+Il regolamento sull'attribuzione dei compiti didattici è fonte da usare per evidenziare nell'XLSX le regole pertinenti e i casi che richiedono verifica. La mappatura regola -> riferimento ufficiale -> avviso nel file -> controllo al reimport sarà svolta in fase di sviluppo, non dedotta dai fac-simile.
+
 ## Flusso anno accademico
 1. Importare le estrazioni ufficiali 2026/27 in archivio privato.
 2. Verificare struttura, codici, identificativi, coperture multiple, SSD e differenze.
