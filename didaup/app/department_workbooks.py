@@ -34,6 +34,13 @@ HISTORIC_HEADERS = [
     "PERIODO INIZIO", "PERIODO FINE", "DIPARTIMENTO AFFERENZA DOCENTE",
     "TITOLO AFFIDAMENTO",
 ]
+# Columns requested to be invisible to referents in ALL five workbooks.
+# Hidden is a presentation rule, not secure redaction: values remain in XLSX.
+HIDDEN_REFERENT_HEADERS = (
+    "CODICE CORSO", "CFU TOTALI INS", "CODICE INS",
+    "TIPOEROGAZIONE", "FUORI PIANO", "MOODLE",
+    "MATRICOLA DOCENTE",
+)
 PROPOSAL_HEADERS = ("Tipo variazione", "Nuovo docente", "Ore", "Note")
 # Position after TOT ORE EFFETTIVE, as agreed; 33 + 4 = 37 visible.
 VISIBLE_HEADERS = HISTORIC_HEADERS[:29] + list(PROPOSAL_HEADERS) + HISTORIC_HEADERS[29:]
@@ -299,6 +306,11 @@ def build_five_workbooks(
     sheet.set_column(15, 28, 19)
     sheet.set_column(29, 32, 23)
     sheet.set_column(33, 36, 20)
+    # Hide only the requested historical columns, preserving their source
+    # values and their original positions so reimport IDs remain stable.
+    for header in HIDDEN_REFERENT_HEADERS:
+        col = VISIBLE_HEADERS.index(header)
+        sheet.set_column(col, col, 18, locked, {"hidden": True})
     sheet.set_column(37, 40, 18, hidden, {"hidden": True})
     for excel_index, (data, historical_id, activity_id) in enumerate(prepared, start=6):
         sheet.set_row(excel_index, 20)
