@@ -120,3 +120,27 @@ La proposta di aggiunta di un docente può raccogliere ore da più righe di cope
 **Controlli funzionali previsti:** per ciascun cedente, ore cedute ≤ `TOT ORE EFFETTIVE` disponibili; la somma dei trasferimenti verso la stessa nuova copertura deve essere calcolata una sola volta, senza creare duplicati; la somma delle ore proposte deve restare uguale alla somma storica; bloccare o segnalare proposte ambigue, negative o prive di identificazione univoca dell'attività e dei cedenti. Nessuna approvazione automatica.
 
 **Rappresentazione nell'Excel — [DA CONFERMARE]:** possibile compilare `Tipo variazione = Aggiunta`, `Nuovo docente = C`, `Ore = 8` sulla riga storica A e analogamente `Ore = 4` su quella B. DidaUP aggrega il nuovo docente C in un'unica copertura proposta da 12 ore, mantenendo la tracciabilità delle due cessioni. Questa scelta di interfaccia non è stata ancora confermata dall'utente.
+
+
+## Distribuzione delle proposte 2027/28: cinque Excel condivisi per dipartimento — CONFERMATO
+
+**Nuova scelta esplicita dell'utilizzatore:** non preparare più un Excel distinto per ogni SSD. Generare invece **cinque file Excel completi, uno per ciascun dipartimento**, e condividerli in modifica su **OneDrive/SharePoint d'Ateneo** con i rispettivi referenti; i referenti compilano direttamente online, senza scambio di allegati e senza restituire una copia individuale del file.
+
+### Esperienza richiesta
+
+- Ogni file contiene **tutte le attività attribuite al rispettivo dipartimento**, e conserva l'intero tracciato storico e le sole quattro colonne modificabili **Tipo variazione, Nuovo docente, Ore, Note**.
+- **Un unico foglio operativo** per dipartimento, con filtro per SSD, CdS e altri campi utili; preferire le **Visualizzazioni foglio** personali di Excel per evitare che il filtro di un referente interferisca con quelli degli altri durante la compilazione contemporanea.
+- **Protezione delle informazioni storiche** e identificativi tecnici delle righe, modificabilità dei soli campi di proposta; mantenere lo storico 2026/27 separato dalle proposte 2027/28. La protezione Excel è una misura contro modifiche accidentali, non un controllo di integrità o autorizzazione.
+- Per i trasferimenti multipli, conservare l'obiettivo del pulsante **«+ Aggiungi variazione»** sulla riga storica: lo script Office Scripts e il pulsante devono essere collaudati su **un file master** prima della duplicazione su cinque file. Non considerare installato o funzionante il pulsante in XLSX generati offline senza prova reale sul tenant.
+- DidaUP deve predisporre/pubblicare e poi acquisire i cinque file, mantenendo un identificativo univoco della fonte, revisione e dipartimento. **Questa integrazione OneDrive e il reimport NON sono ancora implementati nel software**.
+- Da progettare: stato di lavorazione **per dipartimento** (non per file SSD), con riscontro puntuale per **SSD/referente**, note, controlli, chiusura e versione congelata al termine della raccolta. La sola modifica nel file non equivale ad approvazione di un affidamento.
+
+### Punti di controllo da risolvere prima dell'implementazione
+
+1. **Attribuzione delle attività al dipartimento [DA VERIFICARE]:** deve derivare da un campo ufficiale/una tabella di corrispondenza validata dall'utente. Non utilizzare automaticamente `DIPARTIMENTO AFFERENZA DOCENTE`, poiché identifica l'afferenza del docente e non prova quale dipartimento sia responsabile dell'offerta dell'insegnamento. Attività senza attribuzione certa oppure con afferenze multiple devono essere segnalate e non assegnate arbitrariamente.
+2. **Permessi per referente [DA CONFERMARE]:** la condivisione con diritto di modifica del file dipartimentale non applica restrizioni per SSD o singole righe. Chi ha accesso in modifica può in linea di principio intervenire anche nelle celle di proposta degli altri SSD del dipartimento. DidaUP deve verificare chi è autorizzato a presentare modifiche per ogni SSD; l'identificazione affidabile dell'autore per singola variazione non può essere dedotta dal semplice XLSX scaricato. Se si richiede segregazione rigorosa delle modifiche, serve un meccanismo diverso (interfaccia autenticata di DidaUP oppure controllo più granulare fuori da Excel).
+3. **Concorrenza:** collaudare modifica contemporanea, salvataggio, aggiunta di righe e Visualizzazioni foglio sul tenant Microsoft 365 dell'Ateneo. Se due utenti modificano la stessa cella, non assumere un conflitto risolto automaticamente secondo criteri amministrativi; usare storico versioni e riesame amministrativo.
+4. **Conservazione fonte:** i cinque Excel condivisi sono solo proposte. Al reimport, confrontare con lo snapshot originale nel database privato DidaUP e bloccare identificativi non validi, ore cedute oltre il disponibile, doppi conteggi e variazioni di competenza non accertata.
+5. **Nomi e attribuzione dei cinque dipartimenti [DA ACQUISIRE]:** non riportare denominazioni o codici senza una fonte ufficiale fornita dall'utente.
+
+Questa nuova impostazione **sostituisce la precedente ipotesi di un file per SSD**, senza modificare le regole quantitative già confermate per sostituzioni e aggiunte. Nessuna assegnazione reale, file di reparto o autorizzazione OneDrive è stata effettuata.
