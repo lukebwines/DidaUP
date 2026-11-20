@@ -496,6 +496,68 @@ function hookForms() {
     }
   });
 
+  el("workbook-review-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const uploads = [...el("workbook-review-files").files];
+    if (uploads.length !== 5) {
+      showNotice("Selezionare esattamente cinque file Excel.", true);
+      return;
+    }
+    if (uploads.some(f => f.size > 32 * 1024 * 1024 || !f.name.toLowerCase().endsWith(".xlsx"))) {
+      showNotice("Sono consentiti solo file XLSX, massimo 32 MB ciascuno.", true);
+      return;
+    }
+    const sourceId = Number(el("workbook-import-id").value);
+    if (!Number.isInteger(sourceId) || sourceId < 1) {
+      showNotice("Selezionare un report mappato.", true);
+      return;
+    }
+    const button = el("workbook-review-button");
+    button.disabled = true;
+    el("workbook-review-result").textContent = "Controllo delle cinque proposte in corso…";
+    el("workbook-overlaps").replaceChildren();
+    const data = new FormData();
+    data.append("import_id", String(sourceId));
+    data.append("test_data_only", "true");
+    for (const f of uploads) data.append("files", f, f.name);
+    try {
+      const response = await fetch(
+        "api/years/" + state.selected + "/department-workbooks/review",
+        {method: "POST", credentials: "same-origin",
+          headers: {"X-CSRF-Token": state.user.csrf}, body: data}
+      );
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof result.detail === "string" ? result.detail : "Analisi non riuscita");
+      }
+      const message = result.blocked
+        ? "Revisione NON superata: " + result.overlap_count +
+          " sovrapposizioni tra file, " + result.issue_count_at_least +
+          " anomalie. Nessuna proposta acquisita o approvata."
+        : "Nessuna sovrapposizione o anomalia strutturale rilevata. "
+          + "Si tratta di un'anteprima, non di un'approvazione.";
+      const examples = (result.issues || []).slice(0, 12).map(x =>
+        "File " + x.file + (x.excel_row ? ", riga " + x.excel_row : "") +
+        ": " + x.reason);
+      el("workbook-review-result").textContent =
+        message + (examples.length ? "\n" + examples.join("\n") : "");
+      el("workbook-review-result").style.whiteSpace = "pre-line";
+      for (const overlap of result.overlaps || []) {
+        const row = el("workbook-overlaps").insertRow();
+        row.insertCell().textContent = overlap.activity_id;
+        row.insertCell().textContent = overlap.files.join(", ");
+        row.insertCell().textContent = overlap.identical_proposals
+          ? "Proposta ripetuta: da verificare" : "Proposte differenti: da risolvere";
+      }
+      showNotice(message, Boolean(result.blocked));
+    } catch (error) {
+      el("workbook-review-result").textContent = "Nessuna proposta acquisita.";
+      showNotice(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   el("archive-reset-form").addEventListener("submit", async event => {
     event.preventDefault();
     const phrase = updateResetPhrase();
