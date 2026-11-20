@@ -1,6 +1,6 @@
 name: "DidaUP"
 slug: "didaup"
-version: "0.1.0-alpha1"
+version: "0.1.1-alpha1"
 description: "Programmazione didattica: archivio per A.A. e preparazione di schede Excel SSD (sviluppo)"
 arch:
   - aarch64
@@ -23,4 +23,5 @@ options:
 schema:
   bootstrap_username: str
   bootstrap_password: password?
+  admin_recovery_password: password?
   secure_cookies: bool
