@@ -369,36 +369,42 @@ def test_mapping_deleted_with_archive_but_account_retained(client):
 
 
 
-def test_user_supplied_referent_template_recognized_with_three_editable_fields():
-    from app.column_mapping import OFFER_HEADER_TO_FIELD, suggest_fields, evaluate_mapping
+def test_source_headers_recognized_without_output_variation_fields():
+    from app.column_mapping import (
+        OFFER_HEADER_TO_FIELD, OUTPUT_PROPOSAL_HEADERS,
+        suggest_fields, evaluate_mapping,
+    )
 
-    # Synthetic header layout only. No teachers, courses or assignments.
+    # Source report layout from labels only: no teacher or assignment data.
     headers = list(OFFER_HEADER_TO_FIELD.keys())
     assert len(headers) == 36
     result = suggest_fields(headers, "offerta")
     assert result["matched"] == 36
     assert not result["ambiguous"]
-    assert not result["missing_proposal_fields"]
-    assert len(result["proposal_columns"]) == 3
-    assert result["assigned"]["proposta_docente"] == headers.index("NUOVO DOCENTE")
-    assert result["assigned"]["proposta_ore"] == headers.index("ORE")
-    assert result["assigned"]["proposta_note"] == headers.index("NOTE")
+    assert result["output_proposal_headers"] == ["Nuovo docente", "Ore", "Note"]
+    assert not any(key.startswith("proposta_") for key in result["assigned"])
+    assert not any(label in OFFER_HEADER_TO_FIELD for label in
+                   ("NUOVO DOCENTE", "ORE", "NOTE"))
     assert result["assigned"]["ore_previste"] == headers.index("TOT ORE PREVISTE")
     assert result["assigned"]["ore_prevlez"] == headers.index("OREPREVLEZ")
     assert result["assigned"]["ore_effettive_totali"] == headers.index("TOT ORE EFFETTIVE")
     assert result["assigned"]["ssd_insegnamento_originale"] == headers.index("SSD INSEGNAMENTO")
+    assert result["assigned"]["scuola"] == headers.index("SCUOLA")
+    assert result["assigned"]["dipartimento"] == headers.index("DIPARTIMENTO DI RIFERIMENTO")
     assert "ssd_insegnamento_vecchio" not in result["assigned"]
     assert "ssd_insegnamento_nuovo" not in result["assigned"]
-    assert "SSD dell'insegnamento (vecchio o nuovo)" not in evaluate_mapping("offerta", result["assigned"])
+    assert not any("SSD dell'insegnamento" in x
+                   for x in evaluate_mapping("offerta", result["assigned"]))
 
 
-def test_duplicate_headers_require_manual_decision():
+def test_duplicate_source_headers_require_manual_decision():
     from app.column_mapping import suggest_fields
-    result = suggest_fields(["NUOVO DOCENTE", "Ore", " ORE ", "Note"], "offerta")
-    assert result["matched"] == 2
-    assert result["ambiguous"]["proposta_ore"] == [1, 2]
-    assert "proposta_ore" in result["missing_proposal_fields"]
-    assert result["proposal_columns"]["proposta_docente"] == 0
+    result = suggest_fields(["CODICE CORSO", "CDS", " codice  corso "], "offerta")
+    assert result["matched"] == 1
+    assert result["ambiguous"]["cds_codice"] == [0, 2]
+    assert "cds_codice" not in result["assigned"]
+    assert result["assigned"]["cds_nome"] == 1
+    assert result["output_proposal_headers"] == ["Nuovo docente", "Ore", "Note"]
 
 
 def make_synthetic_header_workbook():
@@ -414,7 +420,7 @@ def make_synthetic_header_workbook():
     headers = list(OFFER_HEADER_TO_FIELD.keys())
     cells = []
     for i, label in enumerate(headers):
-        # Exactly 36 headers A:AJ; both cells and content are synthetic.
+        # Only synthetic headers and source-level metadata; no real student or teacher data.
         col = ""
         x = i + 1
         while x:
@@ -454,9 +460,8 @@ def test_auto_mapping_reads_synthetic_template_without_saving_automatically(clie
     result = guessed.json()
     assert result["recognized"] is True
     assert result["matched"] == 36
-    assert result["proposal_columns"] == {
-        "proposta_docente": 29, "proposta_ore": 30, "proposta_note": 31
-    }
+    assert result["output_proposal_headers"] == ["Nuovo docente", "Ore", "Note"]
+    assert "proposta_docente" not in result["assigned"]
     assert result["header_row"] == 1
     # Recognition is just a suggestion: original data and saved mapping untouched.
     record = client.get(f"/api/imports/{import_id}/mapping").json()
