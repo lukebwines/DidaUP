@@ -36,7 +36,7 @@ Nella cartella [`didaup/`](didaup/) è presente la prima versione:
 - interfaccia grafica con **selettore multi-A.A.**, archivio iniziale 2026/27 e creazione degli A.A. successivi;
 - **modalità chiara/scura**, con preferenza locale nel browser;
 - nuova sezione **Importa report**: acquisizione sicura di file .xls/.xlsx nella cartella privata /data/sources, associati all'A.A. e classificati come offerta/coperture o docenti di competenza; lettura della struttura e verifica duplicati;
-- **Archivio**: azzeramento dell'A.A. selezionato o dell'intero archivio, solo admin, con password e doppia conferma; gli account sono preservati;
+- **Archivio**: azzeramento dei soli file di lavorazione rigenerabili, mai delle mappature, delle esclusioni CdS, dei report sorgenti o degli anni accademici; solo admin con password e doppia conferma;
 - gestione manuale per collaudo delle annualità dei CdS, con **esclusione/ripristino senza cancellazione**;
 - multi-account con ruoli **admin**, **operatore** e **sola lettura**;
 - login e sessioni proprie, autorizzazioni lato server, cookie HttpOnly e CSRF;
@@ -69,3 +69,6 @@ Il report di offerta e coperture è una fonte ampia da mappare e verificare; non
 
 ## Selezione annualità CdS (0.1.8-alpha1)
 La schermata **Annualità CdS** propone un elenco a spunte ricavato dal report mappato: ricerca rapida per codice/nome/sede/anno, selezione limitata ai risultati visibili, riepilogo di tutte le esclusioni, motivazione e conferma finale. Un raggruppamento rappresenta una combinazione codice CdS + sede + anno di corso. Le esclusioni non cancellano righe né modificano il report originale. Questo passaggio è preliminare alla futura generazione degli Excel per SSD.
+
+## Protezione delle mappature e delle esclusioni (0.1.9-alpha1)
+L'azione **Azzera soltanto le elaborazioni** non cancella le annualità censite, gli stati di inclusione/esclusione e le motivazioni, le mappature, i documenti Excel importati, la cronologia e gli account. Cancella esclusivamente eventuali output di lavoro rigenerabili; **attualmente non esistono ancora output generati** e l'operazione può non eliminare alcun elemento. Usare un backup recente Home Assistant per proteggere il database e i file sorgenti da danni o disinstallazioni.
