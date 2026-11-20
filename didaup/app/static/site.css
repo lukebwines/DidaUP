@@ -263,3 +263,12 @@ td small{display:block;color:#718398}td button{padding:7px 11px!important;font-s
 .workload-multi-stale div{display:flex;align-items:center;justify-content:space-between;gap:8px;overflow-wrap:anywhere}
 .workload-multi-stale .secondary{padding:3px 8px!important;font-size:.73rem!important;flex-shrink:0}
 [data-theme="dark"] .workload-multi-stale{background:#483a25;border-color:#8e7038;color:#ffdf97}
+
+/* Retired workload-rule choices stay in the register but are never
+   reintroduced as options for courses excluded by annuality. */
+.workload-rule-out-of-scope{background:#fff7e9}
+.workload-rule-warning{display:block;color:#8b4e16;font-weight:650;margin-bottom:5px;white-space:normal;overflow-wrap:anywhere}
+@media (prefers-color-scheme:dark){
+  .workload-rule-out-of-scope{background:#3b3125}
+  .workload-rule-warning{color:#ffd394}
+}
