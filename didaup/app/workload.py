@@ -88,19 +88,30 @@ def validate_rules(rules):
         criteria.add(key)
         mode = item.get("mode")
         value = item.get("value")
-        if mode not in ("percentuale", "fissa"):
-            raise WorkloadRuleError(f"Regola {index}: scegliere percentuale o quota fissa")
-        if not isinstance(value, (str, int, float)) or isinstance(value, bool):
-            raise WorkloadRuleError(f"Regola {index}: valore non valido")
-        text = str(value).strip()
-        if not _NUMBER.fullmatch(text):
-            raise WorkloadRuleError(f"Regola {index}: valore numerico con massimo due decimali")
-        amount = decimal_hours(text)
-        if amount is None or amount > (Decimal("1000") if mode == "percentuale"
-                                      else Decimal("999999")):
-            raise WorkloadRuleError(f"Regola {index}: valore fuori intervallo")
-        rule["mode"] = mode
-        rule["value"] = format(amount, "f")
+        if mode not in ("percentuale", "fissa", "non_disponibile"):
+            raise WorkloadRuleError(
+                f"Regola {index}: scegliere percentuale, quota fissa oppure N.D."
+            )
+        if mode == "non_disponibile":
+            # N.D. is an explicit, nonnumeric output; not a zero-hour assignment.
+            # Accept an empty value (the UI has no numeric field for this mode)
+            # or exactly the single supported label.
+            if value not in (None, "", "N.D."):
+                raise WorkloadRuleError(f"Regola {index}: N.D. non accetta valori numerici o testo libero")
+            rule["mode"] = mode
+            rule["value"] = "N.D."
+        else:
+            if not isinstance(value, (str, int, float)) or isinstance(value, bool):
+                raise WorkloadRuleError(f"Regola {index}: valore non valido")
+            text = str(value).strip()
+            if not _NUMBER.fullmatch(text):
+                raise WorkloadRuleError(f"Regola {index}: valore numerico con massimo due decimali")
+            amount = decimal_hours(text)
+            if amount is None or amount > (Decimal("1000") if mode == "percentuale"
+                                          else Decimal("999999")):
+                raise WorkloadRuleError(f"Regola {index}: valore fuori intervallo")
+            rule["mode"] = mode
+            rule["value"] = format(amount, "f")
         accepted.append(rule)
     return accepted
 
@@ -134,6 +145,10 @@ def apply_workload(planned, typology, course, taf, rules):
     if len(selected) > 1:
         return 0, None, "Conflitto tra regole con la stessa specificità"
     _, index, rule = selected[0]
+    if rule["mode"] == "non_disponibile":
+        # An explicit administrative marker is meaningful even when source
+        # planned hours are absent, invalid or negative.
+        return "N.D.", index, None
     # A blank planned-hours cell must not prevent export of thousands of
     # unrelated activities. It remains ZERO and is reported as an explicit
     # warning, distinct from invalid nonblank source data.
