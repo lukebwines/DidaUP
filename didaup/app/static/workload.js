@@ -172,6 +172,21 @@ const workloadUI = (() => {
     body.replaceChildren();
     for (const [index, rule] of stateLocal.rules.entries()) {
       const row = body.insertRow();
+      // Saved rules are preserved, but flagged if their selections no longer
+      // occur in any included row. This is NOT a selectable course.
+      const currentValues = stateLocal.choices && {
+        tipologia: new Set(stateLocal.choices.tipologie),
+        cds: new Set(stateLocal.choices.cds.map(item => item.code)),
+        taf: new Set(stateLocal.choices.taf)
+      };
+      const outOfScope = currentValues ? criteria.flatMap(key =>
+        asArray(rule[fieldNames[key]])
+          .filter(value => !currentValues[fieldNames[key]].has(value))
+      ) : [];
+      if (outOfScope.length) {
+        row.classList.add("workload-rule-out-of-scope");
+        row.title = "Regola storica con valori fuori dalle annualità incluse";
+      }
       for (const value of [
         criterionSummary(rule.tipologia, "Tutte"),
         criterionSummary(rule.cds, "Tutti"),
@@ -185,6 +200,13 @@ const workloadUI = (() => {
         cell.textContent = value;
       }
       const actions = row.insertCell();
+      if (outOfScope.length) {
+        const warning = document.createElement("small");
+        warning.className = "workload-rule-warning";
+        warning.textContent = "Fuori dalle righe incluse: " + outOfScope.join(", ") +
+          ". La regola resta salvata ma questi valori non sono selezionabili.";
+        actions.append(warning);
+      }
       if (state.user?.role === "admin") {
         const edit = document.createElement("button");
         edit.className = "secondary"; edit.type = "button";
@@ -267,10 +289,25 @@ const workloadUI = (() => {
     const scope = "Selettori limitati alle " + Number(result.rows_in_scope || 0) +
       " righe incluse nei cinque Excel; " + Number(result.excluded_rows || 0) +
       " righe escluse per CdS, sede e annualità.";
-    document.getElementById("workload-mapping-status").textContent = missing.length
-      ? scope + " Associazioni da verificare: " + missing.join("; ") + "."
-      : scope + " Associazioni per il calcolo presenti.";
+    const scopeWarnings = [];
+    if (Number(result.unmatched_exclusion_count || 0)) {
+      scopeWarnings.push(result.unmatched_exclusion_count +
+        " annualità escluse non trovate nel report associato");
+    }
+    if (Number(result.mixed_annuality_rows_retained || 0)) {
+      scopeWarnings.push(result.mixed_annuality_rows_retained +
+        " righe con annualità incluse ed escluse insieme sono state conservate");
+    }
+    if (Number(result.excluded_course_titles_still_present || 0)) {
+      scopeWarnings.push(result.excluded_course_titles_still_present +
+        " righe da verificare: denominazioni di CdS esclusi ancora presenti");
+    }
+    document.getElementById("workload-mapping-status").textContent =
+      scope + (missing.length ? " Associazioni da verificare: " + missing.join("; ") + "." :
+        " Associazioni per il calcolo presenti.") +
+      (scopeWarnings.length ? " ATTENZIONE: " + scopeWarnings.join("; ") + "." : "");
     resetForm();
+    drawRules();
     document.getElementById("workload-results").hidden = true;
   }
   async function load() {
