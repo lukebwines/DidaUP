@@ -273,6 +273,125 @@ def test_unmatched_exclusions_are_reported_not_silently_ignored(tmp_path):
     assert info["unmatched_exclusion_examples"][0]["course_code"] == "not-in-report"
 
 
+
+def _write_named_course_report(path, *, course_year="1,2,3", source_code="CF-REPORT",
+                                name="Corso di formazione continua sintetico"):
+    wb = xlsxwriter.Workbook(str(path))
+    sheet = wb.add_worksheet("Offerta sintetica")
+    for index, header in enumerate(HISTORIC_HEADERS):
+        sheet.write_string(0, index, header)
+    examples = [
+        {
+            "CODICE CORSO": source_code, "CDS": name,
+            "SEDE CORSO": "VERONA", "ANNO": course_year,
+            "CODICE INS": "MOD-TEST", "CODICE UGOV": "UGOV-TEST",
+            "INSEGNAMENTO": "Materia simulata", "MODULO": "Modulo prova",
+            "SSD INSEGNAMENTO": "TEST-SSD", "TOT ORE EFFETTIVE": 10,
+        },
+        {
+            "CODICE CORSO": "ALTRO-CDS", "CDS": "CdS da mantenere",
+            "SEDE CORSO": "VERONA", "ANNO": "1",
+            "CODICE INS": "ALT-TEST", "CODICE UGOV": "UGOV-ALT",
+            "INSEGNAMENTO": "Materia diversa", "MODULO": "Modulo diverso",
+            "SSD INSEGNAMENTO": "TEST-SSD", "TOT ORE EFFETTIVE": 6,
+        },
+    ]
+    for i, data in enumerate(examples, 1):
+        for j, header in enumerate(HISTORIC_HEADERS):
+            value = data.get(header)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                sheet.write_number(i, j, value)
+            elif value is not None:
+                sheet.write_string(i, j, str(value))
+    wb.close()
+    return {
+        OFFER_HEADER_TO_FIELD[h.upper()]: i
+        for i, h in enumerate(HISTORIC_HEADERS)
+        if h.upper() in OFFER_HEADER_TO_FIELD
+    }
+
+
+def _export_named_case(source, mapping, *, excluded, included=(), cohort_names=None):
+    return build_five_workbooks(
+        source, hashlib.sha256(source.read_bytes()).hexdigest(),
+        "Offerta sintetica", 1, mapping, "2026/27",
+        excluded=set(excluded), included=set(included),
+        cohort_names=cohort_names,
+    )
+
+
+def test_entire_excluded_cds_is_removed_even_with_source_year_1_2_3(tmp_path):
+    source = tmp_path / "multiyear.xlsx"
+    mapping = _write_named_course_report(source)
+    packed, info = _export_named_case(
+        source, mapping, excluded={("CF-REPORT", "VERONA", 1)}
+    )
+    assert info["excluded_rows"] == 1
+    assert info["unmatched_exclusion_count"] == 0
+    assert info["mixed_annuality_rows_retained"] == 0
+    assert info["historical_rows"] == 1
+    with ZipFile(io.BytesIO(packed)) as package:
+        payloads = [package.read(name) for name in package.namelist()]
+        assert len(payloads) == 5 and all(x == payloads[0] for x in payloads)
+    file = tmp_path / "retained.xlsx"
+    file.write_bytes(payloads[0])
+    rows = CalamineWorkbook.from_path(file).get_sheet_by_name(
+        "Proposte SSD"
+    ).to_python(skip_empty_area=False)
+    assert rows[6][2] == "CdS da mantenere"
+    assert not any(
+        "formazione continua sintetico" in str(row[2])
+        for row in rows[6:]
+    )
+
+
+def test_name_fallback_must_be_unique_and_reported(tmp_path):
+    source = tmp_path / "different-code.xlsx"
+    title = "Corso di formazione continua sintetico"
+    mapping = _write_named_course_report(source, source_code="SOURCE-CODE")
+    key = ("REGISTRY-CODE", "VERONA", 1)
+    _, info = _export_named_case(
+        source, mapping, excluded={key},
+        cohort_names={key: title},
+    )
+    assert info["excluded_rows"] == 1
+    assert info["historical_rows"] == 1
+    assert info["unmatched_exclusion_count"] == 0
+    assert info["cohorts_matched_by_unique_name_rows"] == 1
+    assert info["cohorts_matched_by_unique_name_examples"] == [2]
+
+
+def test_nonunique_name_fallback_does_not_delete_rows(tmp_path):
+    source = tmp_path / "ambiguous-name.xlsx"
+    title = "Corso di formazione continua sintetico"
+    mapping = _write_named_course_report(source, source_code="SOURCE-CODE")
+    key_a = ("REGISTRY-A", "VERONA", 1)
+    key_b = ("REGISTRY-B", "VERONA", 1)
+    _, info = _export_named_case(
+        source, mapping, excluded={key_a, key_b},
+        cohort_names={key_a: title, key_b: title},
+    )
+    assert info["excluded_rows"] == 0
+    assert info["unmatched_exclusion_count"] == 2
+    assert info["cohorts_matched_by_unique_name_rows"] == 0
+    assert info["historical_rows"] == 2
+
+
+def test_mixed_years_are_retained_and_reported_for_review(tmp_path):
+    source = tmp_path / "mixed-year.xlsx"
+    mapping = _write_named_course_report(source)
+    _, info = _export_named_case(
+        source, mapping,
+        excluded={("CF-REPORT", "VERONA", 1)},
+        included={("CF-REPORT", "VERONA", 2)},
+    )
+    assert info["excluded_rows"] == 0
+    assert info["mixed_annuality_rows_retained"] == 1
+    assert info["mixed_annuality_example_rows"] == [2]
+    assert info["unmatched_exclusion_count"] == 0
+    assert info["historical_rows"] == 2
+
+
 def test_per_row_academic_year_is_preserved_and_source_integrity_checked(tmp_path):
     src = tmp_path / "synthetic.xlsx"
     assigned = make_source(src, wrong_year=True)
