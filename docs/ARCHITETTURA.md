@@ -11,10 +11,10 @@ Il regolamento sull'attribuzione dei compiti didattici è fonte da usare per evi
 2. Verificare struttura, codici, identificativi, coperture multiple, SSD e differenze.
 3. Costruire uno **snapshot storico immutabile** dell'anno base.
 4. Quando disponibili i dati ufficiali 2027/28, riconciliare attività e codifiche con lo storico 2026/27; non considerare valida una copertura per sola eredità.
-5. Generare un file Excel **per SSD dell'insegnamento**, con le assegnazioni precedenti e gli attributi informativi bloccati.
-6. I referenti operano sugli XLSX; la Segreteria reimporta i file, convalidando ID, versioni e campi storici.
-7. Segnalare differenze, incarichi incrociati SSD, assegnazioni multiple, coperture incomplete e conflitti.
-8. Esportare riepiloghi e prospetti di istruttoria. Ogni approvazione è registrata solo sulla base di un atto ufficiale.
+5. Generare **cinque file XLSX identici e completi** dallo stesso snapshot, **senza filtri o suddivisioni di attività per dipartimento**. Conservare attribuzioni e coperture storiche in sola lettura e distinguere le quattro colonne di proposta.
+6. Condividere, quando sarà disponibile l'integrazione autorizzata, una copia per dipartimento su OneDrive d'Ateneo; i referenti filtrano personalmente CdS e SSD nel proprio file. **La pubblicazione automatica non è ancora implementata.**
+7. Acquisire i cinque XLSX compilati, riconciliare le proposte confrontando gli identificativi con la fonte storica privata e **segnalare ogni sovrapposizione sullo stesso insegnamento presente in più file, senza fondere automaticamente le modifiche**.
+8. Esportare prospetti di istruttoria. Ogni approvazione potrà essere registrata solo sulla base di un atto ufficiale; l'anteprima attuale non approva nulla.
 
 ## Modello logico (da convalidare sul report)
 - `AnnoAccademico`: periodo e provenienza.
@@ -25,7 +25,7 @@ Il regolamento sull'attribuzione dei compiti didattici è fonte da usare per evi
 - `ReferenteSSD`: competenza su SSD / dipartimento / facoltà, stato di validazione.
 - `Importazione` e `Anomalia`: hash, nome logico, origine, esito del controllo.
 
-Un insegnamento può avere più coperture. Lo stesso docente può avere carichi su SSD differenti. L'SSD dell'attività determina il foglio competente; l'SSD del docente va mantenuto separato e controllato, non usato per duplicare le proposte.
+Un insegnamento può avere più coperture. Lo stesso docente può avere carichi su SSD differenti. L'SSD dell'attività è utile per filtrare le attività durante la compilazione, **non per dividere preventivamente i cinque file per dipartimento**. L'SSD del docente va mantenuto separato e controllato, non usato per duplicare le proposte.
 
 ## Requisiti XLSX
 - Dati informativi e storici non modificabili.
