@@ -13,7 +13,7 @@ import xlsxwriter
 
 from app.column_mapping import OFFER_HEADER_TO_FIELD
 from app.department_workbooks import (
-    HISTORIC_HEADERS, VISIBLE_HEADERS, TECH_HEADERS,
+    HISTORIC_HEADERS, VISIBLE_HEADERS, TECH_HEADERS, HIDDEN_REFERENT_HEADERS,
     WorkbookGenerationError, build_five_workbooks,
 )
 
@@ -107,6 +107,21 @@ def test_five_copies_are_byte_identical_and_unfiltered(tmp_path):
         assert "<f " not in worksheet_xml
         assert "<cols>" in worksheet_xml
         assert 'hidden="1"' in worksheet_xml
+        # Each requested column is hidden, while retaining data for reimport.
+        from xml.etree import ElementTree as ET
+        root = ET.fromstring(worksheet_xml)
+        namespace = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+        for header in HIDDEN_REFERENT_HEADERS:
+            index = VISIBLE_HEADERS.index(header) + 1
+            assert any(
+                int(col.get("min")) <= index <= int(col.get("max"))
+                and col.get("hidden") == "1"
+                for col in root.findall("./m:cols/m:col", namespace)
+            ), header
+        assert len(HIDDEN_REFERENT_HEADERS) == 7
+        assert set(HIDDEN_REFERENT_HEADERS).isdisjoint(
+            {"Tipo variazione", "Nuovo docente", "Ore", "Note"}
+        )
         # A malicious-looking source text is a *literal*, not an executable formula.
         shared = xlsx.read("xl/sharedStrings.xml").decode()
         assert '=HYPERLINK(' in shared
