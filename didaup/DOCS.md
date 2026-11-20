@@ -1,4 +1,4 @@
-# DidaUP — Installazione e collaudo (0.1.3-alpha1)
+# DidaUP — Installazione e collaudo (0.1.4-alpha1)
 
 > Versione iniziale di sviluppo **non collaudata su una specifica istanza di Home Assistant**. Usare soltanto dati sintetici. Non caricare file reali dell'Ateneo.
 
@@ -86,7 +86,7 @@ La versione 0.1 è un **primo nucleo tecnico**, non l'applicazione finale:
 
 Prima di utilizzare dati dell'Ateneo sono necessari autorizzazioni, revisione della sicurezza, verifica del trattamento dei dati e collaudo sull'infrastruttura appropriata.
 
-## Mappatura delle colonne: 0.1.3-alpha1
+## Mappatura delle colonne: 0.1.4-alpha1
 
 Dopo aver acquisito un report sintetico, aprire **Importa report → Mappa colonne**. Selezionare il foglio e la riga delle intestazioni (da 1 a 40), poi premere **Leggi colonne**. Associare le colonne del report ai campi proposti e scegliere **Salva mappatura in bozza**.
 
@@ -95,3 +95,15 @@ La mappatura distingue codifica precedente e nuova dell'SSD dell'insegnamento e 
 **Importante:** la mappatura non importa ancora incarichi e docenti nelle tabelle didattiche e non genera gli Excel per i referenti. Occorreranno riconciliazione del report, controlli e verifica amministrativa.
 
 Non condividere screenshot di anteprime con nominativi o dati reali. Il collaudo domestico resta riservato a dati sintetici.
+ 
+## 0.1.4-alpha1 — riconoscimento automatico del tracciato referenti
+
+In **Importa report → Mappa colonne**, DidaUP prova a riconoscere automaticamente foglio e intestazioni del tracciato Excel dei referenti condiviso per il 2026/27. Dopo il riconoscimento sono proposte le corrispondenze; la verifica manuale si trova in una sezione ripiegabile, da utilizzare soltanto quando occorre.
+
+La struttura dichiarata prevede **36 intestazioni**, delle quali **soltanto tre erano destinate a variazioni: `Nuovo docente`, `Ore`, `Note`**. Nella futura generazione degli XLSX tutte le altre colonne dovranno rimanere informative e protette; la protezione va accompagnata da controllo al reimport.
+
+Per evitare interpretazioni sbagliate, `SSD INSEGNAMENTO` rimane una codifica non qualificata fino a verifica. La colonna `CODICE SSD DOCENTE NUOVO` è informativa sul docente storico e **non** corrisponde al nuovo docente proposto. `Ore` della proposta è distinta dalle ore previste ed effettive.
+
+Il riconoscimento avviene **solo quando le intestazioni corrispondono esattamente** al modello dichiarato (maiuscole/spazi normalizzati), senza inventare equivalenze. Non registra automaticamente la proposta: è necessario **Salva mappatura in bozza**. Se la corrispondenza non è affidabile, si utilizza la mappatura manuale.
+
+Le coperture storiche e i dati personali restano nell'archivio privato dell'add-on, non sono riportati su GitHub. La mappatura non crea ancora i nuovi Excel né normalizza le coperture.
