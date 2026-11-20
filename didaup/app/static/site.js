@@ -161,7 +161,7 @@ async function refreshImports() {
 function updateResetPhrase() {
   const selected = state.years.find(x => x.id === state.selected);
   const phrase = el("reset-scope").value === "all"
-    ? "AZZERA ARCHIVIO" : "AZZERA " + (selected?.code || "AAAA/AA");
+    ? "AZZERA LAVORAZIONI" : "AZZERA LAVORAZIONE " + (selected?.code || "AAAA/AA");
   setText("reset-required", phrase);
   return phrase;
 }
@@ -175,7 +175,10 @@ async function refreshArchive() {
     const tr = body.insertRow();
     tr.insertCell().textContent = row.code;
     tr.insertCell().textContent = String(row.cohorts);
+    tr.insertCell().textContent = String(row.excluded);
     tr.insertCell().textContent = String(row.imports);
+    tr.insertCell().textContent = String(row.mappings);
+    tr.insertCell().textContent = String(row.working_items);
   }
   updateResetPhrase();
 }
@@ -412,18 +415,20 @@ function hookForms() {
       showNotice("La conferma testuale non corrisponde. Nessun dato eliminato.", true);
       return;
     }
-    if (!window.confirm("Confermi la cancellazione definitiva dei dati selezionati? L'operazione non è annullabile.")) return;
+    if (!window.confirm("Confermi l'eliminazione dei soli file temporanei di lavorazione? Report, esclusioni e mappature resteranno conservati.")) return;
     const scope = el("reset-scope").value;
     try {
-      await api("admin/archive/reset", "POST", {
+      const result = await api("admin/archive/reset", "POST", {
         scope, year_id: scope === "year" ? state.selected : null,
         confirmation: el("reset-confirmation").value,
         password: el("reset-password").value
       });
       el("archive-reset-form").reset();
-      await refreshYears();
       await refreshArchive();
-      showNotice("Archivio azzerato. Gli account degli operatori sono stati conservati.");
+      showNotice(result.message + " File di lavoro eliminati: " +
+        result.deleted_working_items + ". Selezioni e mappature inalterate." +
+        (result.file_removal_failures ? " ATTENZIONE: " +
+          result.file_removal_failures + " rimozioni da verificare." : ""));
     } catch (error) {
       showNotice(error.message, true);
     } finally {
