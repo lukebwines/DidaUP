@@ -18,7 +18,7 @@ from app.department_workbooks import (
 )
 
 
-def make_source(path: Path, *, malicious=False, wrong_year=False, incomplete_annuality=False):
+def make_source(path: Path, *, malicious=False, wrong_year=False, incomplete_annuality=False, mutuazione_bool=False):
     source_headers = list(HISTORIC_HEADERS)
     assert len(source_headers) == 33
     wb = xlsxwriter.Workbook(str(path))
@@ -40,13 +40,16 @@ def make_source(path: Path, *, malicious=False, wrong_year=False, incomplete_ann
             "MODULO": module, "ANNO": ("" if incomplete_annuality and row_number == 3 else 2),
             "SSD INSEGNAMENTO": "TEST-SSD",
             "TAF": "TAF-SINTETICO",
+            "MUTUAZIONE": (row_number in (1, 4)) if mutuazione_bool else None,
             "NOME DOCENTE": teacher,
             "DIPARTIMENTO AFFERENZA DOCENTE": dept,
             "TOT ORE EFFETTIVE": hours,
         }
         for col, header in enumerate(source_headers):
             val = values.get(header)
-            if isinstance(val, (int, float)):
+            if isinstance(val, bool):
+                sh.write_boolean(row_number, col, val)
+            elif isinstance(val, (int, float)):
                 sh.write_number(row_number, col, val)
             elif val is not None:
                 sh.write_string(row_number, col, val)
@@ -157,6 +160,37 @@ def test_taf_from_saved_mapping_is_preserved_without_guessing(tmp_path):
     )
     assert info["taf_mapping_mode"] == "mappatura salvata"
     assert info["taf_rows_with_value"] == 4
+
+
+def test_boolean_mutuazione_is_visible_as_vero_falso_in_all_five(tmp_path):
+    """Native Excel TRUE/FALSE must not turn into blank historical cells."""
+    source = tmp_path / "mutuazione-bool.xlsx"
+    assigned = make_source(source, mutuazione_bool=True)
+    # Confirm source really contains native spreadsheet boolean values.
+    original = CalamineWorkbook.from_path(source).get_sheet_by_name(
+        "Offerta sintetica"
+    ).to_python(skip_empty_area=False)
+    column = HISTORIC_HEADERS.index("MUTUAZIONE")
+    assert [original[i][column] for i in range(1, 5)] == [
+        True, False, False, True
+    ]
+    packed, info = build_five_workbooks(
+        source, hashlib.sha256(source.read_bytes()).hexdigest(),
+        "Offerta sintetica", 1, assigned, "2026/27"
+    )
+    assert info["copies"] == 5
+    with ZipFile(io.BytesIO(packed)) as archive:
+        payloads = [archive.read(name) for name in archive.namelist()]
+    assert len(payloads) == 5 and all(blob == payloads[0] for blob in payloads)
+    excel = tmp_path / "with-mutuazione.xlsx"
+    excel.write_bytes(payloads[0])
+    output = CalamineWorkbook.from_path(excel).get_sheet_by_name(
+        "Proposte SSD"
+    ).to_python(skip_empty_area=False)
+    column = VISIBLE_HEADERS.index("MUTUAZIONE")
+    assert [output[i][column] for i in range(6, 10)] == [
+        "VERO", "FALSO", "FALSO", "VERO"
+    ]
 
 
 def test_explicit_cohort_exclusions_apply_to_all_five_copies(tmp_path):
