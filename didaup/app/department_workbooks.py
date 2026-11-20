@@ -19,7 +19,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from python_calamine import CalamineWorkbook
 import xlsxwriter
 
-from .column_mapping import OFFER_HEADER_TO_FIELD, source_header_conflicts
+from .column_mapping import OFFER_HEADER_TO_FIELD, source_header_conflicts, normalize_header
 from .row_identity import source_row_id
 
 # Order of the pre-existing outgoing referent layout (not the 110-col source).
@@ -197,6 +197,23 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         raise WorkbookGenerationError(
             "Mappatura salvata da correggere: " + "; ".join(conflicts[:5])
         )
+    # Preserve explicitly saved choices. If the TAF field was omitted from
+    # an older saved mapping, restore it ONLY from exactly one column whose
+    # source header is literally "TAF". Never guess a TAF classification.
+    taf_header_positions = [
+        i for i, header in enumerate(rows[header_row - 1])
+        if normalize_header(header) == "TAF"
+    ]
+    if "taf" in assigned:
+        taf_mapping_mode = "mappatura salvata"
+    elif len(taf_header_positions) == 1:
+        assigned = {**assigned, "taf": taf_header_positions[0]}
+        taf_mapping_mode = "intestazione TAF esatta, recuperata per export"
+    elif taf_header_positions:
+        taf_mapping_mode = "intestazione TAF ambigua: non associata"
+    else:
+        taf_mapping_mode = "campo TAF non associato e intestazione esatta assente"
+
     excluded_keys = {_normalized_cohort_key(*item) for item in excluded}
     excluded_keys.discard(None)
     included_keys = {
@@ -257,6 +274,8 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     unresolved_annuality_examples = []
     missing_activity_code_rows = 0
     missing_activity_code_examples = []
+    taf_rows_with_value = 0
+    taf_rows_without_value = 0
     for excel_row, row in enumerate(rows[header_row:], start=header_row + 1):
         if not any(_display(x) for x in row):
             continue
@@ -333,6 +352,10 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
                 f"Riga {excel_row}: TOT ORE EFFETTIVE non numerico o negativo"
             )
         historical_id = source_row_id(source_sha256, sheet_name, excel_row)
+        if _display(data.get("TAF")):
+            taf_rows_with_value += 1
+        else:
+            taf_rows_without_value += 1
         if not (_display(data.get("CODICE INS")) or _display(data.get("CODICE UGOV"))):
             missing_activity_code_rows += 1
             if len(missing_activity_code_examples) < 30:
@@ -366,6 +389,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         len(fallback_rows), fallback_rows,
         len(partial_year_rows), partial_year_rows,
         residual_excluded_title_count, residual_excluded_title_examples,
+        taf_mapping_mode, taf_rows_with_value, taf_rows_without_value,
     )
 
 
@@ -382,7 +406,8 @@ def build_five_workbooks(
      missing_code_count, missing_code_examples, excluded_ambiguous_count,
      unmatched_exclusions_count, unmatched_exclusion_examples,
      fallback_count, fallback_examples, partial_count, partial_examples,
-     residual_count, residual_examples) = _prepare(
+     residual_count, residual_examples,
+     taf_mapping_mode, taf_rows_with_value, taf_rows_without_value) = _prepare(
         source, source_sha256, sheet_name, header_row, assigned,
         history_year, excluded or set(), included, cohort_names,
     )
@@ -511,6 +536,9 @@ def build_five_workbooks(
         "mixed_annuality_example_rows": partial_examples,
         "excluded_course_titles_still_present": residual_count,
         "excluded_course_title_examples": residual_examples,
+        "taf_mapping_mode": taf_mapping_mode,
+        "taf_rows_with_value": taf_rows_with_value,
+        "taf_rows_without_value": taf_rows_without_value,
         "unresolved_annuality_rows_included": unresolved_count,
         "unresolved_annuality_example_rows": unresolved_examples,
         "missing_activity_codes_rows_included": missing_code_count,
