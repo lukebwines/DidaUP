@@ -696,7 +696,9 @@ def archive_summary(request: Request):
     return [dict(year) for year in years]
 
 
+
 class ArchiveReset(BaseModel):
+    """Reset only replaceable working outputs, never protected configuration."""
     scope: Literal["year", "all"]
     year_id: int | None = None
     confirmation: str = Field(max_length=80)
@@ -708,48 +710,83 @@ def reset_archive(body: ArchiveReset, request: Request):
     actor = current_user(request, ("admin",))
     require_write(request, actor)
     with closing(connect()) as cx:
-        stored_user = cx.execute("SELECT passhash FROM users WHERE id=?", (actor["id"],)).fetchone()
-        if stored_user is None or not verify_password(body.password, stored_user["passhash"]):
-            raise HTTPException(403, "Password amministratore non corretta")
-        if body.scope == "year":
-            if body.year_id is None:
-                raise HTTPException(422, "Selezionare un anno accademico")
-            row = cx.execute("SELECT code FROM academic_years WHERE id=?", (body.year_id,)).fetchone()
-            if row is None:
-                raise HTTPException(404, "Anno accademico inesistente")
-            if body.confirmation != "AZZERA " + row["code"]:
-                raise HTTPException(422, "Conferma testuale non valida")
-            sources = cx.execute(
-                "SELECT stored_name FROM source_imports WHERE year_id=?", (body.year_id,)
-            ).fetchall()
-            cx.execute("DELETE FROM cohorts WHERE year_id=?", (body.year_id,))
-            cx.execute("DELETE FROM source_imports WHERE year_id=?", (body.year_id,))
-            record(cx, actor["id"], "reset_year", "academic_year", body.year_id)
-        else:
-            if body.confirmation != "AZZERA ARCHIVIO":
-                raise HTTPException(422, "Conferma testuale non valida")
-            sources = cx.execute("SELECT stored_name FROM source_imports").fetchall()
-            cx.execute("DELETE FROM cohorts")
-            cx.execute("DELETE FROM source_imports")
-            cx.execute("DELETE FROM academic_years")
-            cx.execute(
-                "INSERT INTO academic_years(code,status,created_at) VALUES(?,?,?)",
-                ("2026/27", "storico_in_preparazione", int(time.time())),
-            )
-            record(cx, actor["id"], "reset_all", "academic_year", None)
-        cx.commit()
-    failures = 0
-    for src in sources:
+        cx.execute("BEGIN IMMEDIATE")
         try:
-            (SOURCE_DIR / src["stored_name"]).unlink(missing_ok=True)
+            stored_user = cx.execute(
+                "SELECT passhash FROM users WHERE id=?", (actor["id"],)
+            ).fetchone()
+            if stored_user is None or not verify_password(body.password, stored_user["passhash"]):
+                raise HTTPException(403, "Password amministratore non corretta")
+
+            if body.scope == "year":
+                if body.year_id is None:
+                    raise HTTPException(422, "Selezionare un anno accademico")
+                row = cx.execute(
+                    "SELECT code FROM academic_years WHERE id=?", (body.year_id,)
+                ).fetchone()
+                if row is None:
+                    raise HTTPException(404, "Anno accademico inesistente")
+                if body.confirmation != "AZZERA LAVORAZIONE " + row["code"]:
+                    raise HTTPException(422, "Conferma testuale non valida")
+                artifacts = cx.execute(
+                    "SELECT id,stored_name FROM working_artifacts WHERE year_id=?",
+                    (body.year_id,),
+                ).fetchall()
+                cx.execute(
+                    "DELETE FROM working_artifacts WHERE year_id=?", (body.year_id,)
+                )
+            else:
+                if body.confirmation != "AZZERA LAVORAZIONI":
+                    raise HTTPException(422, "Conferma testuale non valida")
+                artifacts = cx.execute(
+                    "SELECT id,stored_name FROM working_artifacts"
+                ).fetchall()
+                cx.execute("DELETE FROM working_artifacts")
+
+            # Strict allowlist: do not delete academic_years, cohorts,
+            # source_imports, source_mappings, cohort_exclusion_batches,
+            # users or audit. Those are persistent configuration and history.
+            record(
+                cx, actor["id"],
+                "reset_work_year" if body.scope == "year" else "reset_work_all",
+                "working_artifact", body.year_id if body.scope == "year" else None,
+            )
+            cx.commit()
+        except Exception:
+            cx.rollback()
+            raise
+
+    failures = 0
+    for artifact in artifacts:
+        filename = artifact["stored_name"]
+        # The working area is separate from the protected source reports.
+        if not re.fullmatch(r"artifact_[a-zA-Z0-9._-]{1,120}", filename):
+            failures += 1
+            continue
+        try:
+            (WORK_DIR / filename).unlink(missing_ok=True)
         except OSError:
             failures += 1
-    if failures:
-        raise HTTPException(
-            500,
-            f"Archivio azzerato ma {failures} file locali richiedono la rimozione manuale",
-        )
-    return {"ok": True, "scope": body.scope, "deleted_files": len(sources)}
+    return {
+        "ok": failures == 0,
+        "scope": body.scope,
+        "deleted_working_items": len(artifacts) - failures,
+        "file_removal_failures": failures,
+        "protected": {
+            "academic_years": True,
+            "course_year_exclusions": True,
+            "column_mappings": True,
+            "source_reports": True,
+            "exclusion_history": True,
+            "accounts": True,
+        },
+        "message": (
+            "Lavorazioni azzerate. Anni, esclusioni, mappature e report conservati."
+            if failures == 0 else
+            "Elaborazioni aggiornate, ma alcuni file temporanei richiedono verifica."
+        ),
+    }
+
 
 
 def get_source_record(cx: sqlite3.Connection, import_id: int):
