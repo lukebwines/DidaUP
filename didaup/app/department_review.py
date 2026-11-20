@@ -54,7 +54,9 @@ def review_five_workbooks(
          unmatched_exclusions_count, unmatched_exclusion_examples,
          fallback_count, fallback_examples, partial_count, partial_examples,
          residual_count, residual_examples,
-         taf_mapping_mode, taf_rows_with_value, taf_rows_without_value) = _prepare(
+         taf_mapping_mode, taf_rows_with_value, taf_rows_without_value,
+         mutuazione_mapping_mode, mutuazione_true_count,
+         mutuazione_false_count, mutuazione_other_count, mutuazione_blank_count) = _prepare(
             original, source_sha256, sheet_name, header_row, assigned,
             history_year, excluded or set(), included, cohort_names,
         )
@@ -234,6 +236,11 @@ def review_five_workbooks(
         "taf_mapping_mode": taf_mapping_mode,
         "taf_rows_with_value": taf_rows_with_value,
         "taf_rows_without_value": taf_rows_without_value,
+        "mutuazione_mapping_mode": mutuazione_mapping_mode,
+        "mutuazione_true_rows": mutuazione_true_count,
+        "mutuazione_false_rows": mutuazione_false_count,
+        "mutuazione_other_rows": mutuazione_other_count,
+        "mutuazione_empty_rows": mutuazione_blank_count,
         "unresolved_annuality_rows_included": unresolved_count,
         "unresolved_annuality_example_rows": unresolved_examples,
         "missing_activity_codes_rows_included": missing_code_count,
