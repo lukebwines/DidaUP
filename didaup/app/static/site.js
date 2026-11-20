@@ -96,7 +96,10 @@ function switchView(view) {
   setText("breadcrumb", titles[view][0]);
   setText("page-title", titles[view][1]);
   if (view === "users") refreshUsers().catch(e => showNotice(e.message, true));
-  if (view === "cohorts") refreshCohorts().catch(e => showNotice(e.message, true));
+  if (view === "cohorts") {
+    refreshCohorts().catch(e => showNotice(e.message, true));
+    refreshCohortSourcePicker().catch(e => showNotice(e.message, true));
+  }
   if (view === "imports") refreshImports().catch(e => showNotice(e.message, true));
   if (view === "archive") refreshArchive().catch(e => showNotice(e.message, true));
 }
@@ -299,7 +302,10 @@ function hookForms() {
     state.selected = Number(event.target.value);
     try {
       await refreshYears(state.selected);
-      if (state.view === "cohorts") await refreshCohorts();
+      if (state.view === "cohorts") {
+        await refreshCohorts();
+        await refreshCohortSourcePicker();
+      }
       if (state.view === "imports") await refreshImports();
       if (state.view === "archive") await refreshArchive();
     }
