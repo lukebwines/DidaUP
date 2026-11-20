@@ -37,7 +37,7 @@ def make_source(path: Path, *, malicious=False, wrong_year=False, incomplete_ann
                 if malicious else "Insegnamento di prova"
             ),
             "CODICE UGOV": f"UGOV-{module}",
-            "MODULO": module, "ANNO": 2,
+            "MODULO": module, "ANNO": ("" if incomplete_annuality and row_number == 3 else 2),
             "SSD INSEGNAMENTO": "TEST-SSD",
             "NOME DOCENTE": teacher,
             "DIPARTIMENTO AFFERENZA DOCENTE": dept,
@@ -52,8 +52,6 @@ def make_source(path: Path, *, malicious=False, wrong_year=False, incomplete_ann
     write_row(1, course="SYN-A", module="SYN-1", teacher="Docente A", hours=20, dept="D1")
     write_row(2, course="SYN-A", module="SYN-1", teacher="Docente B", hours=10, dept="D2")
     write_row(3, course="SYN-A", module="SYN-2", teacher="", hours=None, dept="")
-    if incomplete_annuality:
-        sh.write_blank(3, source_headers.index("ANNO"), None)
     write_row(4, course="SYN-B", module="SYN-3", teacher="Docente D", hours=8, dept="D5")
     wb.close()
     assigned = {
