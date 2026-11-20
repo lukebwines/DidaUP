@@ -56,15 +56,20 @@ L'importazione **non ha ancora una mappatura semantica** dei docenti, SSD o inca
 
 La modalità chiara/scura si cambia dal pulsante **Tema** in alto (anche sulla schermata di accesso). La preferenza è memorizzata nel browser, non nel database o su GitHub.
 
-## Azzeramento archivio
+## Azzeramento sicuro delle elaborazioni (0.1.9-alpha1)
 
-Menu **Archivio** (solo amministratore):
-- **Solo anno selezionato**: elimina le annualità censite e i report archiviati per l'A.A. corrente, senza cambiare altri anni.
-- **Tutto l'archivio**: elimina dati e report di tutti gli anni e ripristina il contenitore iniziale vuoto 2026/27.
-- Entrambe le modalità richiedono **conferma testuale esatta**, **password amministratore** e una finestra di conferma finale.
-- **Account, permessi e registro tecnico** non vengono cancellati.
+Menu **Archivio** (solo amministratore): la funzione **Azzera soltanto le elaborazioni** è un'operazione limitata ai file di lavoro rigenerabili registrati nella tabella `working_artifacts` e conservati separatamente sotto `/data/working`.
 
-**Attenzione:** azzeramento irreversibile, non sostituisce una strategia di backup. Salvare eventuali copie necessarie su un sistema autorizzato prima di procedere. Eliminare il file sorgente dall'app non modifica l'originale conservato altrove (es. OneDrive/SharePoint).
+Per **uno specifico anno** oppure per **tutti gli anni**, vengono sempre conservati:
+- le annualità censite e gli stati **inclusa / esclusa**, con le relative motivazioni e versioni;
+- i file XLS/XLSX di origine in `/data/sources`, i relativi metadati e le **mappature salvate**;
+- la cronologia delle selezioni/esclusioni, gli anni accademici, gli utenti e il registro tecnico.
+
+Il reset richiede la password amministrativa e una nuova conferma testuale: `AZZERA LAVORAZIONE 2026/27` per l'A.A. indicato (il codice effettivo è mostrato dall'interfaccia), oppure `AZZERA LAVORAZIONI` per tutte le annualità. Le **vecchie formule di conferma non sono più valide**, per prevenire azzeramenti accidentali effettuati da vecchie schermate.
+
+Nell'attuale alpha **non vengono ancora generati file di lavoro**, quindi un azzeramento può legittimamente eliminare **zero** elaborazioni. È comunque registrato nell'audit. La conservazione delle impostazioni è verificata anche da test che simulano un riavvio dell'app.
+
+**Non è un backup:** cancellazione dell'add-on o del suo volume `/data`, danni al database e ripristini di backup precedenti possono comunque far perdere dati. Prima di aggiornare l'add-on, verificare di avere un backup Home Assistant recente; la copia dovrebbe includere database e file locali dell'add-on.
 
 ## Utenti e ruoli
 
@@ -158,3 +163,6 @@ Prima del salvataggio, la schermata è una **sola anteprima**: nessun archivio c
 **Verifiche di sicurezza:** mismatch dell'anno accademico, mappatura incompleta, codici/anni non validi, denominazioni CdS discordanti, anomalie nelle righe sorgente, cambiamenti concorrenti e abbinamenti provenienti da un altro report. Le anomalie sono mostrate come conteggio e non vengono incluse automaticamente nell'elenco: la conferma è esplicita.
 
 L'identificazione non stabilisce ancora gli affidamenti o gli SSD e non genera Excel per i referenti. Nel laboratorio domestico devono continuare a essere utilizzati soltanto file sintetici.
+
+## Correzione di sicurezza 0.1.9-alpha1
+La vecchia funzione di azzeramento era distruttiva anche per le mappature e le esclusioni. Dalla versione 0.1.9-alpha1 il reset è espressamente ristretto agli output temporanei. Non utilizzare versioni precedenti per operazioni di azzeramento; aggiornare l'add-on prima di provare la funzione.
