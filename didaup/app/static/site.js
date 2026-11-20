@@ -1,11 +1,12 @@
 "use strict";
 
 const el = (id) => document.getElementById(id);
-const state = {user: null, years: [], selected: null, view: "dashboard"};
+const state = {user: null, years: [], selected: null, view: "dashboard", mapping: null, preview: null};
 const titles = {
   dashboard: ["PANORAMICA", "Programmazione didattica"],
   cohorts: ["ANNUALITÀ CDS", "Ambito di programmazione"],
   imports: ["IMPORTAZIONE", "Acquisizione report Excel"],
+  mapping: ["MAPPATURA", "Riconoscimento colonne"],
   archive: ["ARCHIVIO", "Gestione e azzeramento"],
   workbook: ["GENERA EXCEL", "File per i referenti SSD"],
   users: ["GESTIONE ACCOUNT", "Utenti autorizzati"],
@@ -142,8 +143,15 @@ async function refreshImports() {
     }
     tr.insertCell().textContent = (file.size_bytes / (1024 * 1024)).toFixed(2) + " MB";
     const status = tr.insertCell();
-    status.textContent = "Acquisito · Da mappare";
+    status.textContent = file.mapping_status ? "Mappatura in bozza" : "Acquisito · Da mappare";
     status.className = "status off";
+    const action = tr.insertCell();
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary";
+    button.textContent = file.mapping_status ? "Modifica mappatura" : "Mappa colonne";
+    button.addEventListener("click", () => openMapping(file.id).catch(e => showNotice(e.message, true)));
+    action.appendChild(button);
   }
 }
 
