@@ -485,9 +485,21 @@ function hookForms() {
     try {
       const result = await api("years/" + state.selected + "/department-workbooks",
         "POST", {import_id: sourceId});
+      const warnings = Number(result.unresolved_annuality_rows_included || 0);
+      const warningMessage = warnings
+        ? " ATTENZIONE: " + warnings +
+          " righe con annualità incompleta sono state mantenute nei cinque file " +
+          "(esempi di righe del report: " +
+          (result.unresolved_annuality_example_rows || []).slice(0, 8).join(", ") +
+          "). Controllarle successivamente; non sono state escluse automaticamente."
+        : "";
       showNotice("Generati cinque file identici con " +
         result.historical_rows + " righe storiche ciascuno; nessun filtro dipartimentale. " +
-        "Il pacchetto ZIP è disponibile per il download.");
+        "Il pacchetto ZIP è disponibile per il download." + warningMessage);
+      el("workbook-progress").textContent = warnings
+        ? warnings + " righe mantenute per impossibilità di verificare l'annualità: " +
+          "generazione conclusa, verifica non bloccante."
+        : "Generazione completata senza annualità indeterminate.";
       await refreshWorkbooks();
     } catch (error) {
       showNotice(error.message, true);
