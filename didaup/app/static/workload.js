@@ -126,6 +126,10 @@ const workloadUI = (() => {
         groups[key].filter = event.target.value;
         refreshMulti(key);
       });
+      // Enter inside the search box must not submit the whole workload rule.
+      multiElement(key, "search").addEventListener("keydown", event => {
+        if (event.key === "Enter") event.preventDefault();
+      });
       multiElement(key, "all").addEventListener("click", () => {
         for (const option of filteredOptions(key)) groups[key].selected.add(option.value);
         refreshMulti(key);
