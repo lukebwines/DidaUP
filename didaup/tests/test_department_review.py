@@ -24,7 +24,9 @@ def fixture_five(tmp_path, *, mutuazione_bool=False):
     )
     with ZipFile(io.BytesIO(packed)) as zipfile:
         paths = []
-        for index, name in enumerate(zipfile.namelist(), 1):
+        for index, name in enumerate(
+            (name for name in zipfile.namelist() if "_Dipartimento_" in name), 1
+        ):
             item = tmp_path / f"dept_{index}.xlsx"
             item.write_bytes(zipfile.read(name))
             paths.append(item)
