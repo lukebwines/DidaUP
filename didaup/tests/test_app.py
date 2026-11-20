@@ -437,7 +437,9 @@ def test_source_mapping_preview_draft_and_concurrency(client):
     assert client.get("/api/years/1/imports").json()[0]["mapping_status"] == "bozza_da_verificare"
 
 
-def test_mapping_deleted_with_archive_but_account_retained(client):
+
+def test_mapping_survives_archive_reset(client):
+    """Regression: the earlier destructive reset is no longer allowed."""
     csrf = signed_in(client)
     imported = client.post(
         "/api/years/1/imports", headers=csrf,
@@ -445,19 +447,24 @@ def test_mapping_deleted_with_archive_but_account_retained(client):
         files={"source": ("synthetic.xlsx", synthetic_xlsx(), "application/octet-stream")}
     )
     assert imported.status_code == 200
-    import_id = imported.json()["id"]
-    assert client.put(f"/api/imports/{import_id}/mapping", headers=csrf, json={
+    report_id = imported.json()["id"]
+    saved = client.put(f"/api/imports/{report_id}/mapping", headers=csrf, json={
         "sheet_name": "Sintetico", "header_row": 1,
         "assigned": {"ssd_insegnamento_nuovo": 0},
         "expected_version": 0
-    }).status_code == 200
-    assert client.post("/api/admin/archive/reset", headers=csrf, json={
+    })
+    assert saved.status_code == 200
+    reset = client.post("/api/admin/archive/reset", headers=csrf, json={
         "scope": "year", "year_id": 1,
-        "confirmation": "AZZERA 2026/27", "password": "SyntheticTestingPass!2026"
-    }).status_code == 200
-    assert client.get(f"/api/imports/{import_id}/mapping").status_code == 404
+        "confirmation": "AZZERA LAVORAZIONE 2026/27",
+        "password": "SyntheticTestingPass!2026",
+    })
+    assert reset.status_code == 200, reset.text
+    assert client.get(f"/api/imports/{report_id}/mapping").json()["mapping"]["assigned"] == {
+        "ssd_insegnamento_nuovo": 0
+    }
+    assert len(client.get("/api/years/1/imports").json()) == 1
     assert len(client.get("/api/users").json()) == 1
-
 
 
 def test_source_headers_recognized_without_output_variation_fields():
