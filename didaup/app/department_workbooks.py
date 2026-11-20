@@ -316,6 +316,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     excluded_by_missing_year_count = 0
     workload_matches = 0
     workload_unmatched = 0
+    workload_not_available = 0
     workload_total = 0.0
     workload_errors = []
     workload_error_count = 0
@@ -470,7 +471,10 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         else:
             workload_matches += 1
             workload_by_rule[matched_index] += 1
-            workload_total += effective
+            if effective == "N.D.":
+                workload_not_available += 1
+            else:
+                workload_total += effective
         historical_id = source_row_id(source_sha256, sheet_name, excel_row)
         if _display(data.get("TAF")):
             taf_rows_with_value += 1
@@ -501,6 +505,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         "rows_calculated": workload_matches,
         "rows_without_rule": workload_unmatched,
         "rows_using_planned_hours": workload_unmatched,
+        "rows_not_available": workload_not_available,
         "total_effective_hours": round(workload_total, 2),
         "per_rule_rows": workload_by_rule,
         "rows_with_missing_planned_hours": workload_missing_count,
