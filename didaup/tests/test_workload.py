@@ -524,6 +524,7 @@ def test_workload_choices_keep_mixed_annuality_rows_that_export_keeps(client, tm
     assert choices.status_code == 200, choices.text
     assert choices.json()["rows_in_scope"] == 3
     assert choices.json()["excluded_rows"] == 1
+    assert choices.json()["mixed_annuality_rows_retained"] == 1
     assert [x["code"] for x in choices.json()["cds"]] == ["SYN-A"]
     assert choices.json()["taf"] == ["TAF-A"]
 
@@ -541,3 +542,47 @@ def test_ui_keeps_excluded_historical_rule_values_outside_choices(client):
     assert "Valori della regola non presenti nelle righe incluse" in script
     assert "group.options.push({value" not in script
     assert "Selettori limitati alle " in script
+
+
+def test_workload_release_assets_are_versioned_to_avoid_old_cached_selectors(client):
+    """Home Assistant must recognize an add-on version bump to install new code."""
+    html = client.get("/").text
+    from pathlib import Path
+    manifest = (Path(__file__).resolve().parents[1] / "config.yaml").read_text(
+        encoding="utf-8"
+    )
+    release = "0.1.10-alpha16"
+    assert f'version: "{release}"' in manifest
+    assert f'ALPHA · {release}' in html
+    for asset in ("site.css", "site.js", "mapping.js", "cohort_review.js", "workload.js"):
+        assert f'static/{asset}?v={release}' in html
+
+
+def test_saved_rule_for_excluded_course_is_flagged_but_kept_for_admin_review(client, tmp_path):
+    src = tmp_path / "saved-rule-then-excluded.xlsx"
+    mapping = make_source(src, with_tipologia=True)
+    csrf = signed_in(client)
+    import_id = _upload_mapped_synthetic_report(client, csrf, src, mapping)
+    configured = client.put(
+        "/api/years/1/workload", headers=csrf,
+        json={"expected_version": 0, "rules": [
+            rule(cds=["SYN-B"], value="50")
+        ]},
+    )
+    assert configured.status_code == 200, configured.text
+    _cohort_set_inclusion(client, csrf, "SYN-B", 2, False)
+    choices = client.get(
+        f"/api/years/1/workload/choices?import_id={import_id}"
+    )
+    assert choices.status_code == 200, choices.text
+    assert {item["code"] for item in choices.json()["cds"]} == {"SYN-A"}
+    assert choices.json()["excluded_rows"] == 1
+    # Rules must not be deleted just because the inclusion perimeter changed.
+    stored = client.get("/api/years/1/workload")
+    assert stored.status_code == 200
+    assert stored.json()["rules"][0]["cds"] == ["SYN-B"]
+    frontend = client.get("/static/workload.js").text
+    assert "Fuori dalle righe incluse:" in frontend
+    assert "unmatched_exclusion_count" in frontend
+    assert "mixed_annuality_rows_retained" in frontend
+    assert "group.options.push({value" not in frontend
