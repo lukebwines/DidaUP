@@ -128,6 +128,15 @@
                 </label>
               </div>
               <div class="cohort-facet-grid">
+                <details class="cohort-multiselect" id="cohort-type-filter">
+                  <summary id="cohort-type-summary">Tipologie · Tutte</summary>
+                  <div class="cohort-filter-popup">
+                    <div class="cohort-filter-actions">
+                      <button type="button" class="secondary" id="cohort-type-clear">Azzera filtro</button>
+                    </div>
+                    <div class="cohort-filter-values" id="cohort-type-options" role="group" aria-label="Tipologie dei CdS"></div>
+                  </div>
+                </details>
                 <details class="cohort-multiselect" id="cohort-cds-filter">
                   <summary id="cohort-cds-summary">Corsi di Studio · Tutti</summary>
                   <div class="cohort-filter-popup">
@@ -175,7 +184,7 @@
               <div class="table-wrap cohort-list-wrap">
                 <table aria-label="Annualità da escludere">
                   <thead>
-                    <tr><th>Da escludere</th><th>Corso di Studio</th><th>Codice</th><th>Sede</th><th>Anno</th><th>Righe sorgente</th></tr>
+                    <tr><th>Da escludere</th><th>Corso di Studio</th><th>Tipologia</th><th>Codice</th><th>Sede</th><th>Anno</th><th>Righe sorgente</th></tr>
                   </thead>
                   <tbody id="cohort-review-rows"></tbody>
                 </table>
