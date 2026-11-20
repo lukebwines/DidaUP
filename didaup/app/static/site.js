@@ -486,6 +486,21 @@ function hookForms() {
       const result = await api("years/" + state.selected + "/department-workbooks",
         "POST", {import_id: sourceId});
       const excludedRows = Number(result.excluded_rows || 0);
+      const matchedByName = Number(result.cohorts_matched_by_unique_name_rows || 0);
+      const mixedYears = Number(result.mixed_annuality_rows_retained || 0);
+      const matchedByNameInfo = matchedByName
+        ? " " + matchedByName + " righe riconciliate usando la denominazione " +
+          "univoca del CdS (non il codice): verifica amministrativa consigliata."
+        : "";
+      const mixedYearsInfo = mixedYears
+        ? " ATTENZIONE: " + mixedYears +
+          " righe riguardano insieme annualità incluse ed escluse " +
+          "(ad esempio ANNO '1,2,3'); sono state conservate SENZA modificarle. " +
+          "Righe del report: " +
+          (result.mixed_annuality_example_rows || []).slice(0, 8).join(", ") +
+          ". Da risolvere prima della distribuzione."
+        : "";
+
       const missed = Number(result.unmatched_exclusion_count || 0);
       const missedDetails = (result.unmatched_exclusion_examples || []).slice(0, 8)
         .map(x => x.course_code + " (" + x.campus + ", anno " + x.study_year + ")")
@@ -515,10 +530,13 @@ function hookForms() {
         result.historical_rows + " righe storiche ciascuno; nessun filtro dipartimentale. " +
         "Righe escluse: " + excludedRows + ". " +
         "Il pacchetto ZIP è disponibile per il download." +
-        warningMessage + missingCodeMessage + missedMessage);
+        warningMessage + missingCodeMessage + missedMessage +
+        matchedByNameInfo + mixedYearsInfo);
       el("workbook-progress").textContent =
         "Escluse " + excludedRows + " righe. " +
         (missed ? missed + " annualità escluse senza corrispondenza nel report. " : "") +
+        (matchedByName ? matchedByName + " riconciliate per denominazione univoca. " : "") +
+        (mixedYears ? mixedYears + " righe miste incluse/escluse DA VERIFICARE. " : "") +
         (warnings ? warnings + " righe con annualità incompleta mantenute. " : "") +
         "Generazione completata.";
       await refreshWorkbooks();
