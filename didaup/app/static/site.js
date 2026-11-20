@@ -8,7 +8,7 @@ const titles = {
   imports: ["IMPORTAZIONE", "Acquisizione report Excel"],
   mapping: ["MAPPATURA", "Riconoscimento colonne"],
   archive: ["ARCHIVIO", "Gestione e azzeramento"],
-  workbook: ["GENERA EXCEL", "File per i referenti SSD"],
+  workbook: ["GENERA EXCEL", "Cinque file completi per dipartimento"],
   users: ["GESTIONE ACCOUNT", "Utenti autorizzati"],
   security: ["SICUREZZA", "Accesso e credenziali"]
 };
@@ -102,6 +102,7 @@ function switchView(view) {
   }
   if (view === "imports") refreshImports().catch(e => showNotice(e.message, true));
   if (view === "archive") refreshArchive().catch(e => showNotice(e.message, true));
+  if (view === "workbook") refreshWorkbooks().catch(e => showNotice(e.message, true));
 }
 
 async function refreshYears(preferred) {
@@ -282,6 +283,70 @@ async function refreshUsers() {
   }
 }
 
+
+async function downloadDepartmentArchive(path, button) {
+  button.disabled = true;
+  try {
+    const response = await fetch(path, {
+      credentials: "same-origin", headers: {"Accept": "application/zip"}
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || "Download del pacchetto non riuscito");
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    try {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "DidaUP_5_file_completi.zip";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
+  } finally { button.disabled = false; }
+}
+
+async function refreshWorkbooks() {
+  const select = el("workbook-import-id");
+  const body = el("workbook-archives");
+  select.replaceChildren();
+  body.replaceChildren();
+  if (!state.selected) return;
+  if (state.user?.role === "lettura") {
+    el("workbook-progress").textContent = "Generazione riservata ad amministratori e operatori.";
+    return;
+  }
+  const sources = await api("years/" + state.selected + "/imports");
+  const mapped = sources.filter(x => x.kind === "offerta" && x.mapping_status);
+  for (const source of mapped) {
+    const item = document.createElement("option");
+    item.value = String(source.id);
+    item.textContent = source.original_name + " · " + source.sha256.slice(0, 12) + "…";
+    select.appendChild(item);
+  }
+  el("workbook-generate-button").disabled = !mapped.length;
+  el("workbook-progress").textContent = mapped.length
+    ? "La generazione usa tutte le attività della fonte, senza filtri per dipartimento."
+    : "Nessun report di offerta mappato: acquisire e mappare prima un report sintetico.";
+  const existing = await api("years/" + state.selected + "/department-workbooks");
+  for (const item of existing) {
+    const row = body.insertRow();
+    row.insertCell().textContent = "Cinque Excel completi · #" + item.id;
+    row.insertCell().textContent = new Date(item.generated_at * 1000).toLocaleString("it-IT");
+    const c = row.insertCell();
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary";
+    button.textContent = "Scarica ZIP";
+    button.addEventListener("click", () => {
+      downloadDepartmentArchive(item.download_url, button)
+        .catch(e => showNotice(e.message, true));
+    });
+    c.appendChild(button);
+  }
+}
+
 function hookForms() {
   el("login-form").addEventListener("submit", async event => {
     event.preventDefault();
@@ -311,6 +376,7 @@ function hookForms() {
       }
       if (state.view === "imports") await refreshImports();
       if (state.view === "archive") await refreshArchive();
+      if (state.view === "workbook") await refreshWorkbooks();
     }
     catch (error) { showNotice(error.message, true); }
   });
@@ -405,6 +471,28 @@ function hookForms() {
     } finally {
       submit.disabled = false;
       setText("import-progress", "");
+    }
+  });
+
+  el("workbook-generate-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!state.selected) return;
+    const sourceId = Number(el("workbook-import-id").value);
+    if (!Number.isInteger(sourceId) || sourceId < 1) return;
+    const button = el("workbook-generate-button");
+    button.disabled = true;
+    el("workbook-progress").textContent = "Creazione delle cinque copie in corso…";
+    try {
+      const result = await api("years/" + state.selected + "/department-workbooks",
+        "POST", {import_id: sourceId});
+      showNotice("Generati cinque file identici con " +
+        result.historical_rows + " righe storiche ciascuno; nessun filtro dipartimentale. " +
+        "Il pacchetto ZIP è disponibile per il download.");
+      await refreshWorkbooks();
+    } catch (error) {
+      showNotice(error.message, true);
+    } finally {
+      button.disabled = false;
     }
   });
 
