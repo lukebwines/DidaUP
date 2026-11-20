@@ -5,7 +5,10 @@
  * Unrecognized fields must remain blank. Never combine new recognition
  * with stale manual mappings: doing so can assign one column twice.
  */
-function mappingSelectedValue(fieldKey, suggestion, previous, suggestHere, reuse) {
+function mappingSelectedValue(fieldKey, suggestion, previous, suggestHere, reuse, draft = null) {
+  if (draft && Object.prototype.hasOwnProperty.call(draft, fieldKey)) {
+    return draft[fieldKey];
+  }
   if (suggestHere) {
     return Object.prototype.hasOwnProperty.call(suggestion.assigned, fieldKey)
       ? String(suggestion.assigned[fieldKey]) : "";
@@ -36,6 +39,7 @@ async function openMapping(importId) {
   state.mapping = data;
   state.preview = null;
   state.suggestion = null;
+  state.mappingDraft = null;
   el("mapping-save").disabled = state.user?.role === "lettura";
   setText("mapping-source-name", data.original_name);
   setText("mapping-source-kind", data.kind === "offerta"
@@ -76,6 +80,13 @@ async function loadMappingPreview() {
     "La mappatura sarà salvata solo con la tua conferma.");
 
   const fields = el("mapping-fields");
+  // Preserve pending changes before rebuilding the controls.
+  if (state.mappingDraft?.sheet_name === sheetName &&
+      state.mappingDraft?.header_row === rowNumber) {
+    for (const select of fields.querySelectorAll("select[data-field-key]")) {
+      state.mappingDraft.assigned[select.dataset.fieldKey] = select.value;
+    }
+  }
   fields.replaceChildren();
   const previous = state.mapping.mapping;
   const reuse = previous && previous.sheet_name === sheetName &&
@@ -83,6 +94,9 @@ async function loadMappingPreview() {
   const suggestion = state.suggestion;
   const suggestHere = suggestion && suggestion.sheet_name === sheetName &&
     suggestion.header_row === rowNumber;
+  const draft = state.mappingDraft?.sheet_name === sheetName &&
+    state.mappingDraft?.header_row === rowNumber
+      ? state.mappingDraft.assigned : null;
   for (const field of state.mapping.available_fields) {
     const label = document.createElement("label");
     label.className = "mapping-field";
@@ -102,7 +116,23 @@ async function loadMappingPreview() {
         (column.label || "[senza intestazione]");
       select.appendChild(option);
     }
-    select.value = mappingSelectedValue(field.key, suggestion, previous, suggestHere, reuse);
+    select.value = mappingSelectedValue(
+      field.key, suggestion, previous, suggestHere, reuse, draft
+    );
+    select.addEventListener("change", () => {
+      if (!state.mappingDraft ||
+          state.mappingDraft.sheet_name !== sheetName ||
+          state.mappingDraft.header_row !== rowNumber) {
+        state.mappingDraft = {
+          sheet_name: sheetName, header_row: rowNumber, assigned: {}
+        };
+        for (const current of fields.querySelectorAll("select[data-field-key]")) {
+          state.mappingDraft.assigned[current.dataset.fieldKey] = current.value;
+        }
+      }
+      state.mappingDraft.assigned[field.key] = select.value;
+      setText("mapping-info", "Modifiche non salvate: premi «Salva mappatura».");
+    });
     if (field.key.startsWith("proposta_")) label.classList.add("proposal-field");
     label.appendChild(select);
     fields.appendChild(label);
@@ -146,6 +176,11 @@ async function autoMap() {
       await loadMappingPreview();
       return;
     }
+    if (state.mappingDraft &&
+        !window.confirm("Il riconoscimento automatico sostituirà le modifiche non salvate. Continuare?")) {
+      return;
+    }
+    state.mappingDraft = null;
     state.suggestion = result;
     el("mapping-sheet").value = result.sheet_name;
     el("mapping-header-row").value = result.header_row;
@@ -224,8 +259,18 @@ async function saveMapping() {
     version: result.version,
     warnings: result.warnings,
   };
+  // Verify actual persistence; a success banner is not proof of a DB save.
+  const verified = await api("imports/" + state.mapping.id + "/mapping");
+  if (!verified.mapping || verified.mapping.version !== result.version ||
+      JSON.stringify(verified.mapping.assigned) !== JSON.stringify(assigned)) {
+    throw new Error("Verifica mappatura salvata non riuscita. Non modificare la fonte.");
+  }
+  state.mapping.mapping = verified.mapping;
+  state.mappingDraft = null;
+  state.suggestion = null;
   renderMappingWarnings(result.warnings);
-  showNotice("Mappatura salvata come bozza. Le corrispondenze devono essere verificate prima dell'elaborazione.");
+  showNotice("Mappatura salvata nel database e verificata (versione " +
+    result.version + "). Rimane disponibile alla riapertura.");
 }
 
 document.addEventListener("DOMContentLoaded", () => {
