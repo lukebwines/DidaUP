@@ -40,7 +40,7 @@ OFFER_FIELDS: list[tuple[str, str]] = [
     ("ssd_insegnamento_originale", "SSD insegnamento · come indicato nel report"),
     ("docente_cognome", "Cognome docente storico"),
     ("ore_prevlez", "Ore previste di lezione (OREPREVLEZ)"),
-    ("ore_effettive_totali", "Totale ore effettive"),
+    ("ore_effettive_totali", "TOT ORE EFFETTIVE (campo calcolato: lasciare non associato)"),
     ("codice_ugov", "Codice UGOV"),
     ("discriminante_oi", "Discriminante OI"),
     ("discriminante_modulo", "Discriminante modulo"),
