@@ -12,9 +12,10 @@ from python_calamine import CalamineWorkbook
 import xlsxwriter
 
 from app.column_mapping import OFFER_HEADER_TO_FIELD
+from app.row_identity import source_row_id
 from app.department_workbooks import (
     HISTORIC_HEADERS, VISIBLE_HEADERS, TECH_HEADERS, HIDDEN_REFERENT_HEADERS,
-    WorkbookGenerationError, build_five_workbooks,
+    WorkbookGenerationError, build_five_workbooks, _verify_xlsx_ids,
 )
 
 
@@ -164,6 +165,16 @@ def test_sixth_excel_contains_only_actually_removed_rows_and_reasons(tmp_path):
     assert info["copies"] == 5
     assert info["archive_files"] == 6
     assert info["excluded_rows"] == info["excluded_file_rows"] == 1
+    assert info["reconciliation"] == {
+        "verified": True,
+        "source_nonempty_rows": 4,
+        "included_in_each_workbook": 3,
+        "excluded_in_internal_register": 1,
+        "missing_from_outputs": 0,
+        "duplicate_ids": 0,
+        "exported_workbooks_checked": 5,
+        "internal_register_checked": True,
+    }
     with ZipFile(io.BytesIO(packed)) as archive:
         names = archive.namelist()
         referents = referent_names(archive)
@@ -202,6 +213,9 @@ def test_sixth_excel_has_zero_records_when_nothing_excluded(tmp_path):
         source, digest, "Offerta sintetica", 1, mapping, "2026/27"
     )
     assert stats["excluded_rows"] == stats["excluded_file_rows"] == 0
+    assert stats["reconciliation"]["source_nonempty_rows"] == 4
+    assert stats["reconciliation"]["included_in_each_workbook"] == 4
+    assert stats["reconciliation"]["excluded_in_internal_register"] == 0
     with ZipFile(io.BytesIO(packed)) as archive:
         audit = next(name for name in archive.namelist()
                      if name.endswith("CONTROLLO_INTERNO.xlsx"))
@@ -609,6 +623,111 @@ def test_effective_hours_unmapped_take_planned_hours_by_default(tmp_path):
 
 
 
+
+def test_source_partition_includes_every_nonexcluded_row_even_without_mapped_fields(tmp_path):
+    """A row with only an unmapped column must not silently disappear."""
+    original = tmp_path / "synthetic.xlsx"
+    assigned = make_source(original)
+    base = CalamineWorkbook.from_path(original).get_sheet_by_name(
+        "Offerta sintetica"
+    ).to_python(skip_empty_area=False)
+    enriched = tmp_path / "extra-unmapped-column.xlsx"
+    workbook = xlsxwriter.Workbook(str(enriched))
+    sh = workbook.add_worksheet("Offerta sintetica")
+    for row_no, cells in enumerate(base):
+        for col, value in enumerate(cells):
+            if value is None:
+                continue
+            if isinstance(value, bool):
+                sh.write_boolean(row_no, col, value)
+            elif isinstance(value, (int, float)):
+                sh.write_number(row_no, col, value)
+            else:
+                sh.write_string(row_no, col, str(value))
+    sh.write_string(0, len(HISTORIC_HEADERS), "INFORMAZIONE EXTRA NON MAPPATA")
+    sh.write_string(10, len(HISTORIC_HEADERS), "Attività senza corrispondenze")
+    workbook.close()
+    digest = hashlib.sha256(enriched.read_bytes()).hexdigest()
+    package, result = build_five_workbooks(
+        enriched, digest, "Offerta sintetica", 1, assigned, "2026/27",
+        excluded={("SYN-B", "Sede TEST", 2)},
+    )
+    assert result["reconciliation"]["source_nonempty_rows"] == 5
+    assert result["reconciliation"]["included_in_each_workbook"] == 4
+    assert result["reconciliation"]["excluded_in_internal_register"] == 1
+    with ZipFile(io.BytesIO(package)) as archive:
+        names = referent_names(archive)
+        assert len(names) == 5
+        assert len({archive.read(name) for name in names}) == 1
+        path = tmp_path / "included.xlsx"
+        path.write_bytes(archive.read(names[0]))
+    data = CalamineWorkbook.from_path(path).get_sheet_by_name(
+        "Proposte SSD"
+    ).to_python(skip_empty_area=False)
+    assert len(data[6:]) == 4
+    assert [row[38] for row in data[6:]] == [
+        source_row_id(digest, "Offerta sintetica", row)
+        for row in (2, 3, 4, 11)
+    ]
+
+
+def test_reconciliation_blocks_missing_or_duplicated_exported_ids(tmp_path):
+    source = tmp_path / "synthetic.xlsx"
+    assigned = make_source(source)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    package, info = build_five_workbooks(
+        source, digest, "Offerta sintetica", 1, assigned, "2026/27"
+    )
+    with ZipFile(io.BytesIO(package)) as archive:
+        payload = archive.read(referent_names(archive)[0])
+    expected = [
+        source_row_id(digest, "Offerta sintetica", row)
+        for row in (2, 3, 4, 5)
+    ]
+    _verify_xlsx_ids(payload, "Proposte SSD", 6, 38, expected, "collaudo")
+    with pytest.raises(WorkbookGenerationError, match="completezza fallita"):
+        _verify_xlsx_ids(
+            payload, "Proposte SSD", 6, 38, expected + ["SRC-synthetic-missing"], "collaudo"
+        )
+
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output, {"in_memory": True})
+    sh = workbook.add_worksheet("Proposte SSD")
+    sh.write_string(6, 38, expected[0])
+    sh.write_string(7, 38, expected[0])
+    workbook.close()
+    with pytest.raises(WorkbookGenerationError, match="duplicate 1"):
+        _verify_xlsx_ids(
+            output.getvalue(), "Proposte SSD", 6, 38, expected[:2], "collaudo"
+        )
+
+
+def test_partial_annuality_rows_remain_present_and_reconciled(tmp_path):
+    source = tmp_path / "partial.xlsx"
+    assigned = make_source(source)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    # An included academic year on the same source row prevents deletion.
+    archive_bytes, stats = build_five_workbooks(
+        source, digest, "Offerta sintetica", 1, assigned, "2026/27",
+        excluded={("SYN-A", "Sede TEST", 1)},
+        included={("SYN-A", "Sede TEST", 2)},
+    )
+    assert stats["reconciliation"]["verified"] is True
+    assert stats["reconciliation"]["source_nonempty_rows"] == 4
+    assert stats["reconciliation"]["included_in_each_workbook"] == 4
+    assert stats["reconciliation"]["excluded_in_internal_register"] == 0
+    with ZipFile(io.BytesIO(archive_bytes)) as archive:
+        item = tmp_path / "partial-out.xlsx"
+        item.write_bytes(archive.read(referent_names(archive)[0]))
+    rows = CalamineWorkbook.from_path(item).get_sheet_by_name(
+        "Proposte SSD"
+    ).to_python(skip_empty_area=False)
+    assert [row[38] for row in rows[6:]] == [
+        source_row_id(digest, "Offerta sintetica", index) for index in (2, 3, 4, 5)
+    ]
+
+
+
 # Complete HTTP flow (upload -> mapping -> five identical downloads -> review).
 from test_app import client, signed_in
 
@@ -648,6 +767,10 @@ def test_api_generates_private_five_file_zip_and_reviews_unchanged(client, tmp_p
     assert created.json()["copies"] == 5
     assert created.json()["historical_rows"] == 4
     assert created.json()["department_filter"] is False
+    assert created.json()["reconciliation"]["verified"] is True
+    assert created.json()["reconciliation"]["source_nonempty_rows"] == 4
+    assert created.json()["reconciliation"]["included_in_each_workbook"] == 4
+    assert created.json()["reconciliation"]["excluded_in_internal_register"] == 0
     artifact_id = created.json()["id"]
     download_path = f"/api/years/1/department-workbooks/{artifact_id}/download"
     response = client.get(download_path)
