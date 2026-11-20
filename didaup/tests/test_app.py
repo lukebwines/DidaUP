@@ -780,7 +780,7 @@ def test_five_workbooks_screen_replaces_coming_soon(client):
     assert 'id="workbook-review-form"' in html
     assert "Generazione Excel per SSD" not in html
     assert '<span class="soon">Prossimamente</span>' not in html
-    assert 'Cinque file completi per dipartimento' in js
+    assert 'Cinque file e registro esclusioni' in js
     assert 'function refreshWorkbooks()' in js
 
 
