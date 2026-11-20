@@ -330,14 +330,14 @@
             <div class="panel-heading">
               <div>
                 <h3>Calcolo del carico didattico · TOT ORE EFFETTIVE</h3>
-                <p>Le ore effettive del report originale sono ignorate: ogni nuova generazione parte da zero. Le regole calcolano il carico sulla base della colonna TOT ORE PREVISTE, senza modificare il file sorgente.</p>
+                <p>Le ore effettive del report originale non vengono riutilizzate. Per impostazione predefinita TOT ORE EFFETTIVE riprende TOT ORE PREVISTE; le regole possono applicare una percentuale, una quota fissa o il testo N.D. (non disponibile), senza modificare il file sorgente.</p>
               </div>
               <span class="chip">Regole per anno accademico</span>
             </div>
             <div class="import-warning">
               Una sola regola per riga: prevale la combinazione più specifica di tipologia, CdS e TAF.
               Regole ugualmente specifiche che intercettano la stessa riga sono un conflitto e bloccano la generazione.
-              Senza regola le ore restano a 0. Se TOT ORE PREVISTE è vuoto, il carico rimane 0 e la riga compare tra gli avvisi di verifica, senza bloccare il calcolo. Valori non numerici o negativi, conflitti e quote fisse superiori alle ore previste continuano a bloccare la generazione.
+              In assenza di una regola applicabile, le ore effettive coincidono con le ore previste. La modalità N.D. prevale sulle ore previste per le righe selezionate e non contribuisce al totale numerico. Se TOT ORE PREVISTE è vuoto e manca una regola N.D., il carico resta 0 con avviso; valori non numerici o negativi, conflitti e quote fisse eccedenti bloccano la generazione.
             </div>
             <div class="workload-source">
               <label>Report di offerta associato
@@ -400,9 +400,10 @@
                 <select id="workload-mode">
                   <option value="percentuale">Percentuale sulle ore previste</option>
                   <option value="fissa">Quota fissa di ore</option>
+                  <option value="non_disponibile">N.D. · Non disponibile (testo)</option>
                 </select>
               </label>
-              <label>Valore
+              <label id="workload-value-wrapper">Valore
                 <input id="workload-value" type="number" min="0" max="1000" step="0.01" required placeholder="Es. 50">
               </label>
               <button class="primary" id="workload-add" type="submit">Aggiungi regola</button>
@@ -427,8 +428,9 @@
             <div id="workload-results" hidden>
               <div class="workload-stats">
                 <div><small>Righe con regola</small><strong id="workload-count-matched">0</strong></div>
-                <div><small>Righe a zero (senza regola)</small><strong id="workload-count-unmatched">0</strong></div>
-                <div><small>Ore di carico complessive</small><strong id="workload-total">0</strong></div>
+                <div><small>Righe con ore previste di default</small><strong id="workload-count-unmatched">0</strong></div>
+                <div><small>Ore di carico complessive (solo numeriche)</small><strong id="workload-total">0</strong></div>
+                <div><small>Righe N.D. · Non disponibile</small><strong id="workload-count-nd">0</strong></div>
                 <div><small>Righe con ore previste vuote · carico 0</small><strong id="workload-count-missing">0</strong></div>
                 <div><small>Errori bloccanti</small><strong id="workload-count-errors">0</strong></div>
               </div>
