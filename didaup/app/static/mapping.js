@@ -1,5 +1,36 @@
 "use strict";
 
+/**
+ * Auto-recognition is authoritative for the CURRENT draft.
+ * Unrecognized fields must remain blank. Never combine new recognition
+ * with stale manual mappings: doing so can assign one column twice.
+ */
+function mappingSelectedValue(fieldKey, suggestion, previous, suggestHere, reuse) {
+  if (suggestHere) {
+    return Object.prototype.hasOwnProperty.call(suggestion.assigned, fieldKey)
+      ? String(suggestion.assigned[fieldKey]) : "";
+  }
+  if (reuse && Object.prototype.hasOwnProperty.call(previous.assigned, fieldKey)) {
+    return String(previous.assigned[fieldKey]);
+  }
+  return "";
+}
+
+function mappingConflicts(items) {
+  const first = new Map();
+  const conflicts = [];
+  for (const item of items) {
+    if (item.value === "") continue;
+    if (first.has(item.value)) {
+      conflicts.push({column: Number(item.value) + 1, left: first.get(item.value), right: item.label});
+    } else {
+      first.set(item.value, item.label);
+    }
+  }
+  return conflicts;
+}
+
+
 async function openMapping(importId) {
   const data = await api("imports/" + importId + "/mapping");
   state.mapping = data;
@@ -71,11 +102,7 @@ async function loadMappingPreview() {
         (column.label || "[senza intestazione]");
       select.appendChild(option);
     }
-    if (suggestHere && Object.prototype.hasOwnProperty.call(suggestion.assigned, field.key)) {
-      select.value = String(suggestion.assigned[field.key]);
-    } else if (reuse && Object.prototype.hasOwnProperty.call(previous.assigned, field.key)) {
-      select.value = String(previous.assigned[field.key]);
-    }
+    select.value = mappingSelectedValue(field.key, suggestion, previous, suggestHere, reuse);
     if (field.key.startsWith("proposta_")) label.classList.add("proposal-field");
     label.appendChild(select);
     fields.appendChild(label);
@@ -102,7 +129,7 @@ async function loadMappingPreview() {
     });
     body.appendChild(row);
   }
-  renderMappingWarnings(reuse ? previous.warnings || [] : []);
+  renderMappingWarnings(reuse && !suggestHere ? previous.warnings || [] : []);
   if (suggestHere) el("mapping-advanced").open = false;
 }
 
@@ -160,8 +187,29 @@ async function saveMapping() {
     return;
   }
   const assigned = {};
+  const selections = [];
+  const fieldLabels = new Map(state.mapping.available_fields.map(field => [field.key, field.label]));
   for (const field of el("mapping-fields").querySelectorAll("select[data-field-key]")) {
+    selections.push({
+      value: field.value,
+      label: fieldLabels.get(field.dataset.fieldKey) || field.dataset.fieldKey
+    });
     if (field.value !== "") assigned[field.dataset.fieldKey] = Number(field.value);
+    field.closest(".mapping-field")?.classList.remove("mapping-conflict");
+  }
+  const conflicts = mappingConflicts(selections);
+  if (conflicts.length) {
+    el("mapping-advanced").open = true;
+    const details = conflicts.map(c =>
+      "Colonna " + c.column + ": " + c.left + " / " + c.right
+    ).join("; ");
+    const repeated = new Set(conflicts.map(c => String(c.column - 1)));
+    for (const select of el("mapping-fields").querySelectorAll("select[data-field-key]")) {
+      if (repeated.has(select.value)) select.closest(".mapping-field")?.classList.add("mapping-conflict");
+    }
+    showNotice("Impossibile salvare: " + details +
+      ". Mantieni un solo abbinamento per colonna; gli altri campi devono restare non associati.", true);
+    return;
   }
   const result = await api("imports/" + state.mapping.id + "/mapping", "PUT", {
     sheet_name: el("mapping-sheet").value,
