@@ -161,3 +161,129 @@ def test_recovery_preserves_years_and_does_not_repeat_after_password_change(clie
     main.startup()
     signed_in(client, password="SyntheticPermanentPass!2026")
     assert any(row["code"] == "2027/28" for row in client.get("/api/years").json())
+
+
+def synthetic_xlsx():
+    """Build tiny fixture entirely from synthetic cell values, no real data."""
+    import io
+    import zipfile
+    xmls = {
+        "[Content_Types].xml": """<?xml version="1.0" encoding="utf-8"?>
+        <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+        <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+        </Types>""",
+        "_rels/.rels": """<?xml version="1.0" encoding="utf-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+        <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+        </Relationships>""",
+        "xl/workbook.xml": """<?xml version="1.0" encoding="utf-8"?>
+        <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+        xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        <sheets><sheet name="Sintetico" sheetId="1" r:id="rId1"/></sheets></workbook>""",
+        "xl/_rels/workbook.xml.rels": """<?xml version="1.0" encoding="utf-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+        <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+        </Relationships>""",
+        "xl/worksheets/sheet1.xml": """<?xml version="1.0" encoding="utf-8"?>
+        <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+        <sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>SSD</t></is></c>
+        <c r="B1" t="inlineStr"><is><t>Docente fittizio</t></is></c></row>
+        <row r="2"><c r="A2" t="inlineStr"><is><t>SSD-X</t></is></c>
+        <c r="B2" t="inlineStr"><is><t>Persona TEST</t></is></c></row>
+        </sheetData></worksheet>""",
+    }
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, contents in xmls.items():
+            archive.writestr(name, contents)
+    return buffer.getvalue()
+
+
+def test_import_retains_file_privately_and_rejects_duplicate(client, tmp_path):
+    csrf = signed_in(client)
+    fixture = synthetic_xlsx()
+    report = client.post(
+        "/api/years/1/imports",
+        headers=csrf,
+        data={"kind": "offerta"},
+        files={"source": ("test-synthetic.xlsx", fixture, "application/octet-stream")},
+    )
+    assert report.status_code == 200, report.text
+    assert report.json()["status"] == "acquisito_da_mappare"
+    assert any(sheet["name"] == "Sintetico" for sheet in report.json()["sheets"])
+    listed = client.get("/api/years/1/imports")
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+    private_files = list((tmp_path / "sources").glob("source_*.xlsx"))
+    assert len(private_files) == 1
+
+    duplicate = client.post(
+        "/api/years/1/imports", headers=csrf, data={"kind": "offerta"},
+        files={"source": ("test-synthetic.xlsx", fixture, "application/octet-stream")},
+    )
+    assert duplicate.status_code == 409
+    assert len(list((tmp_path / "sources").glob("source_*.xlsx"))) == 1
+
+    invalid = client.post(
+        "/api/years/1/imports", headers=csrf, data={"kind": "docenti"},
+        files={"source": ("fake.xls", b"not-really-an-excel-file", "application/octet-stream")},
+    )
+    assert invalid.status_code == 422
+
+
+def test_archive_reset_requires_admin_password_and_text(client, tmp_path):
+    csrf = signed_in(client)
+    fixture = synthetic_xlsx()
+    added = client.post(
+        "/api/years/1/imports", headers=csrf, data={"kind": "docenti"},
+        files={"source": ("fake-staff.xlsx", fixture, "application/octet-stream")},
+    )
+    assert added.status_code == 200, added.text
+
+    wrong = client.post("/api/admin/archive/reset", headers=csrf, json={
+        "scope": "year", "year_id": 1,
+        "confirmation": "AZZERA 2026/27", "password": "wrong"
+    })
+    assert wrong.status_code == 403
+    wrong_phrase = client.post("/api/admin/archive/reset", headers=csrf, json={
+        "scope": "year", "year_id": 1,
+        "confirmation": "AZZERA", "password": "SyntheticTestingPass!2026"
+    })
+    assert wrong_phrase.status_code == 422
+
+    cleared = client.post("/api/admin/archive/reset", headers=csrf, json={
+        "scope": "year", "year_id": 1,
+        "confirmation": "AZZERA 2026/27", "password": "SyntheticTestingPass!2026"
+    })
+    assert cleared.status_code == 200, cleared.text
+    assert client.get("/api/years/1/imports").json() == []
+    assert list((tmp_path / "sources").iterdir()) == []
+    # Users and the selected academic year survive the reset.
+    assert any(x["code"] == "2026/27" for x in client.get("/api/years").json())
+    assert any(x["username"] == "admin" for x in client.get("/api/users").json())
+
+
+def test_reset_all_keeps_accounts_and_initial_year(client):
+    csrf = signed_in(client)
+    client.post("/api/years", headers=csrf, json={"code": "2027/28"})
+    cleared = client.post("/api/admin/archive/reset", headers=csrf, json={
+        "scope": "all", "confirmation": "AZZERA ARCHIVIO",
+        "password": "SyntheticTestingPass!2026"
+    })
+    assert cleared.status_code == 200, cleared.text
+    assert [x["code"] for x in client.get("/api/years").json()] == ["2026/27"]
+    assert len(client.get("/api/users").json()) == 1
+
+
+def test_theme_and_import_controls_exist(client):
+    html = client.get("/").text
+    css = client.get("/static/site.css").text
+    js = client.get("/static/site.js").text
+    assert 'id="import-form"' in html
+    assert 'id="archive-reset-form"' in html
+    assert 'data-theme-toggle' in html
+    assert ':root[data-theme="dark"]' in css
+    assert 'localStorage.setItem("didaup-theme"' in js
