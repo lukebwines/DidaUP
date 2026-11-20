@@ -66,3 +66,6 @@ Il tracciato a 36 colonne fornito dall'utilizzatore è riconoscibile in **Import
 
 ## Report originale e modello Excel per i referenti
 Il report di offerta e coperture è una fonte ampia da mappare e verificare; non ha per forza la stessa struttura del modello Excel ridotto inviato ai referenti. Nella versione 0.1.5 la mappatura automatica distingue questi due tracciati. **Nuovo docente, Ore, Note** sono campi di *output* da compilare per le variazioni, non campi obbligatori di *input* del report ufficiale. La generazione dei nuovi XLSX non è ancora implementata.
+
+## Selezione annualità CdS (0.1.8-alpha1)
+La schermata **Annualità CdS** propone un elenco a spunte ricavato dal report mappato: ricerca rapida per codice/nome/sede/anno, selezione limitata ai risultati visibili, riepilogo di tutte le esclusioni, motivazione e conferma finale. Un raggruppamento rappresenta una combinazione codice CdS + sede + anno di corso. Le esclusioni non cancellano righe né modificano il report originale. Questo passaggio è preliminare alla futura generazione degli Excel per SSD.
