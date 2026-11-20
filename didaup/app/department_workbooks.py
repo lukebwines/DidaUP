@@ -287,6 +287,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     residual_excluded_title_count = 0
     residual_excluded_title_examples = []
     prepared = []
+    excluded_records = []
     excluded_count = 0
     excluded_by_missing_year_count = 0
     unresolved_annuality_rows = 0
@@ -339,6 +340,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         year_text = _display(get("anno_corso"))
         site = _normalized_course_site(course, campus)
         years = _source_years(year_text)
+        matched_by_name = False
 
         # A source-row course code sometimes differs from the saved cohort
         # register. Reconcile by FULL course name and campus only when the
@@ -349,6 +351,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
                 and len(recorded_sites_by_title.get(title_key, set())) == 1
                 and len(source_sites_by_title.get(title_key, set())) == 1):
             site = next(iter(recorded_sites_by_title[title_key]))
+            matched_by_name = True
             if len(fallback_rows) < 30:
                 fallback_rows.append(excel_row)
 
@@ -359,9 +362,16 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
             excluded_count += 1
             if years is None:
                 excluded_by_missing_year_count += 1
+            matching = sorted(item[2] for item in excluded_keys if item[:2] == site)
             matched_exclusion_keys.update(
                 item for item in excluded_keys if item[:2] == site
             )
+            excluded_records.append((
+                excel_row, data,
+                "Tutte le annualità registrate del CdS e della sede risultano escluse",
+                "Denominazione univoca CdS e sede" if matched_by_name else "Codice CdS e sede",
+                ", ".join(str(year) for year in matching),
+            ))
             continue
 
         if site is not None and years is not None:
@@ -373,6 +383,12 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
             if excluded_in_row and len(excluded_in_row) == len(years):
                 # Every explicitly enumerated year of this row is excluded.
                 excluded_count += 1
+                excluded_records.append((
+                    excel_row, data,
+                    "Tutti gli anni di corso presenti nella riga risultano esclusi",
+                    "Denominazione univoca CdS e sede" if matched_by_name else "Codice CdS, sede e anno",
+                    ", ".join(str(year) for year in sorted(years)),
+                ))
                 continue
             if excluded_in_row and len(partial_year_rows) < 30:
                 # A single historic row covers included AND excluded years:
@@ -435,6 +451,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         taf_mapping_mode, taf_rows_with_value, taf_rows_without_value,
         mutuazione_mapping_mode, mutuazione_true_count,
         mutuazione_false_count, mutuazione_other_count, mutuazione_blank_count,
+        excluded_records,
     )
 
 
@@ -445,7 +462,7 @@ def build_five_workbooks(
     included: set[tuple[str, str, int]] | None = None,
     cohort_names: dict[tuple[str, str, int], str] | None = None,
 ) -> tuple[bytes, dict]:
-    """ZIP of exactly five byte-identical XLSX, no department-specific filters."""
+    """ZIP with five byte-identical referent XLSX and one internal excluded-row audit."""
     proposal_year = next_academic_year(history_year)
     (prepared, excluded_count, unresolved_count, unresolved_examples,
      missing_code_count, missing_code_examples, excluded_ambiguous_count,
@@ -454,7 +471,8 @@ def build_five_workbooks(
      residual_count, residual_examples,
      taf_mapping_mode, taf_rows_with_value, taf_rows_without_value,
      mutuazione_mapping_mode, mutuazione_true_count,
-     mutuazione_false_count, mutuazione_other_count, mutuazione_blank_count) = _prepare(
+     mutuazione_false_count, mutuazione_other_count, mutuazione_blank_count,
+     excluded_records) = _prepare(
         source, source_sha256, sheet_name, header_row, assigned,
         history_year, excluded or set(), included, cohort_names,
     )
@@ -562,6 +580,91 @@ def build_five_workbooks(
     })
     workbook.close()
     template = output.getvalue()
+    if excluded_count != len(excluded_records):
+        raise WorkbookGenerationError("Conteggio delle esclusioni incoerente")
+    if {
+        source_row_id(source_sha256, sheet_name, row_index)
+        for row_index, *_ in excluded_records
+    } & {row[1] for row in prepared}:
+        raise WorkbookGenerationError("Una riga compare tra incluse ed escluse")
+    # The sixth file is an internal audit, never part of the five files to
+    # share with referents. Historical columns are readable and unchanged;
+    # there are no proposal/edit columns.
+    excluded_output = io.BytesIO()
+    excluded_wb = xlsxwriter.Workbook(excluded_output, {"in_memory": True})
+    excluded_wb.set_properties({
+        "title": "DidaUP - Righe storiche escluse",
+        "comments": "Riepilogo interno non destinato ai referenti",
+    })
+    excluded_sheet = excluded_wb.add_worksheet("Righe escluse")
+    excluded_title = excluded_wb.add_format({
+        "bold": True, "font_color": "#FFFFFF", "bg_color": "#733D3D",
+        "font_size": 14, "valign": "vcenter",
+    })
+    excluded_info = excluded_wb.add_format({
+        "font_color": "#51322F", "bg_color": "#F8EAE7", "text_wrap": True,
+    })
+    excluded_header = excluded_wb.add_format({
+        "bold": True, "font_color": "#FFFFFF", "bg_color": "#8B5147",
+        "text_wrap": True, "valign": "vcenter",
+    })
+    excluded_cell = excluded_wb.add_format({"locked": True})
+    audit_headers = (
+        "RIGA NEL REPORT", "CRITERIO DI ESCLUSIONE",
+        "TIPO DI CORRISPONDENZA", "ANNUALITÀ ESCLUSE",
+        "ID RIGA STORICA",
+    )
+    headers = HISTORIC_HEADERS + list(audit_headers)
+    last_col = len(headers) - 1
+    excluded_sheet.merge_range(
+        0, 0, 0, last_col,
+        f"DidaUP | RIGHE ESCLUSE DALLA GENERAZIONE {proposal_year}",
+        excluded_title,
+    )
+    excluded_sheet.merge_range(
+        1, 0, 1, last_col,
+        f"Registro interno | Storico {history_year} | "
+        f"{excluded_count} righe eliminate dai cinque file per i referenti. "
+        "Non distribuire questo file ai referenti.",
+        excluded_info,
+    )
+    excluded_sheet.merge_range(
+        2, 0, 2, last_col,
+        "Sono riportate soltanto le righe effettivamente escluse; "
+        "le righe con annualità dubbia e conservate nei cinque Excel non compaiono qui.",
+        excluded_info,
+    )
+    for col, header in enumerate(headers):
+        excluded_sheet.write_string(4, col, header, excluded_header)
+    excluded_sheet.set_row(0, 28)
+    excluded_sheet.set_row(1, 36)
+    excluded_sheet.set_row(2, 33)
+    excluded_sheet.set_row(4, 44)
+    excluded_sheet.set_column(0, len(HISTORIC_HEADERS) - 1, 19)
+    excluded_sheet.set_column(len(HISTORIC_HEADERS), len(HISTORIC_HEADERS), 15)
+    excluded_sheet.set_column(len(HISTORIC_HEADERS)+1, len(HISTORIC_HEADERS)+1, 58)
+    excluded_sheet.set_column(len(HISTORIC_HEADERS)+2, len(HISTORIC_HEADERS)+2, 34)
+    excluded_sheet.set_column(len(HISTORIC_HEADERS)+3, len(HISTORIC_HEADERS)+3, 20)
+    excluded_sheet.set_column(len(HISTORIC_HEADERS)+4, len(HISTORIC_HEADERS)+4, 43)
+    excluded_sheet.hide_gridlines(2)
+    excluded_sheet.set_zoom(85)
+    excluded_sheet.set_tab_color("#8B5147")
+    for row_index, (source_row, data, reason, match_type, years_label) in enumerate(
+        excluded_records, start=5
+    ):
+        for col, header in enumerate(HISTORIC_HEADERS):
+            _write_safe(excluded_sheet, row_index, col, data.get(header, ""), excluded_cell)
+        audit = (
+            source_row, reason, match_type, years_label,
+            source_row_id(source_sha256, sheet_name, source_row),
+        )
+        for col, value in enumerate(audit, start=len(HISTORIC_HEADERS)):
+            _write_safe(excluded_sheet, row_index, col, value, excluded_cell)
+    excluded_sheet.autofilter(4, 0, 4 + len(excluded_records), last_col)
+    excluded_sheet.freeze_panes(5, 3)
+    excluded_sheet.protect("", {"autofilter": True, "select_locked_cells": True})
+    excluded_wb.close()
+    excluded_template = excluded_output.getvalue()
     # Every generation gets a visibly different filename. Existing OneDrive
     # copies do not update when DidaUP regenerates the archive: the operator
     # must not mistake an earlier export for the latest one.
@@ -578,9 +681,17 @@ def build_five_workbooks(
                 f"rev-{export_revision}_Dipartimento_{index:02d}.xlsx",
                 template,
             )
+        archive.writestr(
+            f"DidaUP_Righe_escluse_{proposal_year.replace('/', '-')}_"
+            f"rev-{export_revision}_CONTROLLO_INTERNO.xlsx",
+            excluded_template,
+        )
     return packed.getvalue(), {
         "export_revision": export_revision,
-        "copies": NUM_COPIES, "historical_rows": len(prepared),
+        "copies": NUM_COPIES, "archive_files": NUM_COPIES + 1,
+        "excluded_file_rows": len(excluded_records),
+        "excluded_audit_sha256": hashlib.sha256(excluded_template).hexdigest(),
+        "historical_rows": len(prepared),
         "excluded_rows": excluded_count,
         "excluded_rows_with_missing_year": excluded_ambiguous_count,
         "unmatched_exclusion_count": unmatched_exclusions_count,
