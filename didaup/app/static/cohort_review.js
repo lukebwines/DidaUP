@@ -304,6 +304,11 @@ async function loadCohortCandidates() {
     if (data.anomaly_count) notices.push(
       data.anomaly_count + " righe o gruppi del report richiedono verifica e non sono inclusi nell'elenco."
     );
+    if (data.assignment_title_mapped && data.cohorts.some(
+      item => (item.assignment_titles || []).length > 1
+    )) notices.push(
+      "Alcune annualità comprendono più titoli affidamento. Il filtro serve a trovarle: escluderle elimina tutte le attività di quell'annualità, non soltanto il titolo selezionato."
+    );
     if (data.conflicts?.length) notices.push(
       data.conflicts.length + " annualità hanno denominazioni discordanti rispetto al registro: non salvare prima di risolverle."
     );
@@ -453,8 +458,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const changed = visible.filter(row =>
       !cohortReview.selected.has(cohortKey(row)));
     if (!changed.length) return;
+    const partialTitles = cohortReview.filters.assignments.size && changed.some(row =>
+      (row.assignment_titles || []).some(t => !cohortReview.filters.assignments.has(t))
+    );
     if (!window.confirm("Escludere " + changed.length + " annualità tra le " +
         visible.length + " visualizzate? Le altre annualità non saranno modificate. " +
+        (partialTitles
+          ? "ATTENZIONE: alcune annualità comprendono titoli affidamento differenti dai valori filtrati; verranno escluse per INTERO. "
+          : "") +
         "La conferma NON salva ancora nel database.")) return;
     for (const row of changed) cohortReview.selected.add(cohortKey(row));
     renderCohortChecklist();
