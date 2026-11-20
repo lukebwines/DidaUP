@@ -597,17 +597,18 @@ function hookForms() {
       const workload = result.workload || {};
       const workloadInfo = " Carico didattico: " +
         Number(workload.rows_calculated || 0) + " righe con regola, " +
-        Number(workload.rows_without_rule || 0) + " righe rimaste a 0 senza regola. " +
+        Number(workload.rows_without_rule || 0) + " righe con ore previste applicate in assenza di regola. " +
+        Number(workload.rows_not_available || 0) + " righe indicate come N.D. (non disponibile). " +
         "Totale ore effettive calcolate: " +
         Number(workload.total_effective_hours || 0).toLocaleString("it-IT", {
           maximumFractionDigits: 2
         }) + ". " +
         (Number(workload.rules || 0) === 0
-          ? "ATTENZIONE: nessuna regola di carico salvata, tutte le ore sono 0. "
+          ? "Nessuna regola di carico salvata: valori di default da TOT ORE PREVISTE. "
           : "") +
         (Number(workload.rows_with_missing_planned_hours || 0)
           ? "ATTENZIONE: " + Number(workload.rows_with_missing_planned_hours) +
-            " righe intercettate da regole hanno TOT ORE PREVISTE vuoto e sono rimaste a 0. " +
+            " righe con TOT ORE PREVISTE vuoto sono rimaste a 0. " +
             "Righe del report (prime 15): " +
             (workload.missing_planned_hours_examples || []).slice(0, 15)
               .map(item => item.excel_row).join(", ") + ". Verificare prima di distribuire. "
