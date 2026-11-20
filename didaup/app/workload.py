@@ -11,6 +11,7 @@ from .column_mapping import normalize_header
 
 MAX_RULES = 500
 MAX_CHOICES = 1500
+MAX_RULE_SELECTIONS = 1500
 MONEY_PRECISION = Decimal("0.01")
 _NUMBER = re.compile(r"\d{1,6}(?:[.,]\d{1,2})?\Z")
 
@@ -36,6 +37,33 @@ def decimal_hours(value):
     return result if result.is_finite() and result >= 0 else None
 
 
+def _rule_values(value, field, index, limit):
+    """Accept legacy scalar rules and checkbox selections without wildcard guesses."""
+    if isinstance(value, str):
+        items = [value] if value.strip() else []
+    elif isinstance(value, list):
+        items = value
+    else:
+        raise WorkloadRuleError(f"Regola {index}: campo {field} non valido")
+    if len(items) > MAX_RULE_SELECTIONS:
+        raise WorkloadRuleError(f"Regola {index}: troppe selezioni per {field}")
+    values = []
+    seen = set()
+    for raw in items:
+        if not isinstance(raw, str) or len(raw) > limit:
+            raise WorkloadRuleError(f"Regola {index}: valore {field} non valido")
+        cleaned = " ".join(raw.strip().split())
+        if not cleaned:
+            # Empty arrays represent "Tutti", never empty checkbox values.
+            raise WorkloadRuleError(f"Regola {index}: selezione {field} vuota")
+        key = canonical(cleaned)
+        if key in seen:
+            raise WorkloadRuleError(f"Regola {index}: valore {field} duplicato")
+        seen.add(key)
+        values.append(cleaned)
+    return sorted(values, key=canonical)
+
+
 def validate_rules(rules):
     if not isinstance(rules, list) or len(rules) > MAX_RULES:
         raise WorkloadRuleError("Numero di regole non valido (massimo 500)")
@@ -46,11 +74,10 @@ def validate_rules(rules):
             raise WorkloadRuleError(f"Regola {index}: struttura non valida")
         rule = {}
         for field, limit in (("tipologia", 120), ("cds", 80), ("taf", 80)):
-            value = item.get(field, "")
-            if not isinstance(value, str) or len(value) > limit:
-                raise WorkloadRuleError(f"Regola {index}: campo {field} non valido")
-            rule[field] = " ".join(value.strip().split())
-        key = tuple(canonical(rule[field]) for field in ("tipologia", "cds", "taf"))
+            rule[field] = _rule_values(item.get(field, ""), field, index, limit)
+        # Canonical sorted sets make order of multiselections irrelevant to uniqueness.
+        key = tuple(tuple(canonical(v) for v in rule[field])
+                    for field in ("tipologia", "cds", "taf"))
         if key in criteria:
             raise WorkloadRuleError(f"Regola {index}: combinazione tipologia/CdS/TAF duplicata")
         criteria.add(key)
@@ -77,11 +104,14 @@ def apply_workload(planned, typology, course, taf, rules):
     """Return (hours, matching_rule_index, issue). No matched rule => zero."""
     matches = []
     for i, rule in enumerate(rules):
-        if (rule["tipologia"] and canonical(rule["tipologia"]) != canonical(typology)):
-            continue
-        if rule["cds"] and canonical(rule["cds"]) != canonical(course):
-            continue
-        if rule["taf"] and canonical(rule["taf"]) != canonical(taf):
+        if any(
+            selected and canonical(actual) not in {canonical(value) for value in selected}
+            for selected, actual in (
+                (rule["tipologia"], typology),
+                (rule["cds"], course),
+                (rule["taf"], taf),
+            )
+        ):
             continue
         specificity = sum(bool(rule[key]) for key in ("tipologia", "cds", "taf"))
         matches.append((specificity, i, rule))
