@@ -28,6 +28,8 @@ jobs:
           python -m pip install -r didaup/requirements.txt pytest==8.3.5 httpx==0.28.1
       - name: Controllo sintassi Python
         run: python -m compileall -q didaup/app
+      - name: Controllo sintassi JavaScript
+        run: node --check didaup/app/static/site.js
       - name: Test con dati esclusivamente sintetici
         run: PYTHONPATH=didaup python -m pytest -q didaup/tests
       - name: Build immagine add-on
