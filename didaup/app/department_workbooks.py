@@ -154,6 +154,8 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         )
     prepared = []
     excluded_count = 0
+    unresolved_annuality_rows = 0
+    unresolved_annuality_examples = []
     for excel_row, row in enumerate(rows[header_row:], start=header_row + 1):
         if not any(_display(x) for x in row):
             continue
@@ -173,11 +175,14 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         year_text = _display(get("anno_corso"))
         year_int = int(year_text) if re.fullmatch(r"(?:[1-9]|1[0-2])", year_text) else None
         if excluded and (not course or not campus or year_int is None):
-            raise WorkbookGenerationError(
-                f"Riga {excel_row}: identificativo annualità incompleto; "
-                "non applicare esclusioni in modo approssimativo"
-            )
-        if (course, campus, year_int) in excluded:
+            # An incomplete historical row is NOT evidence that it belongs to
+            # an excluded cohort. Keep it in all five files and report it.
+            unresolved_annuality_rows += 1
+            if len(unresolved_annuality_examples) < 30:
+                unresolved_annuality_examples.append(excel_row)
+        if course and campus and year_int is not None and (
+            course, campus, year_int
+        ) in excluded:
             excluded_count += 1
             continue
         # The year of reference is the imported report's archived year, not
@@ -196,7 +201,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         prepared.append((data, historical_id, _activity_id(data)))
     if not prepared:
         raise WorkbookGenerationError("Nessuna riga storica esportabile")
-    return prepared, excluded_count
+    return prepared, excluded_count, unresolved_annuality_rows, unresolved_annuality_examples
 
 
 def build_five_workbooks(
@@ -206,7 +211,7 @@ def build_five_workbooks(
 ) -> tuple[bytes, dict]:
     """ZIP of exactly five byte-identical XLSX, no department-specific filters."""
     proposal_year = next_academic_year(history_year)
-    prepared, excluded_count = _prepare(
+    prepared, excluded_count, unresolved_count, unresolved_examples = _prepare(
         source, source_sha256, sheet_name, header_row, assigned,
         history_year, excluded or set(),
     )
@@ -320,7 +325,10 @@ def build_five_workbooks(
             )
     return packed.getvalue(), {
         "copies": NUM_COPIES, "historical_rows": len(prepared),
-        "excluded_rows": excluded_count, "source_sha256": source_sha256,
+        "excluded_rows": excluded_count,
+        "unresolved_annuality_rows_included": unresolved_count,
+        "unresolved_annuality_example_rows": unresolved_examples,
+        "source_sha256": source_sha256,
         "template_sha256": hashlib.sha256(template).hexdigest(),
         "historical_year": history_year, "proposal_year": proposal_year,
         "department_filter": False,
