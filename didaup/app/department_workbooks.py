@@ -206,6 +206,18 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         title = _canonical(registered_title)
         if k is not None and title:
             recorded_sites_by_title.setdefault((title, k[1]), set()).add(k[:2])
+    excluded_title_sites = set()
+    included_title_sites = set()
+    for register_key, register_name in (cohort_names or {}).items():
+        normalized_key = _normalized_cohort_key(*register_key)
+        normalized_name = _canonical(register_name)
+        if not normalized_key or not normalized_name:
+            continue
+        title_site = (normalized_name, normalized_key[1])
+        if normalized_key in excluded_keys:
+            excluded_title_sites.add(title_site)
+        if normalized_key in included_keys:
+            included_title_sites.add(title_site)
     source_sites_by_title = {}
     if cohort_names and assigned.get("cds_nome") is not None:
         for raw in rows[header_row:]:
@@ -236,6 +248,8 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     matched_exclusion_keys = set()
     fallback_rows = []
     partial_year_rows = []
+    residual_excluded_title_count = 0
+    residual_excluded_title_examples = []
     prepared = []
     excluded_count = 0
     excluded_by_missing_year_count = 0
@@ -323,6 +337,19 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
             missing_activity_code_rows += 1
             if len(missing_activity_code_examples) < 30:
                 missing_activity_code_examples.append(excel_row)
+        title_site = (_canonical(title), _canonical(campus))
+        if (title_site in excluded_title_sites
+                and title_site not in included_title_sites):
+            # A title still occurs despite all cohorts of that title/site
+            # being excluded. Do not infer a match; alert the operator.
+            residual_excluded_title_count += 1
+            if len(residual_excluded_title_examples) < 20:
+                residual_excluded_title_examples.append({
+                    "excel_row": excel_row,
+                    "course_name": title[:140],
+                    "source_code": course[:40],
+                    "campus": campus[:80],
+                })
         prepared.append((data, historical_id, _activity_id(data, historical_id)))
     if not prepared:
         raise WorkbookGenerationError("Nessuna riga storica esportabile")
@@ -338,6 +365,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         ],
         len(fallback_rows), fallback_rows,
         len(partial_year_rows), partial_year_rows,
+        residual_excluded_title_count, residual_excluded_title_examples,
     )
 
 
@@ -353,7 +381,8 @@ def build_five_workbooks(
     (prepared, excluded_count, unresolved_count, unresolved_examples,
      missing_code_count, missing_code_examples, excluded_ambiguous_count,
      unmatched_exclusions_count, unmatched_exclusion_examples,
-     fallback_count, fallback_examples, partial_count, partial_examples) = _prepare(
+     fallback_count, fallback_examples, partial_count, partial_examples,
+     residual_count, residual_examples) = _prepare(
         source, source_sha256, sheet_name, header_row, assigned,
         history_year, excluded or set(), included, cohort_names,
     )
@@ -480,6 +509,8 @@ def build_five_workbooks(
         "cohorts_matched_by_unique_name_examples": fallback_examples,
         "mixed_annuality_rows_retained": partial_count,
         "mixed_annuality_example_rows": partial_examples,
+        "excluded_course_titles_still_present": residual_count,
+        "excluded_course_title_examples": residual_examples,
         "unresolved_annuality_rows_included": unresolved_count,
         "unresolved_annuality_example_rows": unresolved_examples,
         "missing_activity_codes_rows_included": missing_code_count,
