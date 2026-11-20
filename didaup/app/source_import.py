@@ -6,6 +6,7 @@ This stage does NOT infer assignments or map columns automatically.
 from __future__ import annotations
 
 from pathlib import Path
+from zipfile import BadZipFile, ZipFile
 
 from python_calamine import CalamineWorkbook
 
@@ -24,6 +25,18 @@ def check_signature(path: Path, suffix: str):
         raise ValueError("Il file non è un vero Excel .xls")
     if suffix == ".xlsx" and not is_zip:
         raise ValueError("Il file non è un vero Excel .xlsx")
+    if suffix == ".xlsx":
+        # Reject suspiciously oversized ZIP contents before a spreadsheet parser
+        # expands the archive; never execute embedded code or external links.
+        try:
+            with ZipFile(path) as archive:
+                items = archive.infolist()
+                if len(items) > 2000 or sum(x.file_size for x in items) > 320 * 1024 * 1024:
+                    raise ValueError("Excel compresso troppo grande")
+                if any(x.file_size > 80 * 1024 * 1024 for x in items):
+                    raise ValueError("Componente Excel troppo grande")
+        except BadZipFile as exc:
+            raise ValueError("Archivio Excel non valido") from exc
 
 
 def inspect_workbook(path: Path) -> list[dict]:
