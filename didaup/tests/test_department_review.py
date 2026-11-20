@@ -14,13 +14,16 @@ from app.department_workbooks import build_five_workbooks
 from app.department_review import review_five_workbooks
 from test_department_workbooks import make_source
 
+WORKLOAD_RULES = [{"tipologia": "", "cds": "", "taf": "", "mode": "percentuale", "value": "100"}]
+
 
 def fixture_five(tmp_path, *, mutuazione_bool=False):
     original = tmp_path / "historical.xlsx"
     assigned = make_source(original, mutuazione_bool=mutuazione_bool)
     digest = hashlib.sha256(original.read_bytes()).hexdigest()
     packed, _ = build_five_workbooks(
-        original, digest, "Offerta sintetica", 1, assigned, "2026/27"
+        original, digest, "Offerta sintetica", 1, assigned, "2026/27",
+        workload_rules=WORKLOAD_RULES,
     )
     with ZipFile(io.BytesIO(packed)) as zipfile:
         paths = []
@@ -72,7 +75,7 @@ def edit_synthetic_workbook(path, changes, *,
 def inspect(original, assigned, digest, paths):
     return review_five_workbooks(
         original, digest, "Offerta sintetica", 1,
-        assigned, "2026/27", paths,
+        assigned, "2026/27", paths, workload_rules=WORKLOAD_RULES,
     )
 
 
