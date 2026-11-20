@@ -1,47 +1,37 @@
-# DidaUP · prova Office Scripts su Excel online (solo dati sintetici)
+# DidaUP – prototipo corretto Excel SSD (2026/27 → 2027/28)
 
-Questa prova **non contiene dati dell'Università di Verona** e non modifica il database DidaUP. Il file Excel va usato esclusivamente per collaudare il flusso e l'ambiente Microsoft 365 autorizzato.
+**Avvertenza:** il primo file dimostrativo con 13 colonne non corrispondeva al tracciato concordato. **Usare solo il nuovo file "DidaUP_Prototipo_SSD_CORRETTO.xlsx"** fornito nella conversazione. Nessun dato dell'Ateneo è incluso nel prototipo.
 
-## Obiettivo del test
+## Cosa contiene il file corretto
 
-Un solo foglio **Proposte SSD**, con una riga per ogni copertura storica e quattro campi editabili: **Tipo variazione, Nuovo docente, Ore, Note**.
+- Un solo foglio **Proposte SSD**.
+- Tutte le **36 intestazioni** del foglio precedentemente utilizzato dai referenti, con una nuova colonna **Tipo variazione** davanti a **Nuovo docente, Ore, Note**: **37 colonne visibili** complessive.
+- Le **quattro colonne editabili sono AD:AG**: Tipo variazione, Nuovo docente, Ore, Note. Sono colorate in giallo.
+- Le altre **33 colonne informative** contengono informazioni storiche e risultano **bloccate già all'apertura** nel file consegnato.
+- Quattro colonne tecniche **AL:AO** restano **nascoste e bloccate**: tipo di riga, ID origine, ID proposta, ID attività. Gli identificativi nel collaudo sono fittizi.
+- Storico **2026/27** e proposta **2027/28** sono esplicitamente separati.
+- **TOT ORE EFFETTIVE** è l'unico valore storico usato per il conteggio delle ore; gli altri campi sulle ore sono solo informativi.
+- La protezione è **senza password**, per consentire a Office Scripts di inserire una riga e ripristinare la protezione. Non è una misura contro manipolazioni intenzionali: il reimport in DidaUP dovrà confrontare tutto con la fonte privata.
+- Il testo con il simbolo **＋** nella parte alta del foglio è **solo un'indicazione**. **Non è ancora un pulsante funzionante.** Il pulsante reale potrà essere creato soltanto da Excel online, associando al file l'Office Script (vedi sotto).
 
-- I riferimenti storici A:F provengono dalla fonte di riferimento e rimangono immutati.
-- `TOT ORE EFFETTIVE` è l'unico valore usato come base per le ore storiche.
-- Il comando **Aggiungi variazione** duplica il contesto storico della riga selezionata, ma crea un **identificativo diverso per la proposta**, senza copiare i contenuti dei quattro campi editabili.
-- `ID ORIGINE` conserva un collegamento alla singola riga storica; `ID PROPOSTA` identifica la riga aggiunta.
-- L'aggiunta di docenti non aumenta le ore complessive: occorre assegnare esplicitamente le ore cedute da ogni riga di origine.
-- La stessa persona destinataria può ricevere quote da più cedenti, ma l'identità deve essere confermata sulla base dell'elenco docenti e non per sola somiglianza del nominativo.
+## Procedura di prova (un solo script necessario)
 
-## File disponibili
+1. Aprire il file **DidaUP_Prototipo_SSD_CORRETTO.xlsx** in **Excel online** sul OneDrive universitario. Non usare il vecchio prototipo con 13 colonne.
+2. Prima di collegare lo script, verificare che **J7 sia bloccata** e **AD7 sia modificabile**: la protezione deve essere già presente nel file.
+3. In **Automatizza → Nuovo script**, incollare [aggiungi_variazione.ts](office_scripts/aggiungi_variazione.ts), salvarlo come **DidaUP – Aggiungi variazione**.
+4. Selezionare una cella della riga del docente A (ad esempio **J7**), quindi eseguire lo script. Deve comparire una nuova riga immediatamente sotto, con le quattro celle **AD:AG vuote e modificabili**; il contesto storico e l'ID origine non devono cambiare.
+5. Se l'esecuzione riesce, nella sezione di condivisione dello script selezionare **Associa alla cartella di lavoro** e quindi **Aggiungi pulsante al foglio**. Posizionare il pulsante dove preferito (ad esempio vicino al testo con il simbolo ＋).
+6. Ripetere la prova cliccando il pulsante. Se non funziona su un foglio protetto, verificare la stessa operazione da **Automatizza → Esegui**: il funzionamento dei pulsanti sui fogli protetti è un aspetto **[DA VERIFICARE]** sul tenant dell'Ateneo.
+7. Non distribuire ancora il file a referenti reali: servono i controlli sul totale ore, sulle identità docenti, sulle righe duplicate, la validazione del reimport e la verifica dei permessi OneDrive.
 
-- `DidaUP_Prototipo_SSD_OneDrive.xlsx`: file dimostrativo da scaricare dalla conversazione, **non** presente nel repository.
-- `office_scripts/prepara_protezione.ts`: prima esecuzione per bloccare le colonne storiche.
-- `office_scripts/aggiungi_variazione.ts`: comando per aggiungere una riga di variazione dopo la riga selezionata.
+Lo script [prepara_protezione.ts](office_scripts/prepara_protezione.ts) è ora una **funzione di ripristino**: non occorre eseguirlo sul nuovo file, che è già protetto.
 
-## Collaudo in Microsoft 365 dell'Ateneo
+## Esempio fittizio
 
-1. Scaricare il file dimostrativo e caricarlo **manualmente nel OneDrive d'Ateneo**, non nel OneDrive personale.
-2. Aprirlo in **Excel per il Web** e verificare che sia visibile la scheda **Automatizza**. Se non è presente, la prova con Office Scripts non è disponibile su quell'account senza intervento IT.
-3. In **Automatizza → Nuovo script**, copiare il contenuto di `prepara_protezione.ts` e premere **Esegui** una sola volta. Il foglio viene protetto: le colonne G:J restano modificabili.
-4. Creare un secondo script con il codice `aggiungi_variazione.ts` e chiamarlo **DidaUP — Aggiungi variazione**.
-5. Selezionare una cella della riga del **Docente A** e avviare il secondo script dalla scheda **Automatizza**. Una nuova riga, collegata a `SYN-HIST-001`, deve apparire sotto la riga selezionata. **G:J devono essere vuote; A:F e K:M non devono essere editabili.**
-6. Nella nuova riga inserire ad esempio Tipo variazione = **Aggiunta**, Nuovo docente = **Docente D**, Ore = **2**. Le 20 ore storiche del Docente A devono rimanere 20. La cessione complessiva del Docente A diventa 8 + 2 = 10 e le sue ore residue proposte diventano 10; il Docente B cede ancora 4 ore a C.
-7. **Solo se il primo test è riuscito**, aprire i dettagli dello script, abilitare **Associa alla cartella di lavoro** e scegliere **Aggiungi pulsante al foglio**. Verificare il pulsante anche dopo la protezione e con un secondo account autorizzato, prima di decidere se distribuirlo ai referenti.
-8. Se il pulsante non risponde, utilizzare la scheda **Automatizza → Esegui**: questa è la procedura alternativa per il collaudo. Non disattivare indiscriminatamente la protezione per farlo funzionare.
-9. Non condividere il prototipo con referenti reali e non importare dati ufficiali finché l'intero procedimento (controlli ore, identità, autorizzazioni, reimport, versioni) non è stato validato.
+Due righe storiche dello stesso modulo: **Docente A = 20 ore**, **Docente B = 10 ore**. I due docenti cedono **8 + 4 ore** al nuovo Docente C, che riceve una sola proposta di **12 ore**. Il totale del modulo rimane **30 ore**. Selezionando la riga del Docente A, il comando «＋» può creare una nuova proposta relativa a quella stessa riga senza copiarne i campi compilabili. Non significa che DidaUP abbia già implementato il ricalcolo: questa è una prova tecnica dell'inserimento righe.
 
-## Sicurezza e limiti da non ignorare
+## Limiti da verificare nel tenant
 
-- La protezione del foglio è **senza password** nel collaudo perché lo script condiviso deve temporaneamente sospenderla per inserire righe; **non costituisce una barriera di sicurezza**. Una password inserita nel codice sarebbe visibile a chi può leggere lo script.
-- I dati storici di un Excel **non sono affidabili come fonte** durante il reimport: DidaUP dovrà confrontarli con lo snapshot originale custodito nell'archivio privato, usare gli ID interni solo per collegamenti e bloccare contenuti alterati, duplicati o ambigui.
-- Nel prototipo sono implementate soltanto la struttura dimostrativa, la protezione anti-errore e l'aggiunta di righe. **Non** sono ancora implementati il controllo automatico del totale ore, la rubrica assistita dei docenti, il reimport o l'approvazione.
-- Microsoft segnala restrizioni organizzative all'associazione degli script ai file, e nel 2026 si sono registrati malfunzionamenti dei pulsanti Office Scripts nei fogli protetti. La compatibilità con la specifica configurazione del tenant **[DA VERIFICARE]**.
-- Le formule/ore di esempio non sono dati amministrativi e non devono entrare negli atti.
+Office Scripts, associazione degli script al file e pulsanti dipendono dai permessi Microsoft 365 e dalle impostazioni del tenant. Microsoft documenta [come associare un pulsante a uno script](https://learn.microsoft.com/en-us/office/dev/scripts/develop/script-buttons) e le [API di protezione](https://learn.microsoft.com/en-us/javascript/api/office-scripts/excelscript/excelscript.worksheetprotection?view=office-scripts). La creazione del pulsante non può essere completata con la sola generazione offline del file XLSX.
 
-## Fonti Microsoft
-
-- [Pulsanti per eseguire Office Scripts](https://learn.microsoft.com/en-us/office/dev/scripts/develop/script-buttons)
-- [Protezione foglio con Office Scripts](https://learn.microsoft.com/en-us/javascript/api/office-scripts/excelscript/excelscript.worksheetprotection?view=office-scripts)
-- [Opzioni protezione: inserimento righe](https://learn.microsoft.com/en-us/javascript/api/office-scripts/excelscript/excelscript.worksheetprotectionoptions?view=office-scripts)
-- [Segnalazione Microsoft Q&A sui pulsanti e i fogli protetti](https://learn.microsoft.com/en-us/answers/questions/5987197/excel-online-functionality-of-office-script-button)
+L'Excel contenente proposte compilate non deve diventare fonte dei dati ufficiali. La Segreteria dovrà convalidare ogni riga confrontandola con i report ufficiali e segnalare le anomalie prima degli affidamenti.
