@@ -1,7 +1,7 @@
 name: "DidaUP"
 slug: "didaup"
-version: "0.1.9-alpha1"
-description: "Programmazione didattica: archivio per A.A. e preparazione di schede Excel SSD (sviluppo)"
+version: "0.1.10-alpha1"
+description: "Programmazione didattica: cinque Excel completi e confronto delle proposte (collaudo)"
 arch:
   - aarch64
   - amd64
