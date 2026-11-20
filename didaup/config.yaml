@@ -1,0 +1,29 @@
+name: "DidaUP"
+slug: "didaup"
+version: "0.1.0-alpha1"
+description: "Programmazione didattica: archivio per A.A. e preparazione di schede Excel SSD (sviluppo)"
+arch:
+  - aarch64
+  - amd64
+startup: application
+boot: auto
+init: false
+ingress: true
+ingress_port: 8097
+panel_icon: "mdi:file-excel"
+panel_title: "DidaUP"
+webui: "http://[HOST]:[PORT:8097]/"
+ports:
+  "8097/tcp": 8097
+ports_description:
+  "8097/tcp": "Interfaccia DidaUP per la rete locale e il tunnel Cloudflare"
+options:
+  bootstrap_username: "admin"
+  secure_cookies: true
+schema:
+  bootstrap_username: str
+  bootstrap_password: password?
+  secure_cookies: bool
+map:
+  - type: data
+    read_only: false
