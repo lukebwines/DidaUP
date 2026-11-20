@@ -15,9 +15,9 @@ from app.department_review import review_five_workbooks
 from test_department_workbooks import make_source
 
 
-def fixture_five(tmp_path):
+def fixture_five(tmp_path, *, mutuazione_bool=False):
     original = tmp_path / "historical.xlsx"
-    assigned = make_source(original)
+    assigned = make_source(original, mutuazione_bool=mutuazione_bool)
     digest = hashlib.sha256(original.read_bytes()).hexdigest()
     packed, _ = build_five_workbooks(
         original, digest, "Offerta sintetica", 1, assigned, "2026/27"
@@ -81,6 +81,24 @@ def test_unchanged_five_files_do_not_count_as_five_confirmations(tmp_path):
     assert result["overlap_count"] == 0
     assert result["issue_count_at_least"] == 0
     assert all(item["changes_found"] == 0 for item in result["per_file"])
+
+
+def test_boolean_mutuazione_validates_on_review_and_detects_tampering(tmp_path):
+    original, assigned, digest, paths = fixture_five(
+        tmp_path, mutuazione_bool=True
+    )
+    clean = inspect(original, assigned, digest, paths)
+    assert clean["blocked"] is False
+    assert clean["issue_count_at_least"] == 0
+    from app.department_workbooks import VISIBLE_HEADERS
+    mutuazione = VISIBLE_HEADERS.index("MUTUAZIONE")
+    # Invert a historically locked cell: the review must reject it.
+    paths[0] = edit_synthetic_workbook(
+        paths[0], {}, tamper=(6, mutuazione, "FALSO")
+    )
+    result = inspect(original, assigned, digest, paths)
+    assert result["blocked"] is True
+    assert any("storiche" in x["reason"] for x in result["issues"])
 
 
 def test_same_activity_edited_in_two_departments_flags_overlap(tmp_path):
