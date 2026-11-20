@@ -122,6 +122,7 @@ def preview(path: Path, sheet_name: str, header_row: int) -> dict[str, Any]:
 # equivalents. Never convert planned hours into actual covered hours.
 STRICT_SOURCE_FIELDS = {
     "ore_effettive_totali": "TOT ORE EFFETTIVE",
+    "ore_copertura": "TOT ORE EFFETTIVE",
     "ore_previste": "TOT ORE PREVISTE",
     "ore_prevlez": "OREPREVLEZ",
     "codice_insegnamento": "CODICE INS",
@@ -162,11 +163,16 @@ def source_header_conflicts(
                 f"«{headers[chosen]}», ma la fonte riporta «{expected}» "
                 f"alla colonna {available[0] + 1}"
             )
-        elif (field == "ore_effettive_totali"
+        elif (field in ("ore_effettive_totali", "ore_copertura")
               and selected_header in ("TOT ORE PREVISTE", "OREPREVLEZ")):
             conflicts.append(
                 "Le ore effettive non possono essere ricavate da "
                 f"«{headers[chosen]}»; scegliere «TOT ORE EFFETTIVE»"
+            )
+        if (field == "ssd_docente_vecchio"
+            and selected_header == "CODICE SSD DOCENTE NUOVO"):
+            conflicts.append(
+                "«CODICE SSD DOCENTE NUOVO» non è la precedente codifica SSD del docente"
             )
     return conflicts
 
