@@ -117,3 +117,11 @@ La mappatura automatica riconosce anche le intestazioni `DIPARTIMENTO DI RIFERIM
 **`Nuovo docente`, `Ore`, `Note` non sono campi da ricercare obbligatoriamente nel report sorgente.** Sono invece le tre colonne di proposta che DidaUP dovrà aggiungere nel futuro Excel per i referenti e lasciare modificabili. Tutte le altre colonne dell'Excel distribuito sono informative e protette; la verifica contro lo storico dovrà avvenire anche al reimport.
 
 La mappatura attuale è ancora una **bozza**, non una normalizzazione definitiva degli incarichi. Le righe del report e la deduplicazione delle coperture devono essere verificate prima di generare un nuovo Excel.
+
+## 0.1.6-alpha1 — identificativo tecnico delle righe importate
+
+Nel report originale potrebbe **non esistere** una colonna che contenga un ID ufficiale univoco per ogni copertura. Il precedente avviso `ID copertura storica: da verificare prima della riconciliazione` era quindi fuorviante ed è stato rimosso; eventuali mappature già salvate visualizzano immediatamente gli avvisi ricalcolati, senza obbligare a rifare l'importazione.
+
+Se disponibile, un ID ufficiale potrà essere associato come campo opzionale. La funzione `source_row_id` prepara un identificativo tecnico univoco **all'interno del singolo report importato**, calcolato da hash del file, nome foglio e numero di riga originale. Non costituisce identificativo UGOV e **non è ancora applicato ai dati storici** nell'attuale alpha.
+
+Per identificare le *coperture* e riconciliarle tra estrazioni differenti sarà necessaria una fase successiva di validazione delle chiavi effettive del report (attività, modulo, discriminanti, docenti, ore). Le righe identiche o le coperture multiple non devono essere unite automaticamente. Nessun identificativo ufficiale viene inventato.
