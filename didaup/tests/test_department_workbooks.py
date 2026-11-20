@@ -154,6 +154,52 @@ def test_incomplete_annuality_does_not_block_generation_or_discard_row(tmp_path)
     assert values[8][5] == "SYN-2"
 
 
+def test_missing_both_activity_codes_keeps_all_rows_with_distinct_ids(tmp_path):
+    source = tmp_path / "no-teaching-codes.xlsx"
+    assigned = make_source(source)
+    # The original source can contain empty codes; create an otherwise
+    # identical report with truly blank codes for both teachers on one module.
+    original = CalamineWorkbook.from_path(source).get_sheet_by_name(
+        "Offerta sintetica"
+    ).to_python(skip_empty_area=False)
+    rewritten = tmp_path / "blank-codes.xlsx"
+    writer = xlsxwriter.Workbook(str(rewritten))
+    sh = writer.add_worksheet("Offerta sintetica")
+    cols = {header: i for i, header in enumerate(original[0])}
+    for r, items in enumerate(original):
+        for c, value in enumerate(items):
+            if r in (1, 2) and c in (
+                cols["CODICE INS"], cols["CODICE UGOV"]
+            ):
+                continue
+            if value is None:
+                continue
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                sh.write_number(r, c, value)
+            else:
+                sh.write_string(r, c, str(value))
+    writer.close()
+    packed, info = build_five_workbooks(
+        rewritten, hashlib.sha256(rewritten.read_bytes()).hexdigest(),
+        "Offerta sintetica", 1, assigned, "2026/27"
+    )
+    assert info["copies"] == 5
+    assert info["historical_rows"] == 4
+    assert info["missing_activity_codes_rows_included"] == 2
+    assert info["missing_activity_codes_example_rows"] == [2, 3]
+    with ZipFile(io.BytesIO(packed)) as bundle:
+        copies = [bundle.read(name) for name in bundle.namelist()]
+        assert len(set(copies)) == 1
+    extracted = tmp_path / "out.xlsx"
+    extracted.write_bytes(copies[0])
+    rows = CalamineWorkbook.from_path(extracted).get_sheet_by_name(
+        "Proposte SSD"
+    ).to_python(skip_empty_area=False)
+    assert rows[6][40] != rows[7][40]
+    assert rows[6][40].startswith("ACT-ROW-")
+    assert rows[7][40].startswith("ACT-ROW-")
+
+
 def test_per_row_academic_year_is_preserved_and_source_integrity_checked(tmp_path):
     src = tmp_path / "synthetic.xlsx"
     assigned = make_source(src, wrong_year=True)
