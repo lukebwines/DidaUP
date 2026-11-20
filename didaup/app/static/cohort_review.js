@@ -41,7 +41,11 @@ function cohortFacetOptions(kind) {
     } else if (kind === "campuses") {
       values.set(item.campus, item.campus);
     } else if (kind === "years") {
-      values.set(String(item.study_year), item.study_year + "° anno");
+      // Use the EXACT text in the source's ANNO column, not normalized years.
+      // Distinct values such as "1", "1,2,3" and "1/2" stay distinct.
+      for (const raw of (item.source_year_values || [String(item.study_year)])) {
+        values.set(raw, raw || "(Vuoto)");
+      }
     } else if (kind === "types") {
       for (const type of (item.course_types || [""])) {
         values.set(type, type || "Non indicata nel report");
@@ -52,10 +56,15 @@ function cohortFacetOptions(kind) {
       }
     }
   }
+  // Also list source values from rows not eligible for automatic cohort
+  // identity; these remain visible in diagnostics, NOT force-selected.
+  if (kind === "years") {
+    for (const raw of (cohortReview.data.source_year_filter_values || [])) {
+      values.set(raw, raw || "(Vuoto)");
+    }
+  }
   return [...values].map(([value, label]) => ({value, label})).sort(
-    (a, b) => kind === "years"
-      ? Number(a.value) - Number(b.value)
-      : a.label.localeCompare(b.label, "it")
+    (a, b) => a.label.localeCompare(b.label, "it", {numeric: true})
   );
 }
 
@@ -190,7 +199,8 @@ function visibleCohortCandidates() {
     if (filter === "changed" && selected === saved) return false;
     if (courses.size && !courses.has(item.course_code)) return false;
     if (campuses.size && !campuses.has(item.campus)) return false;
-    if (years.size && !years.has(String(item.study_year))) return false;
+    if (years.size && !(item.source_year_values || [String(item.study_year)])
+        .some(raw => years.has(raw))) return false;
     if (types.size && !(item.course_types || [""]).some(t => types.has(t))) return false;
     if (assignments.size && !(item.assignment_titles || [""]).some(t => assignments.has(t))) return false;
     if (!q) return true;
@@ -239,7 +249,9 @@ function renderCohortChecklist() {
     for (const value of [
       (entry.course_types || [""]).map(t => t || "Non indicata").join(" · "),
       (entry.assignment_titles || [""]).map(t => t || "Non indicato").join(" · "),
-      entry.course_code, entry.campus, entry.study_year, entry.source_rows
+      entry.course_code, entry.campus,
+      (entry.source_year_values || [String(entry.study_year)]).join(" · "),
+      entry.source_rows
     ]) {
       const cell = document.createElement("td");
       cell.textContent = String(value);
@@ -300,6 +312,11 @@ async function loadCohortCandidates() {
     );
     if (!data.assignment_title_mapped) notices.push(
       "Titolo affidamento non associato: mappa il campo «Titolo affidamento storico» prima di utilizzare il relativo filtro."
+    );
+    if (data.source_year_filter_values?.length) notices.push(
+      "Il filtro Anni mostra i valori testuali originali del report. " +
+      "Le voci senza un'annualità identificabile restano solo nel riepilogo anomalie, " +
+      "non diventano esclusioni automatiche."
     );
     if (data.anomaly_count) notices.push(
       data.anomaly_count + " righe o gruppi del report richiedono verifica e non sono inclusi nell'elenco."
