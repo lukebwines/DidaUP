@@ -431,7 +431,7 @@ def list_cohorts(year_id: int, request: Request):
 
 class NewCohort(BaseModel):
     course_code: str = Field(min_length=1, max_length=40)
-    course_name: str = Field(min_length=2, max_length=120)
+    course_name: str = Field(min_length=2, max_length=500)
     campus: str = Field(min_length=1, max_length=80)
     study_year: int = Field(ge=1, le=12)
 
