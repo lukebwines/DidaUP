@@ -4,7 +4,7 @@ const cohortReview = {
   data: null,
   selected: new Set(),
   saved: new Set(),
-  filters: {courses: new Set(), campuses: new Set(), years: new Set(), types: new Set()},
+  filters: {courses: new Set(), campuses: new Set(), years: new Set(), types: new Set(), assignments: new Set()},
   sourceYear: null,
   loading: false,
 };
@@ -46,6 +46,10 @@ function cohortFacetOptions(kind) {
       for (const type of (item.course_types || [""])) {
         values.set(type, type || "Non indicata nel report");
       }
+    } else if (kind === "assignments") {
+      for (const title of (item.assignment_titles || [""])) {
+        values.set(title, title || "Non indicato nel report");
+      }
     }
   }
   return [...values].map(([value, label]) => ({value, label})).sort(
@@ -56,11 +60,13 @@ function cohortFacetOptions(kind) {
 }
 
 function renderCohortFacet(kind) {
-  const ids = {courses: "cds", campuses: "campus", years: "year", types: "type"};
+  const ids = {courses: "cds", campuses: "campus", years: "year", types: "type", assignments: "assignment"};
   const id = ids[kind], container = el("cohort-" + id + "-options");
   const chosen = cohortReview.filters[kind];
   const terms = kind === "courses"
-    ? normalizeCohortSearch(el("cohort-cds-search").value) : "";
+    ? normalizeCohortSearch(el("cohort-cds-search").value)
+    : kind === "assignments"
+      ? normalizeCohortSearch(el("cohort-assignment-search").value) : "";
   const items = cohortFacetOptions(kind).filter(x =>
     !terms || normalizeCohortSearch(x.label).includes(terms)
   );
@@ -94,9 +100,9 @@ function renderCohortFacet(kind) {
 }
 
 function updateFacetSummary(kind) {
-  const ids = {courses: "cds", campuses: "campus", years: "year", types: "type"};
-  const singular = {courses: "CdS", campuses: "Sedi", years: "Anni", types: "Tipologie"};
-  const all = {courses: "Tutti", campuses: "Tutte", years: "Tutti", types: "Tutte"};
+  const ids = {courses: "cds", campuses: "campus", years: "year", types: "type", assignments: "assignment"};
+  const singular = {courses: "CdS", campuses: "Sedi", years: "Anni", types: "Tipologie", assignments: "Titolo affidamento"};
+  const all = {courses: "Tutti", campuses: "Tutte", years: "Tutti", types: "Tutte", assignments: "Tutti"};
   const count = cohortReview.filters[kind].size;
   setText("cohort-" + ids[kind] + "-summary",
     singular[kind] + " · " + (count ? count + " selezionati" : all[kind]));
@@ -105,9 +111,10 @@ function updateFacetSummary(kind) {
 function resetCohortFacets() {
   for (const filter of Object.values(cohortReview.filters)) filter.clear();
   el("cohort-cds-search").value = "";
+  el("cohort-assignment-search").value = "";
   el("cohort-review-search").value = "";
   el("cohort-review-filter").value = "all";
-  for (const kind of ["types", "courses", "campuses", "years"]) renderCohortFacet(kind);
+  for (const kind of ["types", "assignments", "courses", "campuses", "years"]) renderCohortFacet(kind);
   renderCohortChecklist();
 }
 
@@ -117,7 +124,8 @@ function clearCohortReview() {
   cohortReview.saved.clear();
   for (const facet of Object.values(cohortReview.filters)) facet.clear();
   el("cohort-cds-search").value = "";
-  for (const id of ["type", "cds", "campus", "year"]) {
+  el("cohort-assignment-search").value = "";
+  for (const id of ["type", "assignment", "cds", "campus", "year"]) {
     el("cohort-" + id + "-filter").open = false;
     el("cohort-" + id + "-options").replaceChildren();
   }
@@ -172,7 +180,7 @@ function visibleCohortCandidates() {
   if (!cohortReview.data) return [];
   const q = normalizeCohortSearch(el("cohort-review-search").value);
   const filter = el("cohort-review-filter").value;
-  const {courses, campuses, years, types} = cohortReview.filters;
+  const {courses, campuses, years, types, assignments} = cohortReview.filters;
   return cohortReview.data.cohorts.filter(item => {
     const key = cohortKey(item);
     const selected = cohortReview.selected.has(key);
@@ -184,10 +192,12 @@ function visibleCohortCandidates() {
     if (campuses.size && !campuses.has(item.campus)) return false;
     if (years.size && !years.has(String(item.study_year))) return false;
     if (types.size && !(item.course_types || [""]).some(t => types.has(t))) return false;
+    if (assignments.size && !(item.assignment_titles || [""]).some(t => assignments.has(t))) return false;
     if (!q) return true;
     return normalizeCohortSearch(
       [item.course_name, item.course_code, item.campus,
-       ...(item.course_types || []), item.study_year, item.study_year + " anno"].join(" ")
+       ...(item.course_types || []), ...(item.assignment_titles || []),
+       item.study_year, item.study_year + " anno"].join(" ")
     ).includes(q);
   });
 }
@@ -228,6 +238,7 @@ function renderCohortChecklist() {
     tr.appendChild(name);
     for (const value of [
       (entry.course_types || [""]).map(t => t || "Non indicata").join(" · "),
+      (entry.assignment_titles || [""]).map(t => t || "Non indicato").join(" · "),
       entry.course_code, entry.campus, entry.study_year, entry.source_rows
     ]) {
       const cell = document.createElement("td");
@@ -275,6 +286,7 @@ async function loadCohortCandidates() {
     cohortReview.saved = new Set(cohortReview.selected);
     for (const facet of Object.values(cohortReview.filters)) facet.clear();
     el("cohort-cds-search").value = "";
+    el("cohort-assignment-search").value = "";
     el("cohort-review-search").value = "";
     el("cohort-review-filter").value = "all";
     for (const kind of ["types", "courses", "campuses", "years"]) {
@@ -285,6 +297,9 @@ async function loadCohortCandidates() {
     const notices = [];
     if (!data.typology_mapped) notices.push(
       "Tipologia non associata nella mappatura del report: associa il campo CdS · tipologia per attivare il filtro."
+    );
+    if (!data.assignment_title_mapped) notices.push(
+      "Titolo affidamento non associato: mappa il campo «Titolo affidamento storico» prima di utilizzare il relativo filtro."
     );
     if (data.anomaly_count) notices.push(
       data.anomaly_count + " righe o gruppi del report richiedono verifica e non sono inclusi nell'elenco."
@@ -383,6 +398,21 @@ document.addEventListener("DOMContentLoaded", () => {
   el("cohort-review-search").addEventListener("input", renderCohortChecklist);
   el("cohort-review-filter").addEventListener("change", renderCohortChecklist);
   el("cohort-cds-search").addEventListener("input", () => renderCohortFacet("courses"));
+  el("cohort-assignment-search").addEventListener("input", () => renderCohortFacet("assignments"));
+  el("cohort-assignment-pick").addEventListener("click", () => {
+    const term = normalizeCohortSearch(el("cohort-assignment-search").value);
+    if (!term) {
+      showNotice("Inserisci prima un testo per selezionare i titoli affidamento.", true);
+      return;
+    }
+    for (const item of cohortFacetOptions("assignments")) {
+      if (normalizeCohortSearch(item.label).includes(term)) {
+        cohortReview.filters.assignments.add(item.value);
+      }
+    }
+    renderCohortFacet("assignments");
+    renderCohortChecklist();
+  });
   el("cohort-cds-pick").addEventListener("click", () => {
     const term = normalizeCohortSearch(el("cohort-cds-search").value);
     if (!term) {
@@ -398,11 +428,13 @@ document.addEventListener("DOMContentLoaded", () => {
     renderCohortChecklist();
   });
   for (const [kind, id] of [
-    ["types", "type"], ["courses", "cds"], ["campuses", "campus"], ["years", "year"]
+    ["types", "type"], ["assignments", "assignment"],
+    ["courses", "cds"], ["campuses", "campus"], ["years", "year"]
   ]) {
     el("cohort-" + id + "-clear").addEventListener("click", () => {
       cohortReview.filters[kind].clear();
       if (kind === "courses") el("cohort-cds-search").value = "";
+      if (kind === "assignments") el("cohort-assignment-search").value = "";
       renderCohortFacet(kind);
       renderCohortChecklist();
     });
