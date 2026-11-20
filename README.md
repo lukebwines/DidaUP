@@ -2,7 +2,7 @@
 
 **Add-on per la programmazione didattica 2027/28 con cinque Excel completi e identici destinati ai dipartimenti.**
 
-> Stato: **0.1.10-alpha1 (generazione cinque file e revisione preliminare)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. **Solo dati sintetici** durante il collaudo.
+> Stato: **0.1.10-alpha11 (multiselezione annualità e revisione degli export)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. **Solo dati sintetici** durante il collaudo.
 
 ## Obiettivo
 Partire dall'offerta e dalle coperture storiche **2026/27** per costruire un archivio di riferimento verificabile. Quando saranno disponibili le estrazioni ufficiali, predisporre i fogli di programmazione **2027/28** senza trasporre automaticamente come valide assegnazioni, codici o nominativi precedenti.
@@ -81,3 +81,12 @@ La sezione **Genera Excel** crea un **ZIP contenente esattamente cinque copie in
 Dopo la compilazione, è disponibile un endpoint e una schermata per una **revisione preliminare di cinque XLSX**: il sistema confronta ogni riga con lo storico privato, rileva trasferimenti di ore in eccesso e segnala attività modificate da più dipartimenti, **anche se riguardano docenti storici differenti**. Le sovrapposizioni non vengono sommate, risolte o approvate automaticamente. Gli XLSX caricati per la revisione sono file temporanei cancellati a fine analisi, e non sono acquisiti come proposte approvate.
 
 **Limiti della versione:** i cinque XLSX sono attualmente distribuiti in ZIP e devono essere pubblicati manualmente sull'account universitario autorizzato; non vi è un pulsante Excel «+» già operativo nel file esportato. È presente uno script Office Scripts sperimentale per aggiungere variazioni, ma va ancora associato e verificato nell'ambiente Microsoft 365 dell'Ateneo. L'applicazione continua a consentire **soltanto dati sintetici** per importazione e revisione.
+
+
+## Nuova selezione multipla delle annualità (0.1.10-alpha11)
+
+Nella maschera **Annualità CdS** puoi combinare ricerca, selezione multipla di più CdS, più sedi e più anni di corso. Il filtro di stato include **Solo modifiche non salvate**. I filtri non cambiano le esclusioni nel database: i pulsanti per escludere/includere in blocco modificano solo le spunte delle righe **visualizzate**, dopo conferma; il salvataggio effettivo avviene con il pulsante dedicato. Puoi cancellare i filtri senza perdere le spunte e annullare la bozza senza modificare le esclusioni registrate.
+
+Il riquadro **Registro delle annualità già salvate** dispone di ricerca e filtro per incluse/escluse e mostra esclusivamente lo stato persistito. I cinque Excel generati mantengono lo stesso contenuto in tutte le copie ma ora comprendono nel **nome del file** una revisione diversa a ogni generazione, per non confonderli con quelli già caricati su OneDrive. Nessun documento già caricato viene automaticamente sostituito.
+
+Attenzione: una riga originale con annualità multiple oppure con identificativi ambigui non deve essere interpretata come certezza di appartenenza; verificare gli avvisi di generazione prima di distribuire i file.
