@@ -31,3 +31,12 @@ Fonte: decisioni esplicitamente comunicate dall'utilizzatore. Documento di proge
 Versione `0.1.0-alpha1`: predisposti selettore A.A., archivio degli anni, censimento manuale sintetico delle annualità CdS, esclusione/ripristino con motivazione, account multiutente e accesso su porta dedicata. **Non sono ancora implementati** import del report .xls, gestione referenti SSD, esportazione XLSX, reimportazione e confronto delle differenze, motore regolamentare e approvazioni.
 
 La logica di inclusione/esclusione nell'alpha riguarda le annualità censite nell'applicazione, senza modificare il report esterno.
+
+## Seconda fonte 2026/27: docenti di competenza
+- Il report `carichi_docenti_Scuola di medicina_2026_2027.xls`, condiviso dall'utilizzatore, rappresenta l'**elenco dei docenti di competenza** per l'area medica.
+- Va trattato come **fonte distinta** dal report unico dell'offerta/coperture 2026/27: il primo identifica i docenti di competenza, il secondo le attività e le assegnazioni storiche.
+- Usare l'elenco per popolare, dopo verifica della struttura e delle chiavi, la selezione guidata dei docenti nei futuri XLSX; resta possibile proporre un docente non presente mediante inserimento libero, da sottoporre a verifica.
+- **Non assumere** che l'SSD di competenza, l'SSD dell'insegnamento e l'SSD del docente coincidano. Un docente può essere assegnato a più insegnamenti o SSD.
+- L'elenco del 2026/27 **non dimostra da solo** competenze o afferenze valide per il 2027/28: per il nuovo anno occorrerà verificare aggiornamenti e fonte ufficiale.
+- Non copiare contenuto, nominativi, codici o file originali nel repository GitHub, neppure se privato.
+- **[DA VERIFICARE]**: intestazioni/chiavi effettive, campi SSD e carichi presenti nel file; la denominazione del report non basta per dedurne la struttura.
