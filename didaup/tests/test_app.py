@@ -771,3 +771,16 @@ def test_academic_year_column_formats_are_explicitly_validated():
     assert academic_year("2026") == "2026/27"
     assert academic_year("2026/28") is None
     assert academic_year("2027") == "2027/28"
+
+
+def test_five_workbooks_screen_replaces_coming_soon(client):
+    """Regression: avoid an old SSD-only placeholder after updating DidaUP."""
+    html = client.get("/").text
+    js = client.get("/static/site.js").text
+    assert "Cinque Excel identici e completi" in html
+    assert 'id="workbook-generate-form"' in html
+    assert 'id="workbook-review-form"' in html
+    assert "Generazione Excel per SSD" not in html
+    assert '<span class="soon">Prossimamente</span>' not in html
+    assert 'Cinque file completi per dipartimento' in js
+    assert 'function refreshWorkbooks()' in js
