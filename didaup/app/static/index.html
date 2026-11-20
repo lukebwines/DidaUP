@@ -148,6 +148,39 @@
           </div>
         </section>
 
+        <section id="view-mapping" class="screen" hidden>
+          <div class="panel">
+            <div class="panel-heading">
+              <div>
+                <h3>Associazione delle colonne</h3>
+                <p>Indica quale colonna del file corrisponde a ogni informazione. I valori originali non verranno modificati.</p>
+              </div>
+              <button type="button" id="back-to-imports" class="secondary">Torna ai report</button>
+            </div>
+            <div class="mapping-top">
+              <div class="mapping-source"><p class="eyebrow">REPORT SELEZIONATO</p><strong id="mapping-source-name">—</strong><small id="mapping-source-kind"></small></div>
+              <span class="chip">Bozza da verificare</span>
+            </div>
+            <div class="import-warning"><strong>Privacy:</strong> l'anteprima può contenere nominativi e assegnazioni. È visibile soltanto agli operatori autorizzati. Non condividerla tramite screenshot o GitHub.</div>
+            <div class="mapping-settings">
+              <label>Foglio del report<select id="mapping-sheet"></select></label>
+              <label>Riga delle intestazioni (1–40)<input type="number" id="mapping-header-row" min="1" max="40" value="1"></label>
+              <button type="button" id="mapping-load" class="secondary">Leggi colonne</button>
+            </div>
+            <p id="mapping-info" class="muted"></p>
+            <div id="mapping-fields" class="mapping-grid"></div>
+            <div id="mapping-warnings" class="import-warning" hidden></div>
+            <div class="quick-actions">
+              <button type="button" id="mapping-save" class="primary">Salva mappatura in bozza</button>
+              <span class="muted">Le corrispondenze devono essere confermate dalla Segreteria prima della futura generazione degli Excel.</span>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-heading"><div><h3>Anteprima della struttura</h3><p>Intestazioni e prime righe del foglio selezionato. I nomi delle colonne sono disponibili anche nei menu di associazione.</p></div></div>
+            <div class="table-wrap mapping-table"><table id="mapping-preview-table"><thead></thead><tbody></tbody></table></div>
+          </div>
+        </section>
+
         <section id="view-workbook" class="screen" hidden>
           <div class="panel">
             <h3>Generazione Excel per SSD</h3>
