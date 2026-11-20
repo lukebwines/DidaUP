@@ -218,3 +218,14 @@ Nella selezione guidata **Annualità CdS** è disponibile anche il filtro **Tito
 Lo stesso CdS/sede/anno può comprendere attività con più titoli affidamento: la maschera visualizza **tutti i valori rilevati nello storico**. Il filtro seleziona le annualità che hanno **almeno un'attività** corrispondente al titolo, ma **non crea esclusioni di singoli insegnamenti o incarichi**. Anche con questo filtro, il salvataggio riguarda l'intera annualità; in presenza di titoli misti l'interfaccia avvisa l'operatore prima di applicare le spunte in blocco.
 
 Il campo deve essere presente nella mappatura del report. Se manca, il sistema avvisa senza attribuire alcun titolo presunto. I filtri non cambiano il database, le esclusioni precedenti restano intatte e sono necessari il salvataggio esplicito e il controllo delle anteprime prima di generare gli Excel.
+
+
+## Sesto Excel di controllo: righe effettivamente escluse — CONFERMATO
+
+Quando DidaUP genera le **cinque copie identiche per i referenti**, produce nello **stesso archivio ZIP** un **sesto file XLSX separato** denominato `DidaUP_Righe_escluse_..._CONTROLLO_INTERNO.xlsx`. È un **registro amministrativo interno, non destinato ai referenti**, che conserva le stesse colonne storiche e contiene **solo le righe realmente sottratte** ai cinque Excel per effetto delle annualità già escluse nel registro DidaUP.
+
+Ogni riga del sesto file comprende **numero di riga del report sorgente**, **criterio di esclusione**, **tipo di corrispondenza** (codice CdS/sede o denominazione univoca), **annualità che hanno determinato l'esclusione** e **identificativo tecnico univoco della riga storica**. Non sono previste colonne di proposta modificabili; il foglio è protetto, filtrabile e per sola consultazione.
+
+I cinque XLSX dei referenti rimangono identici e compatibili con il loro reimport (esattamente 5 file). **Righe dubbie mantenute** perché l'anno di corso, la sede o l'identificativo non consentono una decisione certa **non devono comparire nel sesto file** come se fossero state escluse. Il generatore verifica la corrispondenza fra numero delle righe escluse nel registro e conteggio mostrato, e impedisce che una stessa identità di riga compaia sia tra le conservate sia tra le escluse.
+
+Il sesto Excel viene creato anche in assenza di esclusioni, con zero righe dati e le sole intestazioni. La fonte importata e le decisioni di esclusione già registrate restano intatte. Il pacchetto ZIP rimane nell'archivio privato finché un operatore autorizzato non lo scarica; DidaUP non lo pubblica su OneDrive.
