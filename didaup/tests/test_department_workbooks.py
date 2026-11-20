@@ -77,9 +77,18 @@ def test_five_copies_are_byte_identical_and_unfiltered(tmp_path):
         names = archive.namelist()
         assert len(names) == 5
         assert all(name.endswith(".xlsx") for name in names)
+        revisions = [
+            re.search(r"_rev-(\d{8}T\d{6}Z-[0-9a-f]{6})_Dipartimento_\d{2}\.xlsx$", name)
+            for name in names
+        ]
+        assert all(revisions), "Each Excel must carry an export revision"
+        assert len({m.group(1) for m in revisions}) == 1, (
+            "All five files must come from the SAME export revision"
+        )
         copies = [archive.read(name) for name in names]
         assert all(copy == copies[0] for copy in copies)
     assert info["copies"] == 5
+    assert re.fullmatch(r"\d{8}T\d{6}Z-[0-9a-f]{6}", info["export_revision"])
     assert info["historical_rows"] == 4  # ALL source activities.
     assert info["excluded_rows"] == 0
     assert info["department_filter"] is False
