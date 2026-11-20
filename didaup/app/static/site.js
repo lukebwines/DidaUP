@@ -594,6 +594,14 @@ function hookForms() {
           "Righe del report (esempi): " +
           (result.missing_activity_codes_example_rows || []).slice(0, 8).join(", ") + "."
         : "";
+      const reconciliation = result.reconciliation || {};
+      const reconciliationInfo = reconciliation.verified
+        ? " COMPLETEZZA VERIFICATA: " + reconciliation.source_nonempty_rows +
+          " righe non vuote nel report = " + reconciliation.included_in_each_workbook +
+          " presenti in ciascuno dei cinque Excel + " +
+          reconciliation.excluded_in_internal_register +
+          " nel registro delle esclusioni. Righe mancanti: 0; duplicazioni: 0. "
+        : " ATTENZIONE: verifica di completezza non presente nel riepilogo. ";
       const workload = result.workload || {};
       const workloadInfo = " Carico didattico: " +
         Number(workload.rows_calculated || 0) + " righe con regola, " +
@@ -615,17 +623,20 @@ function hookForms() {
           : "");
       showNotice("Generati cinque file identici con " +
         result.historical_rows + " righe storiche ciascuno; nessun filtro dipartimentale. " +
-        "Righe escluse: " + excludedRows + ". " + workloadInfo +
+        "Righe escluse: " + excludedRows + ". " +
+        reconciliationInfo + workloadInfo +
         "Il pacchetto ZIP con 6 Excel è disponibile per il download. " +
         auditInfo +
         "Revisione: " + (result.export_revision || "non disponibile") +
         " (non sostituisce gli Excel già presenti su OneDrive)." +
         warningMessage + missingCodeMessage + missedMessage +
         matchedByNameInfo + mixedYearsInfo + residualInfo + mutInfo,
-        Boolean(residual || missed || mixedYears || workload.rows_with_missing_planned_hours));
+        Boolean(residual || missed || mixedYears ||
+          workload.rows_with_missing_planned_hours || !reconciliation.verified));
       el("workbook-progress").textContent =
         "Revisione " + (result.export_revision || "—") +
         ". Escluse " + excludedRows + " righe, tutte presenti nel sesto Excel interno. " +
+        reconciliationInfo +
         (missed ? missed + " annualità escluse senza corrispondenza nel report. " : "") +
         (matchedByName ? matchedByName + " riconciliate per denominazione univoca. " : "") +
         (mixedYears ? mixedYears + " righe miste incluse/escluse DA VERIFICARE. " : "") +
