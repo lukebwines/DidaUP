@@ -503,7 +503,7 @@ def test_entire_excluded_cds_is_removed_even_with_source_year_1_2_3(tmp_path):
     assert info["mixed_annuality_rows_retained"] == 0
     assert info["historical_rows"] == 1
     with ZipFile(io.BytesIO(packed)) as package:
-        payloads = [package.read(name) for name in package.namelist()]
+        payloads = [package.read(name) for name in referent_names(package)]
         assert len(payloads) == 5 and all(x == payloads[0] for x in payloads)
     file = tmp_path / "retained.xlsx"
     file.write_bytes(payloads[0])
