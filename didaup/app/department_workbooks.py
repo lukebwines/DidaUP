@@ -119,27 +119,43 @@ def _activity_id(data: dict[str, object], historical_id: str) -> str:
     ).hexdigest()[:32]
 
 
+def _canonical(value: object) -> str:
+    """Only casing, Unicode width and whitespace; no invented code aliases."""
+    return " ".join(unicodedata.normalize("NFKC", _display(value)).split()).casefold()
+
+
 def _normalized_cohort_key(course: object, campus: object, year: object):
-    """Normalize insignificant typography, not real course identities."""
-    def canonical(value: object) -> str:
-        return " ".join(unicodedata.normalize("NFKC", _display(value)).split()).casefold()
-    if not canonical(course) or not canonical(campus):
-        return None
+    code, location = _canonical(course), _canonical(campus)
     year_str = _display(year)
-    if not re.fullmatch(r"(?:[1-9]|1[0-2])", year_str):
+    if (not code or not location
+            or not re.fullmatch(r"(?:[1-9]|1[0-2])", year_str)):
         return None
-    return (canonical(course), canonical(campus), int(year_str))
+    return (code, location, int(year_str))
 
 
 def _normalized_course_site(course: object, campus: object):
-    key = _normalized_cohort_key(course, campus, 1)
-    return key[:2] if key else None
+    code, location = _canonical(course), _canonical(campus)
+    return (code, location) if code and location else None
+
+
+def _source_years(value: object) -> set[int] | None:
+    """Parse an explicitly enumerated year set, e.g. 1 / 1,2,3 / 1; 2.
+
+    Never infer an academic annuality from unrecognized textual values.
+    """
+    raw = _display(value).strip()
+    if not re.fullmatch(
+        r"(?:[1-9]|1[0-2])(?:\s*[,;/]\s*(?:[1-9]|1[0-2]))*", raw
+    ):
+        return None
+    return {int(item) for item in re.split(r"\s*[,;/]\s*", raw)}
 
 
 def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
              assigned: dict[str, int], history_year: str,
              excluded: set[tuple[str, str, int]],
-             included: set[tuple[str, str, int]] | None = None):
+             included: set[tuple[str, str, int]] | None = None,
+             cohort_names: dict[tuple[str, str, int], str] | None = None):
     if not re.fullmatch(r"[0-9a-f]{64}", source_sha256):
         raise WorkbookGenerationError("Hash dello storico non valido")
     if not source.is_file():
@@ -181,6 +197,32 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         raise WorkbookGenerationError(
             "Mappatura salvata da correggere: " + "; ".join(conflicts[:5])
         )
+    # Name-based matching is ONLY a fallback for a missing/inconsistent
+    # course code. Require a unique documented CdS identity in BOTH the
+    # saved cohort register and the selected report. Ambiguity => no deletion.
+    recorded_sites_by_title = {}
+    for registered_key, registered_title in (cohort_names or {}).items():
+        k = _normalized_cohort_key(*registered_key)
+        title = _canonical(registered_title)
+        if k is not None and title:
+            recorded_sites_by_title.setdefault((title, k[1]), set()).add(k[:2])
+    source_sites_by_title = {}
+    if cohort_names and assigned.get("cds_nome") is not None:
+        for raw in rows[header_row:]:
+            if not any(_display(value) for value in raw):
+                continue
+            def raw_field(name):
+                col = assigned.get(name)
+                return raw[col] if col is not None and col < len(raw) else ""
+            src_title = _canonical(raw_field("cds_nome"))
+            src_site = _normalized_course_site(
+                raw_field("cds_codice"), raw_field("sede")
+            )
+            if src_title and src_site:
+                source_sites_by_title.setdefault(
+                    (src_title, src_site[1]), set()
+                ).add(src_site)
+
     excluded_keys = {_normalized_cohort_key(*item) for item in excluded}
     excluded_keys.discard(None)
     included_keys = {
@@ -189,7 +231,11 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     included_keys.discard(None)
     excluded_sites = {key[:2] for key in excluded_keys}
     retained_sites = {key[:2] for key in included_keys}
+    registered_sites = excluded_sites | retained_sites
+    fully_excluded_sites = excluded_sites - retained_sites
     matched_exclusion_keys = set()
+    fallback_rows = []
+    partial_year_rows = []
     prepared = []
     excluded_count = 0
     excluded_by_missing_year_count = 0
@@ -213,25 +259,50 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         # CdS annuality exclusions may suppress matching rows.
         course = _display(get("cds_codice"))
         campus = _display(get("sede"))
+        title = _display(get("cds_nome"))
         year_text = _display(get("anno_corso"))
-        key = _normalized_cohort_key(course, campus, year_text)
         site = _normalized_course_site(course, campus)
-        if key is not None and key in excluded_keys:
+        years = _source_years(year_text)
+
+        # A source-row course code sometimes differs from the saved cohort
+        # register. Reconcile by FULL course name and campus only when the
+        # saved register identifies exactly one course and the source uses
+        # exactly one code for that same course name/site. Never guess.
+        title_key = (_canonical(title), _canonical(campus))
+        if (cohort_names and site not in registered_sites and title_key[0]
+                and len(recorded_sites_by_title.get(title_key, set())) == 1
+                and len(source_sites_by_title.get(title_key, set())) == 1):
+            site = next(iter(recorded_sites_by_title[title_key]))
+            if len(fallback_rows) < 30:
+                fallback_rows.append(excel_row)
+
+        if site in fully_excluded_sites:
+            # Entire registered CdS + campus is excluded, even if its raw
+            # ANNO column says "1,2,3" or is absent. This does NOT exclude
+            # any other CdS or a campus with retained annualities.
             excluded_count += 1
-            matched_exclusion_keys.add(key)
-            continue
-        # If a row has no interpretable study year, only exclude it when ALL
-        # registered annualities of this exact CdS + campus were excluded.
-        # Otherwise keep it with a warning; do not guess the year.
-        if (key is None and site is not None and site in excluded_sites
-                and site not in retained_sites):
-            excluded_count += 1
-            excluded_by_missing_year_count += 1
+            if years is None:
+                excluded_by_missing_year_count += 1
             matched_exclusion_keys.update(
                 item for item in excluded_keys if item[:2] == site
             )
             continue
-        if excluded_keys and key is None:
+
+        if site is not None and years is not None:
+            excluded_in_row = {
+                (site[0], site[1], year) for year in years
+                if (site[0], site[1], year) in excluded_keys
+            }
+            matched_exclusion_keys.update(excluded_in_row)
+            if excluded_in_row and len(excluded_in_row) == len(years):
+                # Every explicitly enumerated year of this row is excluded.
+                excluded_count += 1
+                continue
+            if excluded_in_row and len(partial_year_rows) < 30:
+                # A single historic row covers included AND excluded years:
+                # must not delete it or silently rewrite "1,2,3" into "2,3".
+                partial_year_rows.append(excel_row)
+        elif excluded_keys:
             unresolved_annuality_rows += 1
             if len(unresolved_annuality_examples) < 30:
                 unresolved_annuality_examples.append(excel_row)
@@ -265,6 +336,8 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
             {"course_code": course, "campus": campus, "study_year": year}
             for course, campus, year in sorted(excluded_keys - matched_exclusion_keys)[:25]
         ],
+        len(fallback_rows), fallback_rows,
+        len(partial_year_rows), partial_year_rows,
     )
 
 
@@ -273,14 +346,16 @@ def build_five_workbooks(
     assigned: dict[str, int], history_year: str,
     excluded: set[tuple[str, str, int]] | None = None,
     included: set[tuple[str, str, int]] | None = None,
+    cohort_names: dict[tuple[str, str, int], str] | None = None,
 ) -> tuple[bytes, dict]:
     """ZIP of exactly five byte-identical XLSX, no department-specific filters."""
     proposal_year = next_academic_year(history_year)
     (prepared, excluded_count, unresolved_count, unresolved_examples,
      missing_code_count, missing_code_examples, excluded_ambiguous_count,
-     unmatched_exclusions_count, unmatched_exclusion_examples) = _prepare(
+     unmatched_exclusions_count, unmatched_exclusion_examples,
+     fallback_count, fallback_examples, partial_count, partial_examples) = _prepare(
         source, source_sha256, sheet_name, header_row, assigned,
-        history_year, excluded or set(), included,
+        history_year, excluded or set(), included, cohort_names,
     )
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output, {"in_memory": True})
@@ -401,6 +476,10 @@ def build_five_workbooks(
         "excluded_rows_with_missing_year": excluded_ambiguous_count,
         "unmatched_exclusion_count": unmatched_exclusions_count,
         "unmatched_exclusion_examples": unmatched_exclusion_examples,
+        "cohorts_matched_by_unique_name_rows": fallback_count,
+        "cohorts_matched_by_unique_name_examples": fallback_examples,
+        "mixed_annuality_rows_retained": partial_count,
+        "mixed_annuality_example_rows": partial_examples,
         "unresolved_annuality_rows_included": unresolved_count,
         "unresolved_annuality_example_rows": unresolved_examples,
         "missing_activity_codes_rows_included": missing_code_count,
