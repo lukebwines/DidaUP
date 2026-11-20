@@ -7,6 +7,12 @@
 ## Obiettivo
 Partire dall'offerta e dalle coperture storiche **2026/27** per costruire un archivio di riferimento verificabile. Quando saranno disponibili le estrazioni ufficiali, predisporre i fogli di programmazione **2027/28** senza trasporre automaticamente come valide assegnazioni, codici o nominativi precedenti.
 
+## Ambito prioritario
+Il primo caso d'uso riguarda i **referenti SSD dell'area medica**, già condivisi con il progetto nei materiali del procedimento 2026/27. La lista dei referenti è una fonte di lavoro, non una conferma automatica per il 2027/28; nominativi, competenze e designazioni del nuovo anno sono **[DA VERIFICARE]**. Non trasferire nominativi o allegati originali su GitHub.
+
+## Regolamento per l'attribuzione dei compiti didattici
+Il regolamento già fornito è un riferimento essenziale da analizzare durante lo sviluppo: le regole applicabili dovranno essere evidenziate negli Excel dei referenti come **istruzioni, avvertenze e controlli verificabili**, con il riferimento alla disposizione in vigore. Non inventare obblighi, soglie o condizioni, né introdurre blocchi automatici prima di validare le fonti.
+
 ## Utilizzatori
 - Segreteria: importazione, produzione dei file Excel per SSD, reimport, controlli e riepiloghi.
 - Referenti SSD: **solo file .xlsx**, senza accesso all'add-on.
@@ -24,7 +30,7 @@ Partire dall'offerta e dalle coperture storiche **2026/27** per costruire un arc
 ## Sicurezza
 Repository privato **solo per codice e documentazione tecnica priva di dati personali**. Non caricare file dell'Ateneo o fogli compilati, nemmeno in issue, log, workflow o allegati GitHub.
 
-Vedere [Policy privacy](docs/PRIVACY.md) e [Architettura](docs/ARCHITETTURA.md).
+Vedere [Policy privacy](docs/PRIVACY.md), [Architettura](docs/ARCHITETTURA.md) e [Specifiche interfaccia](docs/UI_UX.md).
 
 ## Prossimi input
 Il report procedurale 2026/27 servirà a validare il tracciato di importazione, i ruoli, i controlli e il layout Excel. Eventuali dati assenti: **[DA VERIFICARE]**.
