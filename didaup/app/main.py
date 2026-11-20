@@ -751,7 +751,7 @@ def get_mapping(import_id: int, request: Request):
         "mapping": None if mapping is None else {
             "sheet_name": mapping["sheet_name"], "header_row": mapping["header_row"],
             "assigned": json.loads(mapping["fields_json"]),
-            "warnings": json.loads(mapping["warnings_json"]),
+            "warnings": evaluate_mapping(report["kind"], json.loads(mapping["fields_json"])),
             "status": mapping["status"], "version": mapping["version"],
         },
     }
