@@ -336,6 +336,8 @@ def test_source_mapping_preview_draft_and_concurrency(client):
         "expected_version": 1
     })
     assert duplicate_index.status_code == 422
+    assert "Colonna 1" in duplicate_index.json()["detail"]
+    assert "SSD insegnamento" in duplicate_index.json()["detail"]
 
     invalid_column = client.put(f"/api/imports/{source_id}/mapping", headers=csrf, json={
         "sheet_name": "Sintetico", "header_row": 1,
