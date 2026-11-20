@@ -12,6 +12,7 @@ import io
 import json
 import math
 import re
+import unicodedata
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -118,9 +119,27 @@ def _activity_id(data: dict[str, object], historical_id: str) -> str:
     ).hexdigest()[:32]
 
 
+def _normalized_cohort_key(course: object, campus: object, year: object):
+    """Normalize insignificant typography, not real course identities."""
+    def canonical(value: object) -> str:
+        return " ".join(unicodedata.normalize("NFKC", _display(value)).split()).casefold()
+    if not canonical(course) or not canonical(campus):
+        return None
+    year_str = _display(year)
+    if not re.fullmatch(r"(?:[1-9]|1[0-2])", year_str):
+        return None
+    return (canonical(course), canonical(campus), int(year_str))
+
+
+def _normalized_course_site(course: object, campus: object):
+    key = _normalized_cohort_key(course, campus, 1)
+    return key[:2] if key else None
+
+
 def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
              assigned: dict[str, int], history_year: str,
-             excluded: set[tuple[str, str, int]]):
+             excluded: set[tuple[str, str, int]],
+             included: set[tuple[str, str, int]] | None = None):
     if not re.fullmatch(r"[0-9a-f]{64}", source_sha256):
         raise WorkbookGenerationError("Hash dello storico non valido")
     if not source.is_file():
@@ -162,8 +181,18 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         raise WorkbookGenerationError(
             "Mappatura salvata da correggere: " + "; ".join(conflicts[:5])
         )
+    excluded_keys = {_normalized_cohort_key(*item) for item in excluded}
+    excluded_keys.discard(None)
+    included_keys = {
+        _normalized_cohort_key(*item) for item in (included or set())
+    }
+    included_keys.discard(None)
+    excluded_sites = {key[:2] for key in excluded_keys}
+    retained_sites = {key[:2] for key in included_keys}
+    matched_exclusion_keys = set()
     prepared = []
     excluded_count = 0
+    excluded_by_missing_year_count = 0
     unresolved_annuality_rows = 0
     unresolved_annuality_examples = []
     missing_activity_code_rows = 0
@@ -185,18 +214,27 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         course = _display(get("cds_codice"))
         campus = _display(get("sede"))
         year_text = _display(get("anno_corso"))
-        year_int = int(year_text) if re.fullmatch(r"(?:[1-9]|1[0-2])", year_text) else None
-        if excluded and (not course or not campus or year_int is None):
-            # An incomplete historical row is NOT evidence that it belongs to
-            # an excluded cohort. Keep it in all five files and report it.
+        key = _normalized_cohort_key(course, campus, year_text)
+        site = _normalized_course_site(course, campus)
+        if key is not None and key in excluded_keys:
+            excluded_count += 1
+            matched_exclusion_keys.add(key)
+            continue
+        # If a row has no interpretable study year, only exclude it when ALL
+        # registered annualities of this exact CdS + campus were excluded.
+        # Otherwise keep it with a warning; do not guess the year.
+        if (key is None and site is not None and site in excluded_sites
+                and site not in retained_sites):
+            excluded_count += 1
+            excluded_by_missing_year_count += 1
+            matched_exclusion_keys.update(
+                item for item in excluded_keys if item[:2] == site
+            )
+            continue
+        if excluded_keys and key is None:
             unresolved_annuality_rows += 1
             if len(unresolved_annuality_examples) < 30:
                 unresolved_annuality_examples.append(excel_row)
-        if course and campus and year_int is not None and (
-            course, campus, year_int
-        ) in excluded:
-            excluded_count += 1
-            continue
         # The year of reference is the imported report's archived year, not
         # a per-row equality check. Keep the original A.A. value unchanged,
         # including conventions used by Schools of Specialization.
@@ -221,6 +259,12 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         prepared, excluded_count, unresolved_annuality_rows,
         unresolved_annuality_examples,
         missing_activity_code_rows, missing_activity_code_examples,
+        excluded_by_missing_year_count,
+        len(excluded_keys - matched_exclusion_keys),
+        [
+            {"course_code": course, "campus": campus, "study_year": year}
+            for course, campus, year in sorted(excluded_keys - matched_exclusion_keys)[:25]
+        ],
     )
 
 
@@ -228,13 +272,15 @@ def build_five_workbooks(
     source: Path, source_sha256: str, sheet_name: str, header_row: int,
     assigned: dict[str, int], history_year: str,
     excluded: set[tuple[str, str, int]] | None = None,
+    included: set[tuple[str, str, int]] | None = None,
 ) -> tuple[bytes, dict]:
     """ZIP of exactly five byte-identical XLSX, no department-specific filters."""
     proposal_year = next_academic_year(history_year)
     (prepared, excluded_count, unresolved_count, unresolved_examples,
-     missing_code_count, missing_code_examples) = _prepare(
+     missing_code_count, missing_code_examples, excluded_ambiguous_count,
+     unmatched_exclusions_count, unmatched_exclusion_examples) = _prepare(
         source, source_sha256, sheet_name, header_row, assigned,
-        history_year, excluded or set(),
+        history_year, excluded or set(), included,
     )
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output, {"in_memory": True})
@@ -352,6 +398,9 @@ def build_five_workbooks(
     return packed.getvalue(), {
         "copies": NUM_COPIES, "historical_rows": len(prepared),
         "excluded_rows": excluded_count,
+        "excluded_rows_with_missing_year": excluded_ambiguous_count,
+        "unmatched_exclusion_count": unmatched_exclusions_count,
+        "unmatched_exclusion_examples": unmatched_exclusion_examples,
         "unresolved_annuality_rows_included": unresolved_count,
         "unresolved_annuality_example_rows": unresolved_examples,
         "missing_activity_codes_rows_included": missing_code_count,
