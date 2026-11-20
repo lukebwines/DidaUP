@@ -18,6 +18,12 @@ from app.department_workbooks import (
 )
 
 
+def referent_names(archive):
+    """The ZIP now includes a sixth internal audit workbook."""
+    return [name for name in archive.namelist()
+            if "_Dipartimento_" in name and name.endswith(".xlsx")]
+
+
 def make_source(path: Path, *, malicious=False, wrong_year=False, incomplete_annuality=False, mutuazione_bool=False):
     source_headers = list(HISTORIC_HEADERS)
     assert len(source_headers) == 33
@@ -74,7 +80,7 @@ def test_five_copies_are_byte_identical_and_unfiltered(tmp_path):
         "Offerta sintetica", 1, assigned, "2026/27",
     )
     with ZipFile(io.BytesIO(content)) as archive:
-        names = archive.namelist()
+        names = referent_names(archive)
         assert len(names) == 5
         assert all(name.endswith(".xlsx") for name in names)
         revisions = [
@@ -141,6 +147,68 @@ def test_five_copies_are_byte_identical_and_unfiltered(tmp_path):
         assert "https://example.invalid" in shared
 
 
+def test_sixth_excel_contains_only_actually_removed_rows_and_reasons(tmp_path):
+    source = tmp_path / "synthetic-exclusion-audit.xlsx"
+    mapping = make_source(source)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    packed, info = build_five_workbooks(
+        source, digest, "Offerta sintetica", 1, mapping, "2026/27",
+        excluded={("SYN-B", "Sede TEST", 2)},
+        included={("SYN-A", "Sede TEST", 2)},
+    )
+    assert info["copies"] == 5
+    assert info["archive_files"] == 6
+    assert info["excluded_rows"] == info["excluded_file_rows"] == 1
+    with ZipFile(io.BytesIO(packed)) as archive:
+        names = archive.namelist()
+        referents = referent_names(archive)
+        audits = [name for name in names if "Righe_escluse_" in name]
+        assert len(names) == 6 and len(referents) == 5
+        assert len(audits) == 1
+        assert "CONTROLLO_INTERNO" in audits[0]
+        assert len({archive.read(name) for name in referents}) == 1
+        internal = tmp_path / "internal.xlsx"
+        internal.write_bytes(archive.read(audits[0]))
+        delivered = tmp_path / "referent.xlsx"
+        delivered.write_bytes(archive.read(referents[0]))
+    historical = CalamineWorkbook.from_path(internal).get_sheet_by_name(
+        "Righe escluse"
+    ).to_python(skip_empty_area=False)
+    assert historical[4][:len(HISTORIC_HEADERS)] == HISTORIC_HEADERS
+    assert historical[5][HISTORIC_HEADERS.index("CODICE CORSO")] == "SYN-B"
+    assert historical[5][len(HISTORIC_HEADERS)] == 5  # source Excel row
+    assert "esclus" in historical[5][len(HISTORIC_HEADERS) + 1].lower()
+    assert historical[5][len(HISTORIC_HEADERS) + 4].startswith("SRC-")
+    delivered_rows = CalamineWorkbook.from_path(delivered).get_sheet_by_name(
+        "Proposte SSD"
+    ).to_python(skip_empty_area=False)
+    assert "SYN-B" not in [r[1] for r in delivered_rows[6:]]
+    with ZipFile(io.BytesIO(packed)) as archive:
+        assert hashlib.sha256(archive.read(audits[0])).hexdigest() == (
+            info["excluded_audit_sha256"]
+        )
+
+
+def test_sixth_excel_has_zero_records_when_nothing_excluded(tmp_path):
+    source = tmp_path / "synthetic-no-exclusions.xlsx"
+    mapping = make_source(source)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    packed, stats = build_five_workbooks(
+        source, digest, "Offerta sintetica", 1, mapping, "2026/27"
+    )
+    assert stats["excluded_rows"] == stats["excluded_file_rows"] == 0
+    with ZipFile(io.BytesIO(packed)) as archive:
+        audit = next(name for name in archive.namelist()
+                     if name.endswith("CONTROLLO_INTERNO.xlsx"))
+        path = tmp_path / "empty-internal.xlsx"
+        path.write_bytes(archive.read(audit))
+    rows = CalamineWorkbook.from_path(path).get_sheet_by_name(
+        "Righe escluse"
+    ).to_python(skip_empty_area=False)
+    assert rows[4][0] == HISTORIC_HEADERS[0]
+    assert len(rows) == 5
+
+
 def test_taf_is_recovered_from_unique_exact_header_if_old_mapping_omits_it(tmp_path):
     source = tmp_path / "synthetic-taf.xlsx"
     assigned = make_source(source)
@@ -154,7 +222,7 @@ def test_taf_is_recovered_from_unique_exact_header_if_old_mapping_omits_it(tmp_p
     assert info["taf_rows_without_value"] == 0
     with ZipFile(io.BytesIO(packed)) as bundle:
         first = tmp_path / "first.xlsx"
-        first.write_bytes(bundle.read(bundle.namelist()[0]))
+        first.write_bytes(bundle.read(referent_names(bundle)[0]))
     sheet = CalamineWorkbook.from_path(first).get_sheet_by_name("Proposte SSD")
     rows = sheet.to_python(skip_empty_area=False)
     assert rows[6][VISIBLE_HEADERS.index("TAF")] == "TAF-SINTETICO"
@@ -194,7 +262,7 @@ def test_boolean_mutuazione_is_visible_as_vero_falso_in_all_five(tmp_path):
     assert info["mutuazione_other_rows"] == 0
     assert info["mutuazione_empty_rows"] == 0
     with ZipFile(io.BytesIO(packed)) as archive:
-        payloads = [archive.read(name) for name in archive.namelist()]
+        payloads = [archive.read(name) for name in referent_names(archive)]
     assert len(payloads) == 5 and all(blob == payloads[0] for blob in payloads)
     excel = tmp_path / "with-mutuazione.xlsx"
     excel.write_bytes(payloads[0])
@@ -222,7 +290,7 @@ def test_unmapped_legacy_mutuazione_is_recovered_only_from_exact_header(tmp_path
     assert info["mutuazione_false_rows"] == 2
     with ZipFile(io.BytesIO(packed)) as archive:
         file = tmp_path / "mutuazione-result.xlsx"
-        file.write_bytes(archive.read(archive.namelist()[0]))
+        file.write_bytes(archive.read(referent_names(archive)[0]))
     output = CalamineWorkbook.from_path(file).get_sheet_by_name(
         "Proposte SSD"
     ).to_python(skip_empty_area=False)
@@ -243,7 +311,7 @@ def test_explicit_cohort_exclusions_apply_to_all_five_copies(tmp_path):
     assert stats["excluded_rows"] == 1
     assert stats["historical_rows"] == 3
     with ZipFile(io.BytesIO(packed)) as archive:
-        contents = [archive.read(name) for name in archive.namelist()]
+        contents = [archive.read(name) for name in referent_names(archive)]
         assert all(x == contents[0] for x in contents)
 
 
@@ -262,7 +330,7 @@ def test_incomplete_annuality_does_not_block_generation_or_discard_row(tmp_path)
     assert summary["unresolved_annuality_example_rows"] == [4]
     assert summary["historical_rows"] == 3
     with ZipFile(io.BytesIO(packed)) as archive:
-        copies = [archive.read(name) for name in archive.namelist()]
+        copies = [archive.read(name) for name in referent_names(archive)]
         assert len(copies) == 5
         assert all(data == copies[0] for data in copies)
     exported = tmp_path / "exported.xlsx"
@@ -308,7 +376,7 @@ def test_missing_both_activity_codes_keeps_all_rows_with_distinct_ids(tmp_path):
     assert info["missing_activity_codes_rows_included"] == 2
     assert info["missing_activity_codes_example_rows"] == [2, 3]
     with ZipFile(io.BytesIO(packed)) as bundle:
-        copies = [bundle.read(name) for name in bundle.namelist()]
+        copies = [bundle.read(name) for name in referent_names(bundle)]
         assert len(set(copies)) == 1
     extracted = tmp_path / "out.xlsx"
     extracted.write_bytes(copies[0])
@@ -335,7 +403,7 @@ def test_exclusions_ignore_case_and_surrounding_spaces(tmp_path):
     assert info["historical_rows"] == 3
     with ZipFile(io.BytesIO(packed)) as archive:
         item = tmp_path / "normalized.xlsx"
-        item.write_bytes(archive.read(archive.namelist()[0]))
+        item.write_bytes(archive.read(referent_names(archive)[0]))
     rows = CalamineWorkbook.from_path(item).get_sheet_by_name(
         "Proposte SSD"
     ).to_python(skip_empty_area=False)
@@ -357,7 +425,7 @@ def test_missing_year_removed_only_when_all_registered_annualities_excluded(tmp_
     assert info["historical_rows"] == 1
     with ZipFile(io.BytesIO(packed)) as archive:
         item = tmp_path / "all-excluded.xlsx"
-        item.write_bytes(archive.read(archive.namelist()[0]))
+        item.write_bytes(archive.read(referent_names(archive)[0]))
     rows = CalamineWorkbook.from_path(item).get_sheet_by_name(
         "Proposte SSD"
     ).to_python(skip_empty_area=False)
@@ -506,7 +574,7 @@ def test_per_row_academic_year_is_preserved_and_source_integrity_checked(tmp_pat
     assert details["historical_rows"] == 4
     with ZipFile(io.BytesIO(archive)) as zf:
         output = tmp_path / "output.xlsx"
-        output.write_bytes(zf.read(zf.namelist()[0]))
+        output.write_bytes(zf.read(referent_names(zf)[0]))
         rows = CalamineWorkbook.from_path(output).get_sheet_by_name(
             "Proposte SSD"
         ).to_python(skip_empty_area=False)
@@ -573,7 +641,7 @@ def test_api_generates_private_five_file_zip_and_reviews_unchanged(client, tmp_p
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/zip"
     with ZipFile(io.BytesIO(response.content)) as archive:
-        names = archive.namelist()
+        names = referent_names(archive)
         assert len(names) == 5
         sheets = [archive.read(name) for name in names]
         assert all(item == sheets[0] for item in sheets)
