@@ -89,18 +89,37 @@ const workloadUI = (() => {
       label.append(input, title);
       choices.append(label);
     }
+    // A saved rule may reference a course that was excluded AFTER saving.
+    // Show that stale value only as a warning with a remove action; NEVER
+    // reinsert it among the selectable courses, typologies or TAF values.
+    const available = new Set(group.options.map(option => option.value));
+    const stale = [...group.selected].filter(value => !available.has(value));
+    if (stale.length) {
+      const container = document.createElement("div");
+      container.className = "workload-multi-stale";
+      const heading = document.createElement("strong");
+      heading.textContent = "Valori della regola non presenti nelle righe incluse:";
+      container.append(heading);
+      for (const value of stale) {
+        const line = document.createElement("div");
+        line.textContent = value + " ";
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "secondary";
+        remove.textContent = "Rimuovi";
+        remove.addEventListener("click", () => {
+          group.selected.delete(value);
+          refreshMulti(key);
+        });
+        line.append(remove);
+        container.append(line);
+      }
+      choices.append(container);
+    }
   }
   function setMulti(key, values) {
     const group = groups[key];
     const restored = asArray(values);
-    const available = new Set(group.options.map(option => option.value));
-    for (const value of restored) {
-      // Previously saved values remain visible even if absent from this source.
-      if (!available.has(value)) {
-        group.options.push({value, label: value + " (non presente nel report corrente)"});
-        available.add(value);
-      }
-    }
     group.selected = new Set(restored);
     group.filter = "";
     multiElement(key, "search").value = "";
@@ -245,9 +264,12 @@ const workloadUI = (() => {
     if (!result.mapped.tot_ore_previste) missing.push("TOT ORE PREVISTE");
     if (!result.mapped.tipologia) missing.push("TIPOLOGIA (necessaria per regole per tipologia)");
     if (!result.mapped.taf) missing.push("TAF (necessaria per regole per TAF)");
+    const scope = "Selettori limitati alle " + Number(result.rows_in_scope || 0) +
+      " righe incluse nei cinque Excel; " + Number(result.excluded_rows || 0) +
+      " righe escluse per CdS, sede e annualità.";
     document.getElementById("workload-mapping-status").textContent = missing.length
-      ? "Associazioni da verificare: " + missing.join("; ") + "."
-      : "Associazioni per il calcolo presenti.";
+      ? scope + " Associazioni da verificare: " + missing.join("; ") + "."
+      : scope + " Associazioni per il calcolo presenti.";
     resetForm();
     document.getElementById("workload-results").hidden = true;
   }
