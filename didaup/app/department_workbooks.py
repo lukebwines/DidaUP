@@ -23,7 +23,9 @@ import xlsxwriter
 
 from .column_mapping import OFFER_HEADER_TO_FIELD, source_header_conflicts, normalize_header
 from .row_identity import source_row_id
-from .workload import WorkloadRuleError, validate_rules, apply_workload
+from .workload import (
+    WorkloadRuleError, validate_rules, apply_workload, is_missing_planned_hours,
+)
 
 # Order of the pre-existing outgoing referent layout (not the 110-col source).
 HISTORIC_HEADERS = [
@@ -316,6 +318,9 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     workload_unmatched = 0
     workload_total = 0.0
     workload_errors = []
+    workload_error_count = 0
+    workload_missing_warnings = []
+    workload_missing_count = 0
     workload_by_rule = [0] * len(effective_rules)
     unresolved_annuality_rows = 0
     unresolved_annuality_examples = []
@@ -432,16 +437,33 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         # or old effective-hour values. The future workload rule engine will
         # populate this field from TOT ORE PREVISTE; the source is unchanged.
         # Excluded rows above retain their source values in the internal audit.
+        planned_hours = get("ore_previste")
         effective, matched_index, rule_issue = apply_workload(
-            get("ore_previste"), get("cds_tipologia"), course,
+            planned_hours, get("cds_tipologia"), course,
             data.get("TAF", ""), effective_rules,
         )
         data["TOT ORE EFFETTIVE"] = effective
         if matched_index is None and rule_issue is None:
             workload_unmatched += 1
+        elif rule_issue and is_missing_planned_hours(planned_hours):
+            # A documented exception, not an inferred number. Empty planned
+            # hours always yield ZERO even when a fixed-hours rule matches.
+            workload_missing_count += 1
+            if len(workload_missing_warnings) < 100:
+                workload_missing_warnings.append({
+                    "excel_row": excel_row,
+                    "reason": rule_issue,
+                    "rule_number": matched_index + 1,
+                })
         elif rule_issue:
+            workload_error_count += 1
             if len(workload_errors) < 100:
-                workload_errors.append({"excel_row": excel_row, "reason": rule_issue})
+                workload_errors.append({
+                    "excel_row": excel_row,
+                    "reason": rule_issue,
+                    "rule_number": (matched_index + 1 if matched_index is not None else None),
+                    "source_value": _display(planned_hours)[:75],
+                })
         else:
             workload_matches += 1
             workload_by_rule[matched_index] += 1
@@ -477,15 +499,19 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         "rows_without_rule": workload_unmatched,
         "total_effective_hours": round(workload_total, 2),
         "per_rule_rows": workload_by_rule,
+        "rows_with_missing_planned_hours": workload_missing_count,
+        "missing_planned_hours_examples": workload_missing_warnings,
+        "error_count": workload_error_count,
         "errors": workload_errors,
-        "blocked": bool(workload_errors),
+        "blocked": workload_error_count > 0,
     }
-    if strict_workload and workload_errors:
+    if strict_workload and workload_error_count:
         first = workload_errors[0]
         raise WorkbookGenerationError(
-            f"Calcolo carico non valido: {len(workload_errors)} errori "
+            f"Calcolo carico non valido: {workload_error_count} errori effettivi "
             f"(riga {first['excel_row']}: {first['reason']}). "
-            "Verificare le regole e l'anteprima."
+            "Le celle vuote sono segnalate a parte e rimangono a 0; "
+            "verificare le righe non numeriche, negative o con regole conflittuali nell'anteprima."
         )
     return (
         prepared, excluded_count, unresolved_annuality_rows,
