@@ -47,3 +47,20 @@ La logica di inclusione/esclusione nell'alpha riguarda le annualità censite nel
 - Il sistema memorizza una bozza versionata della mappatura, con avvisi sui campi mancanti e blocco in caso di assegnazioni duplicate della stessa colonna.
 - Questa funzione **non acquisisce ancora le coperture come dati validati** e non genera ancora Excel destinati ai referenti.
 - Le anteprime restano nell'add-on, riservate agli operatori: nessun contenuto dei documenti viene pubblicato su GitHub.
+
+## Tracciato XLSX referenti 2026/27 — conferma dell'utilizzatore
+
+Nel file Excel distribuito ai referenti nell'annualità precedente, **le uniche tre colonne compilabili per le variazioni erano `Nuovo docente`, `Ore`, `Note`**. Tutte le altre colonne avevano valore informativo, inclusi dati dell'insegnamento e dati delle coperture già assegnate, e devono rimanere **non modificabili** nella futura generazione XLSX.
+
+Regole funzionali:
+- `Nuovo docente`: propone il docente in sostituzione o aggiunta, da contestualizzare rispetto alla copertura esistente.
+- `Ore`: indica le ore **della proposta**, da non confondere con `OREPREVLEZ`, `TOT ORE PREVISTE`, `TOT ORE EFFETTIVE`.
+- `Note`: motivazioni e osservazioni sulla variazione; anche una nota senza modifica docente/ore deve essere acquisita come comunicazione.
+- Tutte e tre le celle vuote: **nessuna variazione comunicata**; non rappresenta approvazione formale.
+- L'assenza di una nuova assegnazione non cancella né invalida la copertura storica. La rimozione intenzionale di un incarico richiederà un'azione esplicita nel futuro flusso **[DA DEFINIRE]**.
+- Il report può contenere incarichi in SSD diversi da quello del docente. La divergenza deve essere segnalata, ma senza alterare la copertura.
+- `SSD INSEGNAMENTO` non dichiara da sola la codifica vecchia/nuova: non attribuire tale qualificazione senza fonte.
+- `CODICE SSD DOCENTE NUOVO` è un attributo informativo del **docente storico**, non un campo della nuova proposta (omonimia della parola «NUOVO» da evitare).
+
+### Automatizzazione della mappatura
+Il software può proporre associazioni in modo deterministico **solo quando trova le etichette esatte del tracciato condiviso** (tollerando maiuscole e spazi); non deve dedurre corrispondenze per semplice somiglianza nei nomi. Se il tracciato non corrisponde, si mantiene la mappatura manuale. La proposta automatica non sovrascrive i dati e deve essere confermata dall'operatore.
