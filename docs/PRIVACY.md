@@ -25,3 +25,9 @@ Il file `.gitignore` esclude i formati documentali e le directory operative più
 
 ## Materiale sorgente
 I documenti 2026/27 possono essere analizzati nell'ambiente di lavoro autorizzato; il repository conterrà solo descrizioni generali e regole tecniche, non copie o estratti identificativi.
+
+## Importazione e azzeramento nella versione 0.1.2-alpha1
+- Il file caricato è memorizzato con nome casuale e permessi riservati in `/data/sources`; originale e metadati non sono inclusi nei commit GitHub.
+- Le anteprime dei fogli sono accessibili solo a utenti autenticati dell'applicazione. Non renderle pubbliche in screenshot o issue.
+- Un azzeramento elimina i riferimenti nel database e prova a rimuovere i file locali associati; un eventuale errore di rimozione deve essere segnalato e verificato dall'amministratore.
+- Repository privato non significa ambiente operativo autorizzato: su Home Assistant domestico usare **solo dati sintetici**.
