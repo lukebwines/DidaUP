@@ -182,3 +182,12 @@ La regola riguarda le anomalie amministrative classificatorie delle annualità. 
 Se una riga del report non contiene né **CODICE INS** né **CODICE UGOV**, DidaUP **non blocca la generazione dei cinque Excel** e non scarta la riga. La mantiene e le attribuisce esclusivamente un **identificativo tecnico derivato dall'ID univoco della riga dello snapshot storico** (stabile fra le cinque copie e al reimport, ma non equivalente a un codice ufficiale di insegnamento). Non inventa né completa i codici mancanti.
 
 Il riepilogo dell'esportazione mostra quante righe sono state mantenute senza codici e alcuni numeri di riga sorgente, da verificare in sede istruttoria. **Non aggregare automaticamente** tra loro più righe senza codici, nemmeno se denominazione, SSD o docente sono simili. La loro eventuale appartenenza allo stesso modulo/attività è **[DA VERIFICARE]** prima di una riconciliazione amministrativa. La validazione di identificativi e dati storici al reimport resta obbligatoria. Questa scelta riguarda la generazione, non autorizza la ricostruzione automatica di coperture dubbie.
+
+
+## Correzione esclusioni effettive nell'export — confermata dall'utente
+
+Le annualità che sono già registrate come **Escluse** nell'archivio dell'A.A. non devono comparire nei cinque Excel generati. La selezione è fatta confrontando **codice CdS, sede e anno di corso**, con normalizzazione non semantica di maiuscole e spazi. Non basta che l'interfaccia delle annualità mostri «Esclusa»: l'export deve verificare che le relative righe siano state realmente filtrate, e riportare il numero di **righe escluse**.
+
+Per una riga che non riporta l'anno di corso, DidaUP può escluderla tramite codice CdS e sede **soltanto se tutte le annualità registrate per quello stesso CdS e sede sono escluse**; se almeno una annualità è inclusa, la riga va mantenuta con avviso. Questo evita di recuperare indiscriminatamente corsi esclusi senza rischiare di cancellare annualità ancora in gestione. Le esclusioni presenti nell'archivio ma che non trovano alcuna corrispondenza certa nel report sono elencate nel riepilogo per controllo amministrativo.
+
+La fonte importata e le esclusioni registrate non vengono modificate. Le copie Excel già esportate non si aggiornano da sole e devono essere rigenerate dopo la correzione del generatore. Dati e nominativi del caso concreto non sono stati replicati nei test; le verifiche sono esclusivamente sintetiche.
