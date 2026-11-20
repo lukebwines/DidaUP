@@ -665,3 +665,13 @@ def test_cohort_checklist_blocks_other_academic_year(client):
         params={"import_id": report_id}
     )
     assert response.status_code == 422
+
+
+def test_academic_year_column_formats_are_explicitly_validated():
+    from app.cohort_import import academic_year
+    assert academic_year("2026/27") == "2026/27"
+    assert academic_year("2026/2027") == "2026/27"
+    assert academic_year(2026) == "2026/27"
+    assert academic_year("2026") == "2026/27"
+    assert academic_year("2026/28") is None
+    assert academic_year("2027") == "2027/28"
