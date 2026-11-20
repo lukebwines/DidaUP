@@ -199,3 +199,11 @@ td small{display:block;color:#718398}td button{padding:7px 11px!important;font-s
 [data-theme="dark"] .cohort-filter-choice:hover{background:#234366}
 @media(max-width:980px){.cohort-facet-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:590px){.cohort-facet-grid{grid-template-columns:1fr}.cohort-facet-grid>#cohort-clear-filters{width:100%}.cohort-batch-actions button{width:100%}}
+
+/* Five independent annuality facets including historical assignment title. */
+.cohort-facet-grid{grid-template-columns:repeat(3,minmax(190px,1fr))}
+.cohort-filter-values{scrollbar-gutter:stable}
+#cohort-assignment-filter .cohort-filter-popup{max-height:400px}
+#cohort-assignment-options{max-height:255px}
+@media(max-width:980px){.cohort-facet-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:590px){.cohort-facet-grid{grid-template-columns:1fr}}
