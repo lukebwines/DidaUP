@@ -99,3 +99,13 @@ Esempio fittizio: storico A=20 ore, B=10 ore; proposta di trasferire 12 ore da A
 È ancora da definire la semantica del campo Ore nelle **aggiunte** e nelle **modifiche ore** (ore finali oppure differenza); nessuna assunzione automatica su questi due casi finché non confermata.
 
 **Esempio di calcolo confermato:** `TOT ORE EFFETTIVE` docente storico A = 20; sostituzione parziale con nuovo docente C e Ore = 12; proposta: A rimane per 8 ore, C assume 12 ore. La riga del docente B, eventualmente presente nello stesso modulo, resta autonoma. Il totale storico deve restare verificabile, senza applicare modifiche al report fonte.
+
+### Aggiunta docente: redistribuzione delle ore, non aumento del totale — CONFERMATO
+
+Decisione esplicita dell'utilizzatore: quando un referente propone di **aggiungere un docente** a un modulo già coperto, le ore assegnate al nuovo docente devono essere **prelevate dalle ore esistenti**; il totale delle ore del modulo **non aumenta**.
+
+Esempio esclusivamente illustrativo (dati fittizi): docente storico A con `TOT ORE EFFETTIVE` = 20; proposta di aggiunta del docente C con `Ore` = 8; se le ore sono prelevate da A, la distribuzione proposta è A=12 e C=8, totale invariato 20. Il dato storico A=20 rimane immutato nella fonte.
+
+Controlli da prevedere per l'elaborazione: ore trasferite positive, non superiori alle ore disponibili nel/i docente/i di origine, saldo delle ore proposte corrispondente al saldo storico dell'attività/modulo, segnalazione di incongruenze o ambiguità prima dell'approvazione. **Non dedurre automaticamente il docente di origine quando vi sono più coperture:** la modalità con cui indicare una o più righe di origine è ancora **[DA DEFINIRE]**.
+
+Per evitare ambiguità terminologiche, `Aggiunta` e `Sostituzione parziale` possono avere lo stesso effetto aritmetico (redistribuzione) ma rappresentare intenzioni amministrative differenti, da conservare nel campo `Tipo variazione` **[DA PRECISARE]**. Nessuna modifica al database degli affidamenti né approvazione automatica discende da questa definizione.
