@@ -53,7 +53,8 @@ def review_five_workbooks(
          missing_code_count, missing_code_examples, excluded_ambiguous_count,
          unmatched_exclusions_count, unmatched_exclusion_examples,
          fallback_count, fallback_examples, partial_count, partial_examples,
-         residual_count, residual_examples) = _prepare(
+         residual_count, residual_examples,
+         taf_mapping_mode, taf_rows_with_value, taf_rows_without_value) = _prepare(
             original, source_sha256, sheet_name, header_row, assigned,
             history_year, excluded or set(), included, cohort_names,
         )
@@ -230,6 +231,9 @@ def review_five_workbooks(
         "mixed_annuality_example_rows": partial_examples,
         "excluded_course_titles_still_present": residual_count,
         "excluded_course_title_examples": residual_examples,
+        "taf_mapping_mode": taf_mapping_mode,
+        "taf_rows_with_value": taf_rows_with_value,
+        "taf_rows_without_value": taf_rows_without_value,
         "unresolved_annuality_rows_included": unresolved_count,
         "unresolved_annuality_example_rows": unresolved_examples,
         "missing_activity_codes_rows_included": missing_code_count,
