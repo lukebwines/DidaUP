@@ -1,4 +1,4 @@
-# DidaUP — Installazione e collaudo (0.1.4-alpha1)
+# DidaUP — Installazione e collaudo (0.1.5-alpha1)
 
 > Versione iniziale di sviluppo **non collaudata su una specifica istanza di Home Assistant**. Usare soltanto dati sintetici. Non caricare file reali dell'Ateneo.
 
@@ -86,7 +86,7 @@ La versione 0.1 è un **primo nucleo tecnico**, non l'applicazione finale:
 
 Prima di utilizzare dati dell'Ateneo sono necessari autorizzazioni, revisione della sicurezza, verifica del trattamento dei dati e collaudo sull'infrastruttura appropriata.
 
-## Mappatura delle colonne: 0.1.4-alpha1
+## Mappatura delle colonne: 0.1.5-alpha1
 
 Dopo aver acquisito un report sintetico, aprire **Importa report → Mappa colonne**. Selezionare il foglio e la riga delle intestazioni (da 1 a 40), poi premere **Leggi colonne**. Associare le colonne del report ai campi proposti e scegliere **Salva mappatura in bozza**.
 
@@ -96,7 +96,7 @@ La mappatura distingue codifica precedente e nuova dell'SSD dell'insegnamento e 
 
 Non condividere screenshot di anteprime con nominativi o dati reali. Il collaudo domestico resta riservato a dati sintetici.
  
-## 0.1.4-alpha1 — riconoscimento automatico del tracciato referenti
+## 0.1.5-alpha1 — riconoscimento automatico del tracciato referenti
 
 In **Importa report → Mappa colonne**, DidaUP prova a riconoscere automaticamente foglio e intestazioni del tracciato Excel dei referenti condiviso per il 2026/27. Dopo il riconoscimento sono proposte le corrispondenze; la verifica manuale si trova in una sezione ripiegabile, da utilizzare soltanto quando occorre.
 
@@ -107,3 +107,13 @@ Per evitare interpretazioni sbagliate, `SSD INSEGNAMENTO` rimane una codifica no
 Il riconoscimento avviene **solo quando le intestazioni corrispondono esattamente** al modello dichiarato (maiuscole/spazi normalizzati), senza inventare equivalenze. Non registra automaticamente la proposta: è necessario **Salva mappatura in bozza**. Se la corrispondenza non è affidabile, si utilizza la mappatura manuale.
 
 Le coperture storiche e i dati personali restano nell'archivio privato dell'add-on, non sono riportati su GitHub. La mappatura non crea ancora i nuovi Excel né normalizza le coperture.
+
+## 0.1.5-alpha1 — distinzione report sorgente / Excel referenti
+
+Il report originale contiene un tracciato più ampio (nella schermata di collaudo: 110 colonne) rispetto all'Excel ridotto distribuito ai referenti. **Non devono essere mappate tutte le colonne del report sorgente su un elenco ridotto**; è sufficiente identificare con certezza le informazioni necessarie a ricostruire l'attività.
+
+La mappatura automatica riconosce anche le intestazioni `DIPARTIMENTO DI RIFERIMENTO`, `SCUOLA` e `TIPOLOGIA` osservate nell'origine. L'identificazione avviene soltanto per corrispondenza esatta dell'etichetta, normalizzando maiuscole e spazi. I campi non riconosciuti rimangono disponibili per la correzione manuale.
+
+**`Nuovo docente`, `Ore`, `Note` non sono campi da ricercare obbligatoriamente nel report sorgente.** Sono invece le tre colonne di proposta che DidaUP dovrà aggiungere nel futuro Excel per i referenti e lasciare modificabili. Tutte le altre colonne dell'Excel distribuito sono informative e protette; la verifica contro lo storico dovrà avvenire anche al reimport.
+
+La mappatura attuale è ancora una **bozza**, non una normalizzazione definitiva degli incarichi. Le righe del report e la deduplicazione delle coperture devono essere verificate prima di generare un nuovo Excel.
