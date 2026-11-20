@@ -11,6 +11,8 @@ import hashlib
 import io
 import json
 import math
+import secrets
+from datetime import datetime, timezone
 import re
 import unicodedata
 from pathlib import Path
@@ -560,16 +562,24 @@ def build_five_workbooks(
     })
     workbook.close()
     template = output.getvalue()
-    # The exact same bytes are included five times. No file-level department
-    # metadata is written into the XLSX; provenance is the containing ZIP name.
+    # Every generation gets a visibly different filename. Existing OneDrive
+    # copies do not update when DidaUP regenerates the archive: the operator
+    # must not mistake an earlier export for the latest one.
+    export_revision = (
+        datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        + "-" + secrets.token_hex(3)
+    )
+    # Five byte-identical XLSX contents; only ZIP member names differ.
     packed = io.BytesIO()
     with ZipFile(packed, "w", compression=ZIP_DEFLATED, compresslevel=6) as archive:
         for index in range(1, NUM_COPIES + 1):
             archive.writestr(
-                f"DidaUP_Proposte_{proposal_year.replace('/', '-')}_Dipartimento_{index:02d}.xlsx",
+                f"DidaUP_Proposte_{proposal_year.replace('/', '-')}_"
+                f"rev-{export_revision}_Dipartimento_{index:02d}.xlsx",
                 template,
             )
     return packed.getvalue(), {
+        "export_revision": export_revision,
         "copies": NUM_COPIES, "historical_rows": len(prepared),
         "excluded_rows": excluded_count,
         "excluded_rows_with_missing_year": excluded_ambiguous_count,
