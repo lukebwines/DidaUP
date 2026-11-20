@@ -166,10 +166,15 @@
             <div class="mapping-settings">
               <label>Foglio del report<select id="mapping-sheet"></select></label>
               <label>Riga delle intestazioni (1–40)<input type="number" id="mapping-header-row" min="1" max="40" value="1"></label>
+              <button type="button" id="mapping-auto" class="primary">Riconosci automaticamente</button>
               <button type="button" id="mapping-load" class="secondary">Leggi colonne</button>
             </div>
+            <p id="mapping-auto-status" class="mapping-summary" role="status" aria-live="polite"></p>
             <p id="mapping-info" class="muted"></p>
-            <div id="mapping-fields" class="mapping-grid"></div>
+            <details id="mapping-advanced" open>
+              <summary>Controlla o correggi le associazioni delle colonne</summary>
+              <div id="mapping-fields" class="mapping-grid"></div>
+            </details>
             <div id="mapping-warnings" class="import-warning" hidden></div>
             <div class="quick-actions">
               <button type="button" id="mapping-save" class="primary">Salva mappatura in bozza</button>
