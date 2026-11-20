@@ -6,6 +6,7 @@ const titles = {
   dashboard: ["PANORAMICA", "Programmazione didattica"],
   cohorts: ["ANNUALITÀ CDS", "Ambito di programmazione"],
   imports: ["IMPORTAZIONE", "Acquisizione report Excel"],
+  workload: ["CALCOLO CARICO", "Regole per le ore effettive"],
   mapping: ["MAPPATURA", "Riconoscimento colonne"],
   archive: ["ARCHIVIO", "Gestione e azzeramento"],
   workbook: ["GENERA EXCEL", "Cinque file e registro esclusioni"],
@@ -103,6 +104,7 @@ function switchView(view) {
   if (view === "imports") refreshImports().catch(e => showNotice(e.message, true));
   if (view === "archive") refreshArchive().catch(e => showNotice(e.message, true));
   if (view === "workbook") refreshWorkbooks().catch(e => showNotice(e.message, true));
+  if (view === "workload") window.DidaUPWorkload?.load().catch(e => showNotice(e.message, true));
 }
 
 async function refreshYears(preferred) {
