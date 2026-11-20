@@ -1280,7 +1280,7 @@ async def generate_department_workbooks(
         "id": artifact_id,
         **summary,
         "download_url": f"api/years/{year_id}/department-workbooks/{artifact_id}/download",
-        "notice": "Cinque file uguali nell'archivio. Nessuna pubblicazione su OneDrive effettuata.",
+        "notice": "Cinque Excel identici per i referenti e un sesto Excel riservato al controllo interno delle righe escluse. Nessuna pubblicazione su OneDrive effettuata.",
     }
 
 
