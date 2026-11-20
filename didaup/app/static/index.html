@@ -137,6 +137,19 @@
                     <div class="cohort-filter-values" id="cohort-type-options" role="group" aria-label="Tipologie dei CdS"></div>
                   </div>
                 </details>
+                <details class="cohort-multiselect" id="cohort-assignment-filter">
+                  <summary id="cohort-assignment-summary">Titolo affidamento · Tutti</summary>
+                  <div class="cohort-filter-popup">
+                    <label for="cohort-assignment-search">Cerca il titolo affidamento</label>
+                    <input id="cohort-assignment-search" type="search" placeholder="Cerca valore nel report…" autocomplete="off">
+                    <div class="cohort-filter-actions">
+                      <button type="button" class="secondary" id="cohort-assignment-pick">Seleziona risultati</button>
+                      <button type="button" class="secondary" id="cohort-assignment-clear">Azzera filtro</button>
+                    </div>
+                    <div class="cohort-filter-values" id="cohort-assignment-options" role="group" aria-label="Titoli affidamento"></div>
+                    <p class="muted">Il filtro individua annualità, non singoli moduli. L'esclusione riguarda l'intera annualità, anche se contiene titoli affidamento differenti.</p>
+                  </div>
+                </details>
                 <details class="cohort-multiselect" id="cohort-cds-filter">
                   <summary id="cohort-cds-summary">Corsi di Studio · Tutti</summary>
                   <div class="cohort-filter-popup">
@@ -184,7 +197,7 @@
               <div class="table-wrap cohort-list-wrap">
                 <table aria-label="Annualità da escludere">
                   <thead>
-                    <tr><th>Da escludere</th><th>Corso di Studio</th><th>Tipologia</th><th>Codice</th><th>Sede</th><th>Anno</th><th>Righe sorgente</th></tr>
+                    <tr><th>Da escludere</th><th>Corso di Studio</th><th>Tipologia</th><th>Titolo affidamento</th><th>Codice</th><th>Sede</th><th>Anno</th><th>Righe sorgente</th></tr>
                   </thead>
                   <tbody id="cohort-review-rows"></tbody>
                 </table>
