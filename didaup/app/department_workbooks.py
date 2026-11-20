@@ -206,7 +206,8 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
              included: set[tuple[str, str, int]] | None = None,
              cohort_names: dict[tuple[str, str, int], str] | None = None,
              workload_rules: list[dict] | None = None,
-             strict_workload: bool = True):
+             strict_workload: bool = True,
+             allow_empty: bool = False):
     if not re.fullmatch(r"[0-9a-f]{64}", source_sha256):
         raise WorkbookGenerationError("Hash dello storico non valido")
     if not source.is_file():
@@ -555,7 +556,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
                     "campus": campus[:80],
                 })
         prepared.append((data, historical_id, _activity_id(data, historical_id)))
-    if not prepared:
+    if not prepared and not allow_empty:
         raise WorkbookGenerationError("Nessuna riga storica esportabile")
 
     # Cross-check EACH nonempty source line against the partition retained /
