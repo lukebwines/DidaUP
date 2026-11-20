@@ -27,6 +27,7 @@ from .source_import import MAX_UPLOAD_BYTES, check_signature, inspect_workbook
 from .column_mapping import fields_for, preview as read_mapping_preview, evaluate_mapping, autodetect_workbook
 from .cohort_import import CohortExtractionError, extract_cohorts
 from .department_workbooks import build_five_workbooks, WorkbookGenerationError
+from .department_review import review_five_workbooks, ReviewError
 
 BASE = Path(__file__).resolve().parent
 DATA = Path(os.environ.get("DIDAUP_DATA_DIR", "/data"))
@@ -1282,3 +1283,104 @@ def download_department_workbooks(year_id: int, artifact_id: int, request: Reque
         path, filename="DidaUP_5_file_completi.zip",
         media_type="application/zip",
     )
+
+
+
+@app.post("/api/years/{year_id}/department-workbooks/review")
+async def preview_five_department_proposals(
+    year_id: int, request: Request,
+    import_id: int = Form(...),
+    test_data_only: bool = Form(False),
+    files: list[UploadFile] = File(...),
+):
+    """Read-only reconciliation preview; NEVER approves or imports proposals."""
+    actor = current_user(request, ("admin", "operatore"))
+    require_write(request, actor, allow_multipart=True)
+    if not test_data_only:
+        raise HTTPException(422, "Revisione consentita soltanto con dati sintetici")
+    if len(files) != 5:
+        raise HTTPException(422, "Caricare esattamente cinque file XLSX")
+    with closing(connect()) as cx:
+        ensure_year(cx, year_id)
+        year = cx.execute(
+            "SELECT code FROM academic_years WHERE id=?", (year_id,)
+        ).fetchone()
+        source = cx.execute(
+            "SELECT * FROM source_imports WHERE id=? AND year_id=? AND kind='offerta'",
+            (import_id, year_id),
+        ).fetchone()
+        mapping = cx.execute(
+            "SELECT * FROM source_mappings WHERE import_id=?", (import_id,)
+        ).fetchone()
+        if source is None or mapping is None:
+            raise HTTPException(409, "Report storico o mappatura non disponibili")
+        excluded_rows = cx.execute(
+            "SELECT course_code,campus,study_year FROM cohorts "
+            "WHERE year_id=? AND included=0", (year_id,)
+        ).fetchall()
+        excluded = {
+            (r["course_code"], r["campus"], r["study_year"])
+            for r in excluded_rows
+        }
+        assigned = json.loads(mapping["fields_json"])
+        mapping_version = mapping["version"]
+    temp_files = []
+    try:
+        for uploaded in files:
+            original_name = Path((uploaded.filename or "").replace("\\", "/")).name
+            if (Path(original_name).suffix.lower() != ".xlsx"
+                or len(original_name) > 180):
+                raise HTTPException(422, "Caricare soltanto file .xlsx")
+            fd, temp_name = tempfile.mkstemp(prefix="review_", suffix=".xlsx", dir=WORK_DIR)
+            path = Path(temp_name)
+            temp_files.append(path)
+            size = 0
+            with os.fdopen(fd, "wb") as output:
+                while True:
+                    block = await uploaded.read(1024 * 1024)
+                    if not block:
+                        break
+                    size += len(block)
+                    if size > MAX_UPLOAD_BYTES:
+                        raise HTTPException(413, "Uno dei cinque file supera 32 MB")
+                    output.write(block)
+            if not size:
+                raise HTTPException(422, "Uno dei cinque file è vuoto")
+            try:
+                check_signature(path, ".xlsx")
+            except ValueError as exc:
+                raise HTTPException(422, "Uno dei file Excel non è valido") from exc
+        try:
+            summary = await run_in_threadpool(
+                review_five_workbooks, SOURCE_DIR / source["stored_name"],
+                source["sha256"], mapping["sheet_name"], mapping["header_row"],
+                assigned, year["code"], temp_files, excluded,
+            )
+        except ReviewError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(422, "Analisi dei cinque file non riuscita") from exc
+        with closing(connect()) as cx:
+            check = cx.execute(
+                "SELECT version FROM source_mappings WHERE import_id=?",
+                (import_id,),
+            ).fetchone()
+            now_excluded = cx.execute(
+                "SELECT course_code,campus,study_year FROM cohorts "
+                "WHERE year_id=? AND included=0", (year_id,),
+            ).fetchall()
+            if (check is None or check["version"] != mapping_version
+                or {
+                    (r["course_code"], r["campus"], r["study_year"])
+                    for r in now_excluded
+                } != excluded):
+                raise HTTPException(409, "Mappatura o esclusioni cambiate durante la revisione")
+            record(cx, actor["id"], "review_five_department_proposals",
+                   "source_import", import_id)
+            cx.commit()
+        return summary
+    finally:
+        for uploaded in files:
+            await uploaded.close()
+        for path in temp_files:
+            path.unlink(missing_ok=True)
