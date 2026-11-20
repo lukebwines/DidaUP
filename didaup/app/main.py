@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from .source_import import MAX_UPLOAD_BYTES, check_signature, inspect_workbook
+from .column_mapping import fields_for, preview as read_mapping_preview, evaluate_mapping
 
 BASE = Path(__file__).resolve().parent
 DATA = Path(os.environ.get("DIDAUP_DATA_DIR", "/data"))
@@ -151,6 +152,14 @@ def startup():
               status TEXT NOT NULL, created_at INTEGER NOT NULL,
               actor_id INTEGER NOT NULL REFERENCES users(id),
               UNIQUE(year_id,kind,sha256)
+            );
+            CREATE TABLE IF NOT EXISTS source_mappings(
+              import_id INTEGER PRIMARY KEY REFERENCES source_imports(id) ON DELETE CASCADE,
+              sheet_name TEXT NOT NULL, header_row INTEGER NOT NULL,
+              fields_json TEXT NOT NULL, warnings_json TEXT NOT NULL,
+              status TEXT NOT NULL DEFAULT 'bozza_da_verificare',
+              version INTEGER NOT NULL DEFAULT 1,
+              updated_at INTEGER NOT NULL, actor_id INTEGER NOT NULL REFERENCES users(id)
             );
             CREATE TABLE IF NOT EXISTS audit(
               id INTEGER PRIMARY KEY, at INTEGER NOT NULL, actor_id INTEGER,
@@ -714,3 +723,117 @@ def reset_archive(body: ArchiveReset, request: Request):
             f"Archivio azzerato ma {failures} file locali richiedono la rimozione manuale",
         )
     return {"ok": True, "scope": body.scope, "deleted_files": len(sources)}
+
+
+def get_source_record(cx: sqlite3.Connection, import_id: int):
+    row = cx.execute(
+        "SELECT * FROM source_imports WHERE id=?", (import_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(404, "Report non presente nell'archivio")
+    return row
+
+
+@app.get("/api/imports/{import_id}/mapping")
+def get_mapping(import_id: int, request: Request):
+    current_user(request)
+    with closing(connect()) as cx:
+        report = get_source_record(cx, import_id)
+        mapping = cx.execute(
+            "SELECT * FROM source_mappings WHERE import_id=?", (import_id,)
+        ).fetchone()
+    return {
+        "id": report["id"], "year_id": report["year_id"],
+        "original_name": report["original_name"], "kind": report["kind"],
+        "sheets": json.loads(report["sheets_json"]),
+        "available_fields": fields_for(report["kind"]),
+        "mapping": None if mapping is None else {
+            "sheet_name": mapping["sheet_name"], "header_row": mapping["header_row"],
+            "assigned": json.loads(mapping["fields_json"]),
+            "warnings": json.loads(mapping["warnings_json"]),
+            "status": mapping["status"], "version": mapping["version"],
+        },
+    }
+
+
+@app.get("/api/imports/{import_id}/preview")
+async def get_mapping_preview(
+    import_id: int, request: Request, sheet_name: str, header_row: int = 1,
+):
+    current_user(request)
+    with closing(connect()) as cx:
+        source = get_source_record(cx, import_id)
+        allowed_sheets = json.loads(source["sheets_json"])
+    if sheet_name not in [item["name"] for item in allowed_sheets]:
+        raise HTTPException(422, "Foglio non valido")
+    if not 1 <= header_row <= 40:
+        raise HTTPException(422, "Riga intestazioni fuori intervallo")
+    path = SOURCE_DIR / source["stored_name"]
+    if not path.is_file():
+        raise HTTPException(404, "File sorgente non disponibile nell'archivio")
+    try:
+        return await run_in_threadpool(read_mapping_preview, path, sheet_name, header_row)
+    except Exception as exc:
+        raise HTTPException(422, "Impossibile leggere intestazioni e anteprima") from exc
+
+
+class MappingDecision(BaseModel):
+    sheet_name: str = Field(min_length=1, max_length=100)
+    header_row: int = Field(ge=1, le=40)
+    assigned: dict[str, int]
+    expected_version: int = Field(ge=0)
+
+
+@app.put("/api/imports/{import_id}/mapping")
+async def set_mapping(import_id: int, body: MappingDecision, request: Request):
+    actor = current_user(request, ("admin", "operatore"))
+    require_write(request, actor)
+    with closing(connect()) as cx:
+        report = get_source_record(cx, import_id)
+        existing = cx.execute(
+            "SELECT version FROM source_mappings WHERE import_id=?", (import_id,)
+        ).fetchone()
+        current_version = int(existing["version"]) if existing else 0
+        if current_version != body.expected_version:
+            raise HTTPException(409, "Mappatura modificata da un altro operatore: ricaricare")
+        sheets = json.loads(report["sheets_json"])
+        sheet = next((item for item in sheets if item["name"] == body.sheet_name), None)
+        if sheet is None:
+            raise HTTPException(422, "Foglio non previsto nel report")
+        if body.header_row > sheet["rows"]:
+            raise HTTPException(422, "Riga intestazioni oltre il limite del foglio")
+        available = {f["key"] for f in fields_for(report["kind"])}
+        if not body.assigned or not set(body.assigned).issubset(available):
+            raise HTTPException(422, "Selezionare i campi tra quelli previsti")
+        for field, index in body.assigned.items():
+            if isinstance(index, bool) or index < 0 or index >= sheet["columns"]:
+                raise HTTPException(422, "Indice colonna non valido")
+        if len(set(body.assigned.values())) != len(body.assigned):
+            raise HTTPException(422, "La stessa colonna risulta associata a più campi")
+        warnings = evaluate_mapping(report["kind"], body.assigned)
+        if existing is None:
+            cx.execute(
+                """INSERT INTO source_mappings(
+                 import_id,sheet_name,header_row,fields_json,warnings_json,
+                 status,version,updated_at,actor_id) VALUES(?,?,?,?,?,?,?,?,?)""",
+                (import_id, body.sheet_name, body.header_row,
+                 json.dumps(body.assigned), json.dumps(warnings,ensure_ascii=False),
+                 "bozza_da_verificare", 1, int(time.time()), actor["id"]),
+            )
+        else:
+            cx.execute(
+                """UPDATE source_mappings
+                   SET sheet_name=?, header_row=?, fields_json=?, warnings_json=?,
+                   status='bozza_da_verificare',version=version+1,updated_at=?,actor_id=?
+                   WHERE import_id=? AND version=?""",
+                (body.sheet_name, body.header_row, json.dumps(body.assigned),
+                 json.dumps(warnings,ensure_ascii=False), int(time.time()), actor["id"],
+                 import_id, body.expected_version),
+            )
+        record(cx, actor["id"], "save_column_mapping", "source_import", import_id)
+        cx.commit()
+    return {
+        "status": "bozza_da_verificare",
+        "version": current_version + 1, "warnings": warnings,
+        "message": "Mappatura salvata, ancora da verificare prima dell'elaborazione"
+    }
