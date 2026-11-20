@@ -3,6 +3,8 @@
 const cohortReview = {
   data: null,
   selected: new Set(),
+  saved: new Set(),
+  filters: {courses: new Set(), campuses: new Set(), years: new Set()},
   sourceYear: null,
   loading: false,
 };
@@ -17,9 +19,104 @@ function normalizeCohortSearch(value) {
     .replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("it-IT").trim();
 }
 
+function pendingCohortChanges() {
+  if (!cohortReview.data) return {exclude: 0, restore: 0};
+  let exclude = 0, restore = 0;
+  for (const item of cohortReview.data.cohorts) {
+    const key = cohortKey(item);
+    if (cohortReview.selected.has(key) && !cohortReview.saved.has(key)) exclude++;
+    if (!cohortReview.selected.has(key) && cohortReview.saved.has(key)) restore++;
+  }
+  return {exclude, restore};
+}
+
+function cohortFacetOptions(kind) {
+  if (!cohortReview.data) return [];
+  const values = new Map();
+  for (const item of cohortReview.data.cohorts) {
+    if (kind === "courses") {
+      if (!values.has(item.course_code)) {
+        values.set(item.course_code, item.course_name + " · " + item.course_code);
+      }
+    } else if (kind === "campuses") {
+      values.set(item.campus, item.campus);
+    } else if (kind === "years") {
+      values.set(String(item.study_year), item.study_year + "° anno");
+    }
+  }
+  return [...values].map(([value, label]) => ({value, label})).sort(
+    (a, b) => kind === "years"
+      ? Number(a.value) - Number(b.value)
+      : a.label.localeCompare(b.label, "it")
+  );
+}
+
+function renderCohortFacet(kind) {
+  const ids = {courses: "cds", campuses: "campus", years: "year"};
+  const id = ids[kind], container = el("cohort-" + id + "-options");
+  const chosen = cohortReview.filters[kind];
+  const terms = kind === "courses"
+    ? normalizeCohortSearch(el("cohort-cds-search").value) : "";
+  const items = cohortFacetOptions(kind).filter(x =>
+    !terms || normalizeCohortSearch(x.label).includes(terms)
+  );
+  const fragment = document.createDocumentFragment();
+  for (const item of items) {
+    const label = document.createElement("label");
+    label.className = "cohort-filter-choice";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = chosen.has(item.value);
+    checkbox.setAttribute("aria-label", item.label);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) chosen.add(item.value);
+      else chosen.delete(item.value);
+      updateFacetSummary(kind);
+      renderCohortChecklist();
+    });
+    const name = document.createElement("span");
+    name.textContent = item.label;
+    label.append(checkbox, name);
+    fragment.appendChild(label);
+  }
+  container.replaceChildren(fragment);
+  if (!items.length) {
+    const empty = document.createElement("span");
+    empty.className = "muted";
+    empty.textContent = "Nessuna corrispondenza";
+    container.appendChild(empty);
+  }
+  updateFacetSummary(kind);
+}
+
+function updateFacetSummary(kind) {
+  const ids = {courses: "cds", campuses: "campus", years: "year"};
+  const singular = {courses: "CdS", campuses: "Sedi", years: "Anni"};
+  const all = {courses: "Tutti", campuses: "Tutte", years: "Tutti"};
+  const count = cohortReview.filters[kind].size;
+  setText("cohort-" + ids[kind] + "-summary",
+    singular[kind] + " · " + (count ? count + " selezionati" : all[kind]));
+}
+
+function resetCohortFacets() {
+  for (const filter of Object.values(cohortReview.filters)) filter.clear();
+  el("cohort-cds-search").value = "";
+  el("cohort-review-search").value = "";
+  el("cohort-review-filter").value = "all";
+  for (const kind of ["courses", "campuses", "years"]) renderCohortFacet(kind);
+  renderCohortChecklist();
+}
+
 function clearCohortReview() {
   cohortReview.data = null;
   cohortReview.selected.clear();
+  cohortReview.saved.clear();
+  for (const facet of Object.values(cohortReview.filters)) facet.clear();
+  el("cohort-cds-search").value = "";
+  for (const id of ["cds", "campus", "year"]) {
+    el("cohort-" + id + "-filter").open = false;
+    el("cohort-" + id + "-options").replaceChildren();
+  }
   cohortReview.sourceYear = state.selected;
   el("cohort-review-body").hidden = true;
   el("cohort-review-placeholder").hidden = false;
@@ -32,8 +129,13 @@ function clearCohortReview() {
 
 async function refreshCohortSourcePicker() {
   const yearId = state.selected;
-  clearCohortReview();
   const select = el("cohort-source-select");
+  const currentSource = select.value;
+  // Returning to this view must NOT silently delete unsaved checkbox changes.
+  const keep = Boolean(cohortReview.data &&
+    cohortReview.sourceYear === yearId &&
+    String(cohortReview.data.import_id) === currentSource);
+  if (!keep) clearCohortReview();
   select.replaceChildren();
   if (!yearId) return;
   const sources = await api("years/" + yearId + "/imports");
@@ -54,6 +156,11 @@ async function refreshCohortSourcePicker() {
       source.sheets.map(s => s.name).join(", ");
     select.appendChild(option);
   }
+  if (keep && candidates.some(x => String(x.id) === currentSource)) {
+    select.value = currentSource;
+  } else if (keep) {
+    clearCohortReview();
+  }
   el("cohort-review-load").disabled = false;
 }
 
@@ -61,10 +168,17 @@ function visibleCohortCandidates() {
   if (!cohortReview.data) return [];
   const q = normalizeCohortSearch(el("cohort-review-search").value);
   const filter = el("cohort-review-filter").value;
+  const {courses, campuses, years} = cohortReview.filters;
   return cohortReview.data.cohorts.filter(item => {
-    const selected = cohortReview.selected.has(cohortKey(item));
+    const key = cohortKey(item);
+    const selected = cohortReview.selected.has(key);
+    const saved = cohortReview.saved.has(key);
     if (filter === "excluded" && !selected) return false;
     if (filter === "included" && selected) return false;
+    if (filter === "changed" && selected === saved) return false;
+    if (courses.size && !courses.has(item.course_code)) return false;
+    if (campuses.size && !campuses.has(item.campus)) return false;
+    if (years.size && !years.has(String(item.study_year))) return false;
     if (!q) return true;
     return normalizeCohortSearch(
       [item.course_name, item.course_code, item.campus,
@@ -119,11 +233,20 @@ function renderCohortChecklist() {
   el("cohort-review-empty").hidden = visible.length !== 0;
   setText("cohort-review-count", visible.length + " visibili / " +
     data.cohort_count + " annualità");
-  setText("cohort-review-selected", cohortReview.selected.size + " da escludere");
+  setText("cohort-review-selected", cohortReview.selected.size + " da escludere (bozza)");
+  setText("cohort-review-saved", cohortReview.saved.size + " escluse già salvate");
+  const diff = pendingCohortChanges();
+  setText("cohort-review-pending", (diff.exclude + diff.restore) +
+    " modifiche non salvate (+" + diff.exclude + " esclusioni, " +
+    diff.restore + " ripristini)");
 }
 
 async function loadCohortCandidates() {
   if (cohortReview.loading || !state.selected) return;
+  const pending = pendingCohortChanges();
+  if ((pending.exclude || pending.restore) &&
+      !window.confirm("Sono presenti modifiche non salvate alle esclusioni. " +
+        "Ricaricare dal report e perdere la bozza?")) return;
   const importId = Number(el("cohort-source-select").value);
   if (!Number.isInteger(importId) || importId < 1) {
     showNotice("Selezionare prima un report dell'offerta già mappato.", true);
@@ -141,6 +264,14 @@ async function loadCohortCandidates() {
     cohortReview.selected = new Set(
       data.cohorts.filter(c => c.excluded).map(cohortKey)
     );
+    cohortReview.saved = new Set(cohortReview.selected);
+    for (const facet of Object.values(cohortReview.filters)) facet.clear();
+    el("cohort-cds-search").value = "";
+    el("cohort-review-search").value = "";
+    el("cohort-review-filter").value = "all";
+    for (const kind of ["courses", "campuses", "years"]) {
+      renderCohortFacet(kind);
+    }
     el("cohort-review-body").hidden = false;
     el("cohort-review-placeholder").hidden = true;
     const notices = [];
@@ -194,10 +325,13 @@ async function saveCohortSelections() {
     .map(r => ({
       course_code: r.course_code, campus: r.campus, study_year: r.study_year,
     }));
+  const delta = pendingCohortChanges();
   const preview = "Anno " + (state.years.find(y => y.id === data.year_id)?.code || "") +
     ": saranno censite " + data.cohort_count + " annualità, di cui " +
     excluded.length + " ESCLUSE e " + (data.cohort_count - excluded.length) +
-    " incluse. I file originali resteranno invariati." +
+    " incluse. Rispetto alle scelte già salvate: " +
+    delta.exclude + " nuove esclusioni e " + delta.restore +
+    " ripristini. I file originali resteranno invariati." +
     (data.anomaly_count
       ? " ATTENZIONE: " + data.anomaly_count +
         " righe/gruppi anomali non verranno acquisiti e dovranno essere verificati."
