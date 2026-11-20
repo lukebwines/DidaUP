@@ -141,3 +141,20 @@ Per ripartire da una mappatura che visualizza il conflitto:
 4. verificare che i campi non supportati siano **Non associata**, poi premere **Salva mappatura in bozza**.
 
 L'aggiornamento non genera ancora incarichi né Excel per SSD: corregge esclusivamente la preparazione delle colonne.
+
+## 0.1.8-alpha1 — selezione annualità con spunte e ricerca rapida
+
+La funzione **Annualità CdS** dispone ora di una procedura di selezione massiva con ricerca istantanea:
+
+1. Selezionare l'**anno accademico** e aprire **Annualità CdS**.
+2. Nel riquadro **Seleziona le annualità da escludere**, scegliere il report dell'offerta già importato e mappato.
+3. Premere **Ricava elenco dal report**: le righe vengono raggruppate per **codice CdS, sede e anno di corso**, senza perdere il documento originale; le righe duplicate del medesimo gruppo sono conteggiate.
+4. Usare **Ricerca rapida** per filtrare per codice, denominazione, sede oppure anno. Le spunte significano **DA ESCLUDERE**.
+5. I comandi **Spunta risultati visibili** e **Togli spunta ai risultati visibili** agiscono soltanto sui risultati filtrati; le spunte delle voci nascoste sono conservate.
+6. Inserire una motivazione per le nuove esclusioni e premere **Salva le esclusioni selezionate**. DidaUP riepiloga il totale e richiede la conferma prima di intervenire.
+
+Prima del salvataggio, la schermata è una **sola anteprima**: nessun archivio cambia. Al salvataggio vengono censite le annualità riconosciute e registrate le esclusioni con motivazione, senza alterare il file Excel originale. Le annualità non più presenti nel report selezionato sono preservate. I precedenti motivi di esclusione non vengono riscritti quando l'annualità resta esclusa.
+
+**Verifiche di sicurezza:** mismatch dell'anno accademico, mappatura incompleta, codici/anni non validi, denominazioni CdS discordanti, anomalie nelle righe sorgente, cambiamenti concorrenti e abbinamenti provenienti da un altro report. Le anomalie sono mostrate come conteggio e non vengono incluse automaticamente nell'elenco: la conferma è esplicita.
+
+L'identificazione non stabilisce ancora gli affidamenti o gli SSD e non genera Excel per i referenti. Nel laboratorio domestico devono continuare a essere utilizzati soltanto file sintetici.
