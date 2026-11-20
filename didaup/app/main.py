@@ -1247,13 +1247,45 @@ async def get_workload_choices(year_id: int, import_id: int, request: Request):
     current_user(request)
     with closing(connect()) as cx:
         source, mapping = workload_source_snapshot(cx, year_id, import_id)
+        year = cx.execute(
+            "SELECT code FROM academic_years WHERE id=?", (year_id,)
+        ).fetchone()
+        cohorts = cx.execute(
+            "SELECT course_code,course_name,campus,study_year,included FROM cohorts "
+            "WHERE year_id=?", (year_id,),
+        ).fetchall()
+        included = {
+            (r["course_code"], r["campus"], r["study_year"])
+            for r in cohorts if r["included"]
+        }
+        excluded = {
+            (r["course_code"], r["campus"], r["study_year"])
+            for r in cohorts if not r["included"]
+        }
+        cohort_names = {
+            (r["course_code"], r["campus"], r["study_year"]): r["course_name"]
+            for r in cohorts
+        }
         assigned = json.loads(mapping["fields_json"])
+    path = SOURCE_DIR / source["stored_name"]
     try:
-        return await run_in_threadpool(
-            source_choices, SOURCE_DIR / source["stored_name"],
-            mapping["sheet_name"], mapping["header_row"], assigned,
+        # Match the generation algorithm, including code/name fallback,
+        # fully-excluded courses, missing years and multi-year rows.
+        # Do not infer eligibility from a separate simplified filter.
+        prepared = await run_in_threadpool(
+            _prepare, path, source["sha256"], mapping["sheet_name"],
+            mapping["header_row"], assigned, year["code"],
+            excluded, included, cohort_names, None, False, True,
         )
-    except WorkloadRuleError as exc:
+        kept_ids = {record[1] for record in prepared[0]}
+        result = await run_in_threadpool(
+            source_choices, path, mapping["sheet_name"],
+            mapping["header_row"], assigned,
+            source_sha256=source["sha256"], allowed_source_ids=kept_ids,
+        )
+        result["excluded_rows"] = prepared[1]
+        return result
+    except (WorkloadRuleError, WorkbookGenerationError) as exc:
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:
         raise HTTPException(422, "Impossibile leggere i valori dal report") from exc
