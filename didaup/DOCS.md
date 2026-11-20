@@ -1,4 +1,4 @@
-# DidaUP — Installazione e collaudo (0.1.5-alpha1)
+# DidaUP — Installazione e collaudo (0.1.10-alpha1)
 
 > Versione iniziale di sviluppo **non collaudata su una specifica istanza di Home Assistant**. Usare soltanto dati sintetici. Non caricare file reali dell'Ateneo.
 
@@ -67,7 +67,7 @@ Per **uno specifico anno** oppure per **tutti gli anni**, vengono sempre conserv
 
 Il reset richiede la password amministrativa e una nuova conferma testuale: `AZZERA LAVORAZIONE 2026/27` per l'A.A. indicato (il codice effettivo è mostrato dall'interfaccia), oppure `AZZERA LAVORAZIONI` per tutte le annualità. Le **vecchie formule di conferma non sono più valide**, per prevenire azzeramenti accidentali effettuati da vecchie schermate.
 
-Nell'attuale alpha **non vengono ancora generati file di lavoro**, quindi un azzeramento può legittimamente eliminare **zero** elaborazioni. È comunque registrato nell'audit. La conservazione delle impostazioni è verificata anche da test che simulano un riavvio dell'app.
+Nella versione corrente vengono prodotti pacchetti ZIP dei cinque Excel identici: l'azzeramento rimuove questi output rigenerabili, **non** i report sorgenti né le mappature. È comunque registrato nell'audit. La conservazione delle impostazioni è verificata anche da test che simulano un riavvio dell'app.
 
 **Non è un backup:** cancellazione dell'add-on o del suo volume `/data`, danni al database e ripristini di backup precedenti possono comunque far perdere dati. Prima di aggiornare l'add-on, verificare di avere un backup Home Assistant recente; la copia dovrebbe includere database e file locali dell'add-on.
 
@@ -82,9 +82,9 @@ Il backend applica i permessi agli endpoint, indipendentemente dagli elementi mo
 
 ## Limiti attuali
 
-La versione 0.1 è un **primo nucleo tecnico**, non l'applicazione finale:
-- acquisisce e ispeziona il file `.xls`, ma **non mappa ancora gli incarichi e le assegnazioni**;
-- non genera né acquisisce XLSX dei referenti SSD;
+La versione 0.1 è ancora un **ambiente di collaudo**, non l'applicazione finale:
+- acquisisce, ispeziona e mappa le colonne dei file `.xls`/`.xlsx`, senza validare automaticamente gli affidamenti;
+- **genera cinque XLSX completi e identici** in ZIP e dispone di un controllo preliminare dei cinque XLSX restituiti, senza ancora registrarli come proposte definitivamente acquisite;
 - non automatizza la distribuzione via email o SharePoint;
 - non integra ancora regole e avvertenze del regolamento;
 - non dispone ancora di test di sicurezza end-to-end e collaudo su tunnel reale.
@@ -166,3 +166,16 @@ L'identificazione non stabilisce ancora gli affidamenti o gli SSD e non genera E
 
 ## Correzione di sicurezza 0.1.9-alpha1
 La vecchia funzione di azzeramento era distruttiva anche per le mappature e le esclusioni. Dalla versione 0.1.9-alpha1 il reset è espressamente ristretto agli output temporanei. Non utilizzare versioni precedenti per operazioni di azzeramento; aggiornare l'add-on prima di provare la funzione.
+
+
+## Cinque file identici per dipartimento — collaudo 0.1.10-alpha1
+
+1. Selezionare l'A.A. storico nel selettore e importare un report di **offerta didattica** esclusivamente sintetico.
+2. Salvare la mappatura del report. Per generare i cinque file servono almeno codice CdS, sede, anno di corso, codice insegnamento e `TOT ORE EFFETTIVE`. Le righe senza docente e senza ore sono mantenute nello storico.
+3. Aprire **Genera Excel**; selezionare il report mappato e premere **Genera 5 Excel identici**.
+4. Scaricare lo ZIP: contiene cinque copie inizialmente identiche, denominate provvisoriamente `Dipartimento_01` … `Dipartimento_05`. Non vengono effettuate suddivisioni per dipartimento né SSD; tutte le attività sono presenti in tutti e cinque i file, fatte salve le annualità precedentemente escluse con scelta esplicita.
+5. I file generati hanno 37 colonne visibili: 33 informative di storico e quattro compilabili (**Tipo variazione, Nuovo docente, Ore, Note**). Le colonne tecniche nascoste servono al controllo di integrità. La protezione senza password previene modifiche accidentali ma non sostituisce la validazione sul server.
+6. L'apertura e la condivisione sul **OneDrive istituzionale** sono ancora operazioni manuali: l'add-on **non** pubblica automaticamente. **Non** caricare file veri nel laboratorio finché la destinazione e la sicurezza non sono state autorizzate.
+7. Al rientro, caricare esattamente cinque XLSX compilati nella sezione **Controllo delle proposte restituite**. Il sistema esegue una **sola anteprima di verifica** su fonte, ID, ore e sovrapposizioni tra file e non salva alcun affidamento proposto o approvato. L'esito viene mostrato senza modificare gli archivi storici.
+
+Il tasto Excel **«+ Aggiungi variazione» non è ancora incorporato** nei file generati: è disponibile un Office Script sperimentale in `prototypes/office_scripts/aggiungi_variazione.ts`, da collaudare e associare al file master nel tenant Microsoft 365 dell'Ateneo. I cinque file non devono essere distribuiti per uso amministrativo definitivo prima di questa verifica e prima dell'implementazione delle autorizzazioni e del controllo istituzionale delle proposte.
