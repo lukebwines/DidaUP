@@ -206,3 +206,98 @@ def test_workload_api_profile_preview_and_export(client, tmp_path):
         skip_empty_area=False
     )
     assert [line[28] for line in rows[6:10]] == [10, 5, 0, 4]
+
+
+
+def test_multiselection_or_inside_each_filter_and_and_between_filters():
+    rules = validate_rules([
+        rule(tipologia=["Laurea", "Magistrale"], cds=["SYN-A", "SYN-B"],
+             taf=["A", "C"], mode="percentuale", value="40"),
+    ])
+    assert rules[0]["tipologia"] == ["Laurea", "Magistrale"]
+    assert rules[0]["cds"] == ["SYN-A", "SYN-B"]
+    assert rules[0]["taf"] == ["A", "C"]
+    assert apply_workload(20, "Laurea", "SYN-B", "C", rules) == (8.0, 0, None)
+    assert apply_workload(20, "Magistrale", "SYN-A", "A", rules) == (8.0, 0, None)
+    assert apply_workload(20, "Altro", "SYN-A", "C", rules) == (0, None, None)
+    assert apply_workload(20, "Laurea", "SYN-C", "C", rules) == (0, None, None)
+    assert apply_workload(20, "Laurea", "SYN-A", "B", rules) == (0, None, None)
+
+
+def test_multiselection_duplicate_sets_and_values_are_rejected():
+    with pytest.raises(WorkloadRuleError, match="duplicata"):
+        validate_rules([
+            rule(cds=["A", "B"], taf=["C", "D"]),
+            rule(cds=[" b ", " a "], taf=["d", "c"]),
+        ])
+    with pytest.raises(WorkloadRuleError, match="duplicato"):
+        validate_rules([rule(cds=["A", " a "])])
+    with pytest.raises(WorkloadRuleError, match="vuota"):
+        validate_rules([rule(taf=[""])])
+    with pytest.raises(WorkloadRuleError, match="non valido"):
+        validate_rules([rule(cds=[10])])
+    with pytest.raises(WorkloadRuleError, match="non valido"):
+        validate_rules([rule(taf={"not": "a list"})])
+
+
+def test_multiselect_specificity_and_overlap_never_silently_sum():
+    rules = validate_rules([
+        rule(value="10"),
+        rule(cds=["SYN-A", "SYN-B"], value="50"),
+        rule(cds=["SYN-A", "SYN-B"], taf=["A", "B"], mode="fissa", value="5"),
+    ])
+    assert apply_workload(20, "X", "SYN-B", "B", rules) == (5.0, 2, None)
+    assert apply_workload(20, "X", "SYN-A", "C", rules) == (10.0, 1, None)
+    assert apply_workload(20, "X", "SYN-C", "A", rules) == (2.0, 0, None)
+
+    conflicting = validate_rules([
+        rule(cds=["SYN-A", "SYN-B"], value="50"),
+        rule(taf=["A", "B"], value="20"),
+    ])
+    assert "Conflitto" in apply_workload(20, "X", "SYN-B", "B", conflicting)[2]
+
+
+def test_previous_scalar_rules_migrate_to_multiselect_lists_without_changing_result():
+    legacy = rule(cds="SYN-A", taf="C", value="80")
+    converted = validate_rules([legacy])
+    assert converted[0]["cds"] == ["SYN-A"]
+    assert converted[0]["taf"] == ["C"]
+    assert converted[0]["tipologia"] == []
+    assert apply_workload(10, "X", "SYN-A", "C", converted) == (8.0, 0, None)
+
+
+def test_multi_cds_rule_applied_in_all_five_excel_exports(tmp_path):
+    source = tmp_path / "multi-cds.xlsx"
+    mapping = make_source(source)
+    mapping.pop("ore_effettive_totali")
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    rules = validate_rules([
+        rule(cds=["SYN-A", "SYN-B"], taf=["TAF-SINTETICO"], value="50")
+    ])
+    packed, summary = build_five_workbooks(
+        source, digest, "Offerta sintetica", 1, mapping, "2026/27",
+        workload_rules=rules,
+    )
+    assert summary["workload"]["per_rule_rows"] == [4]
+    assert summary["workload"]["total_effective_hours"] == 19
+    with ZipFile(io.BytesIO(packed)) as archive:
+        names = referent_names(archive)
+        assert len(names) == 5
+        assert len({archive.read(name) for name in names}) == 1
+        output = tmp_path / "multi-output.xlsx"
+        output.write_bytes(archive.read(names[0]))
+    rows = CalamineWorkbook.from_path(output).get_sheet_by_name(
+        "Proposte SSD"
+    ).to_python(skip_empty_area=False)
+    assert [row[28] for row in rows[6:10]] == [10, 5, 0, 4]
+
+
+def test_workload_multiselect_controls_are_visible_in_section(client):
+    page = client.get("/").text
+    js = client.get("/static/workload.js").text
+    for key in ("typologia", "cds", "taf"):
+        for part in ("toggle", "panel", "search", "options", "all", "clear", "count"):
+            assert f'id="workload-{key}-{part}"' in page
+    assert "Seleziona visibili" in page
+    assert "Deseleziona tutte" in page
+    assert "filteredOptions" in js and "groups.typologia.selected" in js
