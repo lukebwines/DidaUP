@@ -369,16 +369,60 @@ document.addEventListener("DOMContentLoaded", () => {
     loadCohortCandidates().catch(e => showNotice(e.message, true)));
   el("cohort-review-search").addEventListener("input", renderCohortChecklist);
   el("cohort-review-filter").addEventListener("change", renderCohortChecklist);
-  el("cohort-check-visible").addEventListener("click", () => {
-    for (const row of visibleCohortCandidates()) {
-      cohortReview.selected.add(cohortKey(row));
+  el("cohort-cds-search").addEventListener("input", () => renderCohortFacet("courses"));
+  el("cohort-cds-pick").addEventListener("click", () => {
+    const term = normalizeCohortSearch(el("cohort-cds-search").value);
+    if (!term) {
+      showNotice("Scrivi prima parte del nome o del codice CdS da selezionare.", true);
+      return;
     }
+    for (const item of cohortFacetOptions("courses")) {
+      if (normalizeCohortSearch(item.label).includes(term)) {
+        cohortReview.filters.courses.add(item.value);
+      }
+    }
+    renderCohortFacet("courses");
+    renderCohortChecklist();
+  });
+  for (const [kind, id] of [
+    ["courses", "cds"], ["campuses", "campus"], ["years", "year"]
+  ]) {
+    el("cohort-" + id + "-clear").addEventListener("click", () => {
+      cohortReview.filters[kind].clear();
+      if (kind === "courses") el("cohort-cds-search").value = "";
+      renderCohortFacet(kind);
+      renderCohortChecklist();
+    });
+  }
+  el("cohort-clear-filters").addEventListener("click", resetCohortFacets);
+  el("cohort-discard-pending").addEventListener("click", () => {
+    const pending = pendingCohortChanges();
+    if (!pending.exclude && !pending.restore) return;
+    if (!window.confirm("Annullare le modifiche non ancora salvate? " +
+      "Le esclusioni registrate nel database resteranno invariate.")) return;
+    cohortReview.selected = new Set(cohortReview.saved);
+    renderCohortChecklist();
+  });
+  el("cohort-check-visible").addEventListener("click", () => {
+    const visible = visibleCohortCandidates();
+    const changed = visible.filter(row =>
+      !cohortReview.selected.has(cohortKey(row)));
+    if (!changed.length) return;
+    if (!window.confirm("Escludere " + changed.length + " annualità tra le " +
+        visible.length + " visualizzate? Le altre annualità non saranno modificate. " +
+        "La conferma NON salva ancora nel database.")) return;
+    for (const row of changed) cohortReview.selected.add(cohortKey(row));
     renderCohortChecklist();
   });
   el("cohort-uncheck-visible").addEventListener("click", () => {
-    for (const row of visibleCohortCandidates()) {
-      cohortReview.selected.delete(cohortKey(row));
-    }
+    const visible = visibleCohortCandidates();
+    const changed = visible.filter(row =>
+      cohortReview.selected.has(cohortKey(row)));
+    if (!changed.length) return;
+    if (!window.confirm("Ripristinare " + changed.length + " annualità tra le " +
+        visible.length + " visualizzate? Le altre annualità non saranno modificate. " +
+        "La conferma NON salva ancora nel database.")) return;
+    for (const row of changed) cohortReview.selected.delete(cohortKey(row));
     renderCohortChecklist();
   });
 });
