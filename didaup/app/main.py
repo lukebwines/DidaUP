@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from .source_import import MAX_UPLOAD_BYTES, check_signature, inspect_workbook
 from .column_mapping import fields_for, preview as read_mapping_preview, evaluate_mapping, autodetect_workbook
+from .cohort_import import CohortExtractionError, extract_cohorts
 
 BASE = Path(__file__).resolve().parent
 DATA = Path(os.environ.get("DIDAUP_DATA_DIR", "/data"))
@@ -160,6 +161,18 @@ def startup():
               status TEXT NOT NULL DEFAULT 'bozza_da_verificare',
               version INTEGER NOT NULL DEFAULT 1,
               updated_at INTEGER NOT NULL, actor_id INTEGER NOT NULL REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS cohort_exclusion_batches(
+              id INTEGER PRIMARY KEY,
+              import_id INTEGER NOT NULL REFERENCES source_imports(id) ON DELETE CASCADE,
+              year_id INTEGER NOT NULL REFERENCES academic_years(id),
+              mapping_version INTEGER NOT NULL,
+              source_sha256 TEXT NOT NULL,
+              cohort_count INTEGER NOT NULL,
+              exclusion_count INTEGER NOT NULL,
+              anomaly_count INTEGER NOT NULL,
+              actor_id INTEGER NOT NULL REFERENCES users(id),
+              created_at INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS audit(
               id INTEGER PRIMARY KEY, at INTEGER NOT NULL, actor_id INTEGER,
