@@ -387,3 +387,157 @@ def test_nd_mode_is_visible_in_user_interface(client):
     assert 'id="workload-value-wrapper"' in html
     assert 'workload-count-nd' in js
     assert 'input.required = !unavailable' in js
+
+
+def _upload_mapped_synthetic_report(client, csrf, path, mapping):
+    uploaded = client.post(
+        "/api/years/1/imports", headers=csrf,
+        data={"kind": "offerta", "test_data_only": "true"},
+        files={"source": (
+            "offer-only-synthetic.xlsx", path.read_bytes(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    import_id = uploaded.json()["id"]
+    mapped = client.put(
+        f"/api/imports/{import_id}/mapping", headers=csrf,
+        json={"sheet_name": "Offerta sintetica", "header_row": 1,
+              "assigned": mapping, "expected_version": 0},
+    )
+    assert mapped.status_code == 200, mapped.text
+    return import_id
+
+
+def _cohort_set_inclusion(client, csrf, code, year, included):
+    created = client.post("/api/years/1/cohorts", headers=csrf, json={
+        "course_code": code,
+        "course_name": "Corso sintetico",
+        "campus": "Sede TEST",
+        "study_year": year,
+    })
+    assert created.status_code == 200, created.text
+    if included:
+        return created.json()["id"]
+    changed = client.patch(
+        f"/api/cohorts/{created.json()['id']}", headers=csrf,
+        json={"included": False, "reason": "Esclusione sintetica",
+              "expected_version": 1},
+    )
+    assert changed.status_code == 200, changed.text
+    return created.json()["id"]
+
+
+def test_workload_selectors_include_only_rows_retained_in_five_xlsx(client, tmp_path):
+    source = tmp_path / "offer-synthetic.xlsx"
+    mapping = make_source(
+        source, with_tipologia=True,
+        taf_by_course={"SYN-A": "TAF-A", "SYN-B": "TAF-B"},
+    )
+    csrf = signed_in(client)
+    import_id = _upload_mapped_synthetic_report(client, csrf, source, mapping)
+    url = f"/api/years/1/workload/choices?import_id={import_id}"
+
+    before = client.get(url)
+    assert before.status_code == 200, before.text
+    assert {x["code"] for x in before.json()["cds"]} == {"SYN-A", "SYN-B"}
+    assert before.json()["taf"] == ["TAF-A", "TAF-B"]
+    assert before.json()["tipologie"] == ["Laurea", "Magistrale"]
+    _cohort_set_inclusion(client, csrf, "SYN-B", 2, False)
+
+    after = client.get(url)
+    assert after.status_code == 200, after.text
+    data = after.json()
+    assert [x["code"] for x in data["cds"]] == ["SYN-A"]
+    assert data["taf"] == ["TAF-A"]
+    assert data["tipologie"] == ["Laurea"]
+    assert data["rows_in_scope"] == 3
+    assert data["excluded_rows"] == 1
+    # Verify against what was ACTUALLY generated, not just the source filter.
+    generated = client.post(
+        "/api/years/1/department-workbooks", headers=csrf,
+        json={"import_id": import_id},
+    )
+    assert generated.status_code == 200, generated.text
+    assert generated.json()["reconciliation"]["included_in_each_workbook"] == 3
+    assert generated.json()["reconciliation"]["excluded_in_internal_register"] == 1
+    download = client.get("/" + generated.json()["download_url"])
+    assert download.status_code == 200, download.text
+    with ZipFile(io.BytesIO(download.content)) as archive:
+        copies = referent_names(archive)
+        assert len(copies) == 5
+        assert len({archive.read(name) for name in copies}) == 1
+        out = tmp_path / "actual.xlsx"
+        out.write_bytes(archive.read(copies[0]))
+    rows = CalamineWorkbook.from_path(out).get_sheet_by_name(
+        "Proposte SSD"
+    ).to_python(skip_empty_area=False)[6:]
+    assert len(rows) == 3
+    assert {row[1] for row in rows} == {"SYN-A"}
+    assert {row[16] for row in rows} == {"TAF-A"}
+
+    # Once an annuality is explicitly re-included, it returns to the selector.
+    excluded_cohort = next(
+        x for x in client.get("/api/years/1/cohorts").json()
+        if x["course_code"] == "SYN-B"
+    )
+    restored = client.patch(
+        f"/api/cohorts/{excluded_cohort['id']}", headers=csrf,
+        json={"included": True, "expected_version": excluded_cohort["version"]},
+    )
+    assert restored.status_code == 200, restored.text
+    again = client.get(url)
+    assert again.status_code == 200
+    assert {x["code"] for x in again.json()["cds"]} == {"SYN-A", "SYN-B"}
+    assert again.json()["rows_in_scope"] == 4
+
+
+def test_workload_selectors_empty_when_all_cohorts_excluded(client, tmp_path):
+    source = tmp_path / "all-excluded.xlsx"
+    mapping = make_source(source, with_tipologia=True)
+    csrf = signed_in(client)
+    import_id = _upload_mapped_synthetic_report(client, csrf, source, mapping)
+    _cohort_set_inclusion(client, csrf, "SYN-A", 2, False)
+    _cohort_set_inclusion(client, csrf, "SYN-B", 2, False)
+    choices = client.get(f"/api/years/1/workload/choices?import_id={import_id}")
+    assert choices.status_code == 200, choices.text
+    assert choices.json()["rows_in_scope"] == 0
+    assert choices.json()["excluded_rows"] == 4
+    assert choices.json()["cds"] == []
+    assert choices.json()["tipologie"] == []
+    assert choices.json()["taf"] == []
+
+
+def test_workload_choices_keep_mixed_annuality_rows_that_export_keeps(client, tmp_path):
+    source = tmp_path / "mixed-annuality.xlsx"
+    mapping = make_source(
+        source, with_tipologia=True, annualities_by_row={1: "1,2,3"},
+        taf_by_course={"SYN-A": "TAF-A", "SYN-B": "TAF-B"},
+    )
+    csrf = signed_in(client)
+    import_id = _upload_mapped_synthetic_report(client, csrf, source, mapping)
+    _cohort_set_inclusion(client, csrf, "SYN-A", 1, False)
+    _cohort_set_inclusion(client, csrf, "SYN-A", 2, True)
+    _cohort_set_inclusion(client, csrf, "SYN-B", 2, False)
+
+    choices = client.get(f"/api/years/1/workload/choices?import_id={import_id}")
+    assert choices.status_code == 200, choices.text
+    assert choices.json()["rows_in_scope"] == 3
+    assert choices.json()["excluded_rows"] == 1
+    assert [x["code"] for x in choices.json()["cds"]] == ["SYN-A"]
+    assert choices.json()["taf"] == ["TAF-A"]
+
+    generated = client.post(
+        "/api/years/1/department-workbooks", headers=csrf,
+        json={"import_id": import_id},
+    )
+    assert generated.status_code == 200, generated.text
+    assert generated.json()["mixed_annuality_rows_retained"] == 1
+    assert generated.json()["reconciliation"]["included_in_each_workbook"] == 3
+
+
+def test_ui_keeps_excluded_historical_rule_values_outside_choices(client):
+    script = client.get("/static/workload.js").text
+    assert "Valori della regola non presenti nelle righe incluse" in script
+    assert "group.options.push({value" not in script
+    assert "Selettori limitati alle " in script
