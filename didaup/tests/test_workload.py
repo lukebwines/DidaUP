@@ -107,3 +107,73 @@ def test_workload_choices_follow_exact_source_columns(tmp_path):
     assert result["taf"] == ["TAF-SINTETICO"]
     assert result["mapped"]["tot_ore_previste"]
     assert result["mapped"]["taf"]
+
+
+# API journey: one annual profile, mapped input without effective hours,
+# preview, generation and byte-identical five-file ZIP.
+from test_app import client, signed_in
+
+
+def test_workload_api_profile_preview_and_export(client, tmp_path):
+    source = tmp_path / "synthetic-workload.xlsx"
+    mapping = make_source(source)
+    mapping.pop("ore_effettive_totali")
+    csrf = signed_in(client)
+    uploaded = client.post(
+        "/api/years/1/imports", headers=csrf,
+        data={"kind": "offerta", "test_data_only": "true"},
+        files={"source": ("synthetic-workload.xlsx", source.read_bytes(),
+                          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    source_id = uploaded.json()["id"]
+    saved = client.put(
+        f"/api/imports/{source_id}/mapping", headers=csrf,
+        json={"sheet_name": "Offerta sintetica", "header_row": 1,
+              "assigned": mapping, "expected_version": 0},
+    )
+    assert saved.status_code == 200, saved.text
+    empty = client.get("/api/years/1/workload")
+    assert empty.status_code == 200
+    assert empty.json()["version"] == 0
+    profile_rules = [rule(value="50")]
+    changed = client.put(
+        "/api/years/1/workload", headers=csrf,
+        json={"expected_version": 0, "rules": profile_rules},
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["version"] == 1
+    assert client.put(
+        "/api/years/1/workload", headers=csrf,
+        json={"expected_version": 0, "rules": []},
+    ).status_code == 409
+    source_values = client.get(
+        "/api/years/1/workload/choices", params={"import_id": source_id}
+    )
+    assert source_values.status_code == 200, source_values.text
+    assert source_values.json()["mapped"]["tot_ore_previste"]
+    preview = client.get(
+        "/api/years/1/workload/preview", params={"import_id": source_id}
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["rows_calculated"] == 4
+    assert preview.json()["total_effective_hours"] == 19
+    assert preview.json()["blocked"] is False
+    output = client.post(
+        "/api/years/1/department-workbooks", headers=csrf,
+        json={"import_id": source_id},
+    )
+    assert output.status_code == 200, output.text
+    assert output.json()["workload"]["total_effective_hours"] == 19
+    archive = client.get("/" + output.json()["download_url"])
+    assert archive.status_code == 200
+    with ZipFile(io.BytesIO(archive.content)) as z:
+        files = referent_names(z)
+        assert len(files) == 5 and len(z.namelist()) == 6
+        assert len(set(z.read(name) for name in files)) == 1
+        path = tmp_path / "calculated.xlsx"
+        path.write_bytes(z.read(files[0]))
+    rows = CalamineWorkbook.from_path(path).get_sheet_by_name("Proposte SSD").to_python(
+        skip_empty_area=False
+    )
+    assert [line[28] for line in rows[6:10]] == [10, 5, 0, 4]
