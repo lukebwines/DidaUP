@@ -47,7 +47,8 @@ def review_five_workbooks(
     if len(files) != 5:
         raise ReviewError("Occorrono esattamente cinque file Excel")
     try:
-        historical, excluded_count, unresolved_count, unresolved_examples = _prepare(
+        (historical, excluded_count, unresolved_count, unresolved_examples,
+         missing_code_count, missing_code_examples) = _prepare(
             original, source_sha256, sheet_name, header_row, assigned,
             history_year, excluded or set(),
         )
@@ -217,6 +218,8 @@ def review_five_workbooks(
         "excluded_rows_per_file": excluded_count,
         "unresolved_annuality_rows_included": unresolved_count,
         "unresolved_annuality_example_rows": unresolved_examples,
+        "missing_activity_codes_rows_included": missing_code_count,
+        "missing_activity_codes_example_rows": missing_code_examples,
         "per_file": results,
         "overlaps": overlaps,
         "overlap_count": len(overlaps),
