@@ -270,6 +270,23 @@
                 <tbody id="workbook-archives"></tbody></table>
             </div>
           </div>
+          <div class="panel">
+            <h3>Controllo delle proposte restituite (anteprima)</h3>
+            <p>Seleziona i cinque Excel compilati. DidaUP confronta le righe con la fonte storica e segnala le proposte sullo stesso insegnamento presenti in file diversi. Non unisce e non approva alcuna copertura.</p>
+            <form id="workbook-review-form" class="fields row-fields write-only">
+              <label>Cinque Excel modificati dai referenti
+                <input id="workbook-review-files" type="file" accept=".xlsx" multiple required>
+              </label>
+              <button id="workbook-review-button" class="secondary" type="submit">Controlla i cinque file</button>
+            </form>
+            <p id="workbook-review-result" class="muted" aria-live="polite">Nessuna revisione eseguita.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Attività</th><th>File coinvolti</th><th>Esito</th></tr></thead>
+                <tbody id="workbook-overlaps"></tbody>
+              </table>
+            </div>
+          </div>
         </section>
 
         <section id="view-users" class="screen" hidden>
