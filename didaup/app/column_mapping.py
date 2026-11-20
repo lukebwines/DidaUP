@@ -20,7 +20,8 @@ OFFER_FIELDS: list[tuple[str, str]] = [
     ("cds_tipologia", "CdS · tipologia"),
     ("sede", "Sede didattica"),
     ("anno_corso", "Anno di corso del CdS"),
-    ("dipartimento", "Dipartimento"),
+    ("dipartimento", "Dipartimento di riferimento dell’attività"),
+    ("scuola", "Scuola / Facoltà nel report"),
     ("codice_insegnamento", "Codice insegnamento"),
     ("insegnamento", "Denominazione insegnamento"),
     ("codice_modulo", "Codice modulo o partizione"),
@@ -57,9 +58,6 @@ OFFER_FIELDS: list[tuple[str, str]] = [
     ("periodo_fine", "Periodo fine"),
     ("titolo_affidamento", "Titolo affidamento storico"),
     ("dipartimento_docente", "Dipartimento afferenza docente storico"),
-    ("proposta_docente", "VARIAZIONE · Nuovo docente"),
-    ("proposta_ore", "VARIAZIONE · Ore"),
-    ("proposta_note", "VARIAZIONE · Note"),
 
 ]
 
@@ -148,6 +146,9 @@ def evaluate_mapping(kind: str, assigned: dict[str, int]) -> list[str]:
 # workbook *layout*, not a specific teacher, assignment or legal rule.
 # "SSD INSEGNAMENTO" has no old/new qualifier; never infer either version.
 OFFER_HEADER_TO_FIELD = {
+    "DIPARTIMENTO DI RIFERIMENTO": "dipartimento",
+    "SCUOLA": "scuola",
+    "TIPOLOGIA": "cds_tipologia",
     "SEDE CORSO": "sede",
     "CODICE CORSO": "cds_codice",
     "CDS": "cds_nome",
@@ -177,15 +178,14 @@ OFFER_HEADER_TO_FIELD = {
     "CODICE SSD DOCENTE NUOVO": "ssd_docente_nuovo",
     "TOT ORE PREVISTE": "ore_previste",
     "TOT ORE EFFETTIVE": "ore_effettive_totali",
-    "NUOVO DOCENTE": "proposta_docente",
-    "ORE": "proposta_ore",
-    "NOTE": "proposta_note",
     "PERIODO INIZIO": "periodo_inizio",
     "PERIODO FINE": "periodo_fine",
     "DIPARTIMENTO AFFERENZA DOCENTE": "dipartimento_docente",
     "TITOLO AFFIDAMENTO": "titolo_affidamento",
 }
-PROPOSAL_FIELDS = ("proposta_docente", "proposta_ore", "proposta_note")
+# The following are generated in the outgoing Excel and must NOT be mapped
+# to the original 110-column teaching report.
+OUTPUT_PROPOSAL_HEADERS = ("Nuovo docente", "Ore", "Note")
 
 
 def normalize_header(value: Any) -> str:
@@ -213,12 +213,10 @@ def suggest_fields(headers: list[Any], kind: str) -> dict[str, Any]:
         field: positions for field, positions in locations.items()
         if len(positions) > 1
     }
-    editable = {field: assigned[field] for field in PROPOSAL_FIELDS if field in assigned}
-    missing_proposal = [field for field in PROPOSAL_FIELDS if field not in assigned]
     return {
         "assigned": assigned, "matched": len(assigned),
-        "ambiguous": ambiguous, "proposal_columns": editable,
-        "missing_proposal_fields": missing_proposal,
+        "ambiguous": ambiguous,
+        "output_proposal_headers": list(OUTPUT_PROPOSAL_HEADERS),
         "unmatched_source_columns": [
             index for index, label in enumerate(headers)
             if str(label or "").strip() and index not in assigned.values()
@@ -228,7 +226,7 @@ def suggest_fields(headers: list[Any], kind: str) -> dict[str, Any]:
 
 
 def autodetect_workbook(path: Path, kind: str) -> dict[str, Any]:
-    """Look for the supplied Excel-for-referents layout in the first 40 rows.
+    """Recognize the 2026/27 source report independently of the outgoing Excel.
 
     The result is a *suggestion*; never persists or validates assignments.
     """
