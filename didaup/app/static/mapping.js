@@ -35,11 +35,15 @@ function mappingConflicts(items) {
 
 
 async function openMapping(importId) {
+  const pendingDraft = state.mappingDraft?.import_id === importId
+    ? state.mappingDraft : null;
   const data = await api("imports/" + importId + "/mapping");
   state.mapping = data;
   state.preview = null;
   state.suggestion = null;
-  state.mappingDraft = null;
+  // Preserve uncommitted edits when returning to the SAME source during
+  // the current browser session. Never carry a draft to another report.
+  state.mappingDraft = pendingDraft;
   el("mapping-save").disabled = state.user?.role === "lettura";
   setText("mapping-source-name", data.original_name);
   setText("mapping-source-kind", data.kind === "offerta"
@@ -52,12 +56,14 @@ async function openMapping(importId) {
     opt.textContent = sheet.name + " · " + sheet.rows + " righe";
     picker.appendChild(opt);
   }
-  picker.value = data.mapping?.sheet_name || data.sheets[0]?.name || "";
-  el("mapping-header-row").value = data.mapping?.header_row || 1;
+  picker.value = pendingDraft?.sheet_name || data.mapping?.sheet_name || data.sheets[0]?.name || "";
+  el("mapping-header-row").value = pendingDraft?.header_row || data.mapping?.header_row || 1;
   switchView("mapping");
-  if (!data.mapping) await autoMap();
+  if (!data.mapping && !pendingDraft) await autoMap();
   else {
-    setText("mapping-auto-status", "Mappatura salvata in precedenza. Puoi rivederla o usare il riconoscimento automatico senza modificare l'originale.");
+    setText("mapping-auto-status", pendingDraft
+      ? "Modifiche non ancora salvate recuperate. Premi «Salva mappatura»."
+      : "Mappatura salvata in precedenza. Puoi rivederla senza modificare l'originale.");
     await loadMappingPreview();
   }
 }
@@ -81,7 +87,8 @@ async function loadMappingPreview() {
 
   const fields = el("mapping-fields");
   // Preserve pending changes before rebuilding the controls.
-  if (state.mappingDraft?.sheet_name === sheetName &&
+  if (state.mappingDraft?.import_id === state.mapping.id &&
+      state.mappingDraft?.sheet_name === sheetName &&
       state.mappingDraft?.header_row === rowNumber) {
     for (const select of fields.querySelectorAll("select[data-field-key]")) {
       state.mappingDraft.assigned[select.dataset.fieldKey] = select.value;
@@ -94,7 +101,8 @@ async function loadMappingPreview() {
   const suggestion = state.suggestion;
   const suggestHere = suggestion && suggestion.sheet_name === sheetName &&
     suggestion.header_row === rowNumber;
-  const draft = state.mappingDraft?.sheet_name === sheetName &&
+  const draft = state.mappingDraft?.import_id === state.mapping.id &&
+    state.mappingDraft?.sheet_name === sheetName &&
     state.mappingDraft?.header_row === rowNumber
       ? state.mappingDraft.assigned : null;
   for (const field of state.mapping.available_fields) {
@@ -124,6 +132,7 @@ async function loadMappingPreview() {
           state.mappingDraft.sheet_name !== sheetName ||
           state.mappingDraft.header_row !== rowNumber) {
         state.mappingDraft = {
+          import_id: state.mapping.id,
           sheet_name: sheetName, header_row: rowNumber, assigned: {}
         };
         for (const current of fields.querySelectorAll("select[data-field-key]")) {
