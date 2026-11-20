@@ -149,3 +149,80 @@ def test_mandatory_mapped_hours_not_substituted_with_planned(tmp_path):
             src, hashlib.sha256(src.read_bytes()).hexdigest(),
             "Offerta sintetica", 1, assigned, "2026/27"
         )
+
+
+
+# Complete HTTP flow (upload -> mapping -> five identical downloads -> review).
+from test_app import client, signed_in
+
+
+def test_api_generates_private_five_file_zip_and_reviews_unchanged(client, tmp_path):
+    synthetic = tmp_path / "source.xlsx"
+    assigned = make_source(synthetic)
+    csrf = signed_in(client)
+    denied = client.post(
+        "/api/years/1/department-workbooks", json={"import_id": 1}
+    )
+    assert denied.status_code == 403  # CSRF required even after login.
+
+    uploaded = client.post(
+        "/api/years/1/imports",
+        headers=csrf,
+        data={"kind": "offerta", "test_data_only": "true"},
+        files={"source": ("only-synthetic.xlsx", synthetic.read_bytes(),
+                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    source_id = uploaded.json()["id"]
+    saved = client.put(
+        f"/api/imports/{source_id}/mapping",
+        headers=csrf,
+        json={
+            "sheet_name": "Offerta sintetica", "header_row": 1,
+            "assigned": assigned, "expected_version": 0,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    created = client.post(
+        "/api/years/1/department-workbooks",
+        headers=csrf, json={"import_id": source_id},
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["copies"] == 5
+    assert created.json()["historical_rows"] == 4
+    assert created.json()["department_filter"] is False
+    artifact_id = created.json()["id"]
+    download_path = f"/api/years/1/department-workbooks/{artifact_id}/download"
+    response = client.get(download_path)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    with ZipFile(io.BytesIO(response.content)) as archive:
+        names = archive.namelist()
+        assert len(names) == 5
+        sheets = [archive.read(name) for name in names]
+        assert all(item == sheets[0] for item in sheets)
+
+    review = client.post(
+        "/api/years/1/department-workbooks/review", headers=csrf,
+        data={"import_id": str(source_id), "test_data_only": "true"},
+        files=[
+            ("files", (name, content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            for name, content in zip(names, sheets)
+        ],
+    )
+    assert review.status_code == 200, review.text
+    assert review.json()["files_received"] == 5
+    assert review.json()["blocked"] is False
+    assert review.json()["overlap_count"] == 0
+
+    # Archive reset deletes ONLY the generated ZIP; source and mapping remain.
+    reset = client.post(
+        "/api/admin/archive/reset", headers=csrf,
+        json={"scope": "year", "year_id": 1,
+              "confirmation": "AZZERA LAVORAZIONE 2026/27",
+              "password": "SyntheticTestingPass!2026"},
+    )
+    assert reset.status_code == 200
+    assert client.get(download_path).status_code == 404
+    assert client.get(f"/api/imports/{source_id}/mapping").status_code == 200
+    assert len(client.get("/api/years/1/imports").json()) == 1
