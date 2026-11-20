@@ -168,8 +168,8 @@ def review_five_workbooks(
                 if not new_teacher:
                     issue(file_no, excel_row, "Docente sostitutivo mancante")
                     continue
-                if historical_hours is None:
-                    issue(file_no, excel_row, "Ore storiche assenti per sostituzione totale")
+                if historical_hours is None or historical_hours <= 0:
+                    issue(file_no, excel_row, "Ore storiche assenti o pari a zero per sostituzione totale")
                     continue
                 if moved is None and not hours:
                     moved = historical_hours
