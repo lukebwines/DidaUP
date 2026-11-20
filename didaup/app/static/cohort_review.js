@@ -228,6 +228,9 @@ async function saveCohortSelections() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  el("cohort-source-select").addEventListener("change", clearCohortReview);
+  el("cohort-review-save").addEventListener("click", () =>
+    saveCohortSelections().catch(error => showNotice(error.message, true)));
   el("cohort-review-load").addEventListener("click", () =>
     loadCohortCandidates().catch(e => showNotice(e.message, true)));
   el("cohort-review-search").addEventListener("input", renderCohortChecklist);
