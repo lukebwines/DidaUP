@@ -191,3 +191,10 @@ Le annualità che sono già registrate come **Escluse** nell'archivio dell'A.A. 
 Per una riga che non riporta l'anno di corso, DidaUP può escluderla tramite codice CdS e sede **soltanto se tutte le annualità registrate per quello stesso CdS e sede sono escluse**; se almeno una annualità è inclusa, la riga va mantenuta con avviso. Questo evita di recuperare indiscriminatamente corsi esclusi senza rischiare di cancellare annualità ancora in gestione. Le esclusioni presenti nell'archivio ma che non trovano alcuna corrispondenza certa nel report sono elencate nel riepilogo per controllo amministrativo.
 
 La fonte importata e le esclusioni registrate non vengono modificate. Le copie Excel già esportate non si aggiornano da sole e devono essere rigenerate dopo la correzione del generatore. Dati e nominativi del caso concreto non sono stati replicati nei test; le verifiche sono esclusivamente sintetiche.
+
+
+## TAF nel tracciato storico — mappatura confermata
+
+L'utente ha verificato che il campo **TAF** risultava **non associato nella mappatura**: non si trattava di un valore TAF da inventare, ma dell'assenza di una corrispondenza con la colonna del report. La soluzione operativa è selezionare la colonna **TAF** nella mappatura e salvare, quindi rigenerare i cinque Excel. Il report storico non viene modificato.
+
+Per proteggere anche i precedenti mapping incompleti, il generatore può recuperare il TAF dalla fonte **soltanto se trova un'unica intestazione esatta \"TAF\"**; segnala se la colonna manca, è ambigua, oppure quanti valori di riga sono effettivamente disponibili. Non attribuisce classificazioni TAF per analogia o interpretazione. Questa funzionalità non sostituisce la verifica esplicita della mappatura da parte dell'operatore.
