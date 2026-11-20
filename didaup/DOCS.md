@@ -1,4 +1,4 @@
-# DidaUP — Installazione e collaudo (0.1.10-alpha1)
+# DidaUP — Installazione e collaudo (0.1.10-alpha11)
 
 > Versione iniziale di sviluppo **non collaudata su una specifica istanza di Home Assistant**. Usare soltanto dati sintetici. Non caricare file reali dell'Ateneo.
 
@@ -179,3 +179,12 @@ La vecchia funzione di azzeramento era distruttiva anche per le mappature e le e
 7. Al rientro, caricare esattamente cinque XLSX compilati nella sezione **Controllo delle proposte restituite**. Il sistema esegue una **sola anteprima di verifica** su fonte, ID, ore e sovrapposizioni tra file e non salva alcun affidamento proposto o approvato. L'esito viene mostrato senza modificare gli archivi storici.
 
 Il tasto Excel **«+ Aggiungi variazione» non è ancora incorporato** nei file generati: è disponibile un Office Script sperimentale in `prototypes/office_scripts/aggiungi_variazione.ts`, da collaudare e associare al file master nel tenant Microsoft 365 dell'Ateneo. I cinque file non devono essere distribuiti per uso amministrativo definitivo prima di questa verifica e prima dell'implementazione delle autorizzazioni e del controllo istituzionale delle proposte.
+
+
+## Nuova selezione multipla delle annualità (0.1.10-alpha11)
+
+Nella maschera **Annualità CdS** puoi combinare ricerca, selezione multipla di più CdS, più sedi e più anni di corso. Il filtro di stato include **Solo modifiche non salvate**. I filtri non cambiano le esclusioni nel database: i pulsanti per escludere/includere in blocco modificano solo le spunte delle righe **visualizzate**, dopo conferma; il salvataggio effettivo avviene con il pulsante dedicato. Puoi cancellare i filtri senza perdere le spunte e annullare la bozza senza modificare le esclusioni registrate.
+
+Il riquadro **Registro delle annualità già salvate** dispone di ricerca e filtro per incluse/escluse e mostra esclusivamente lo stato persistito. I cinque Excel generati mantengono lo stesso contenuto in tutte le copie ma ora comprendono nel **nome del file** una revisione diversa a ogni generazione, per non confonderli con quelli già caricati su OneDrive. Nessun documento già caricato viene automaticamente sostituito.
+
+Attenzione: una riga originale con annualità multiple oppure con identificativi ambigui non deve essere interpretata come certezza di appartenenza; verificare gli avvisi di generazione prima di distribuire i file.
