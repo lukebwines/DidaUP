@@ -189,6 +189,14 @@ def health():
     return {"status": "ok"}
 
 
+def cookie_path(request: Request) -> str:
+    """Scope ingress sessions to the add-on subpath, not all Home Assistant URLs."""
+    ingress = request.headers.get("x-ingress-path", "")
+    if ingress and re.fullmatch(r"/api/hassio_ingress/[A-Za-z0-9_-]+/?", ingress):
+        return ingress.rstrip("/") + "/"
+    return "/"
+
+
 def current_user(request: Request, allowed: tuple[str, ...] = ("admin", "operatore", "lettura")) -> dict:
     token = request.cookies.get(COOKIE_NAME, "")
     if len(token) < 30:
@@ -253,7 +261,7 @@ def login(body: Login, request: Request):
     response = JSONResponse({"ok": True})
     response.set_cookie(
         COOKIE_NAME, token, httponly=True, secure=bool(settings.get("secure_cookies", True)),
-        samesite="lax", max_age=SESSION_SECONDS, path="/",
+        samesite="lax", max_age=SESSION_SECONDS, path=cookie_path(request),
     )
     return response
 
@@ -276,7 +284,7 @@ def logout(request: Request):
         cx.commit()
     from fastapi.responses import JSONResponse
     response = JSONResponse({"ok": True})
-    response.delete_cookie(COOKIE_NAME, path="/")
+    response.delete_cookie(COOKIE_NAME, path=cookie_path(request))
     return response
 
 
