@@ -109,6 +109,35 @@ def test_workload_choices_follow_exact_source_columns(tmp_path):
     assert result["mapped"]["taf"]
 
 
+
+def test_typology_cds_taf_combined_priority_and_choices(tmp_path):
+    src = tmp_path / "typed.xlsx"
+    assigned = make_source(src, with_tipologia=True)
+    assigned.pop("ore_effettive_totali")
+    digest = hashlib.sha256(src.read_bytes()).hexdigest()
+    lookup = source_choices(src, "Offerta sintetica", 1, assigned)
+    assert lookup["mapped"]["tipologia"]
+    assert lookup["tipologie"] == ["Laurea", "Magistrale"]
+    configured = validate_rules([
+        rule(value="10"),
+        rule(tipologia="Laurea", value="20"),
+        rule(tipologia="Laurea", cds="SYN-A", taf="TAF-SINTETICO", value="80"),
+    ])
+    payload, summary = build_five_workbooks(
+        src, digest, "Offerta sintetica", 1, assigned, "2026/27",
+        workload_rules=configured,
+    )
+    assert summary["workload"]["per_rule_rows"] == [1, 0, 3]
+    with ZipFile(io.BytesIO(payload)) as archive:
+        result = tmp_path / "typed-export.xlsx"
+        result.write_bytes(archive.read(referent_names(archive)[0]))
+    lines = CalamineWorkbook.from_path(result).get_sheet_by_name(
+        "Proposte SSD"
+    ).to_python(skip_empty_area=False)
+    assert [row[28] for row in lines[6:10]] == [16, 8, 0, 0.8]
+
+
+
 # API journey: one annual profile, mapped input without effective hours,
 # preview, generation and byte-identical five-file ZIP.
 from test_app import client, signed_in
