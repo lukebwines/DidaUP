@@ -29,8 +29,9 @@ const workloadUI = (() => {
       criterionSummary(rule.cds, "Tutti"),
       criterionSummary(rule.taf, "Tutte")
     ];
-    return labels.join(" · ") + " · " + rule.value +
-      (rule.mode === "percentuale" ? "%" : " ore");
+    return labels.join(" · ") + " · " +
+      (rule.mode === "non_disponibile" ? "N.D. (non disponibile)" :
+       rule.value + (rule.mode === "percentuale" ? "%" : " ore"));
   }
   function multiElement(key, suffix) {
     return document.getElementById("workload-" + key + "-" + suffix);
@@ -156,8 +157,10 @@ const workloadUI = (() => {
         criterionSummary(rule.tipologia, "Tutte"),
         criterionSummary(rule.cds, "Tutti"),
         criterionSummary(rule.taf, "Tutte"),
-        rule.mode === "percentuale" ? "Percentuale" : "Quota fissa",
-        rule.value + (rule.mode === "percentuale" ? " %" : " ore")
+        rule.mode === "non_disponibile" ? "N.D. (non disponibile)" :
+          (rule.mode === "percentuale" ? "Percentuale" : "Quota fissa"),
+        rule.mode === "non_disponibile" ? "N.D." :
+          rule.value + (rule.mode === "percentuale" ? " %" : " ore")
       ]) {
         const cell = row.insertCell();
         cell.textContent = value;
@@ -185,7 +188,7 @@ const workloadUI = (() => {
       const row = body.insertRow();
       const cell = row.insertCell();
       cell.colSpan = 6;
-      cell.textContent = "Nessuna regola: tutte le TOT ORE EFFETTIVE resteranno a 0.";
+      cell.textContent = "Nessuna regola: TOT ORE EFFETTIVE sarà uguale a TOT ORE PREVISTE (se disponibile).";
     }
     const status = document.getElementById("workload-save-status");
     status.textContent = stateLocal.dirty
@@ -207,14 +210,21 @@ const workloadUI = (() => {
     stateLocal.editing = index;
     for (const key of criteria) setMulti(key, rule[fieldNames[key]]);
     document.getElementById("workload-mode").value = rule.mode;
-    document.getElementById("workload-value").value = rule.value;
+    document.getElementById("workload-value").value =
+      rule.mode === "non_disponibile" ? "" : rule.value;
     document.getElementById("workload-add").textContent = "Aggiorna regola";
     document.getElementById("workload-cancel").hidden = false;
     updateLimit();
   }
   function updateLimit() {
-    document.getElementById("workload-value").max =
-      document.getElementById("workload-mode").value === "percentuale" ? "1000" : "999999";
+    const mode = document.getElementById("workload-mode").value;
+    const input = document.getElementById("workload-value");
+    const unavailable = mode === "non_disponibile";
+    document.getElementById("workload-value-wrapper").hidden = unavailable;
+    input.disabled = unavailable;
+    input.required = !unavailable;
+    input.max = mode === "percentuale" ? "1000" : "999999";
+    if (unavailable) input.value = "";
   }
   function sourceId() {
     return Number(document.getElementById("workload-source").value);
@@ -293,7 +303,8 @@ const workloadUI = (() => {
         cds: [...groups.cds.selected],
         taf: [...groups.taf.selected],
         mode: document.getElementById("workload-mode").value,
-        value: document.getElementById("workload-value").value.trim()
+        value: document.getElementById("workload-mode").value === "non_disponibile"
+          ? "N.D." : document.getElementById("workload-value").value.trim()
       };
       if (!rule.value) return;
       if (stateLocal.editing >= 0) stateLocal.rules[stateLocal.editing] = rule;
@@ -332,6 +343,7 @@ const workloadUI = (() => {
         const counts = [
           ["workload-count-matched", result.rows_calculated],
           ["workload-count-unmatched", result.rows_without_rule],
+          ["workload-count-nd", result.rows_not_available || 0],
           ["workload-total", Number(result.total_effective_hours).toLocaleString("it-IT", {
             maximumFractionDigits: 2
           })],
@@ -350,7 +362,7 @@ const workloadUI = (() => {
             "lasciate a 0 senza applicare la regola. Righe del report (prime " +
             missingExamples.length + "): " + missingExamples.join(", ") +
             ". Verificare che i dati mancanti siano corretti."
-          : "Nessuna cella vuota in TOT ORE PREVISTE tra le righe intercettate dalle regole.";
+          : "Nessuna cella vuota in TOT ORE PREVISTE tra le righe che richiedono un valore numerico.";
         const errorCount = Number(result.error_count ?? result.errors.length);
         document.getElementById("workload-errors").textContent =
           issues.length
