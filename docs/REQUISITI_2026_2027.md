@@ -64,3 +64,6 @@ Regole funzionali:
 
 ### Automatizzazione della mappatura
 Il software può proporre associazioni in modo deterministico **solo quando trova le etichette esatte del tracciato condiviso** (tollerando maiuscole e spazi); non deve dedurre corrispondenze per semplice somiglianza nei nomi. Se il tracciato non corrisponde, si mantiene la mappatura manuale. La proposta automatica non sovrascrive i dati e deve essere confermata dall'operatore.
+
+## Chiarimento sul report sorgente da schermata DidaUP
+La schermata ricevuta mostra un import Excel per 2026/27 con 11.735 righe e 110 colonne, mentre le 36 intestazioni fornite per il file distribuito ai referenti descrivono un **tracciato di output** più compatto. La futura elaborazione non deve imporre la stessa mappatura ai due tracciati. La distinzione tra dati fonte e campi di proposta è stata recepita nell'alpha 0.1.5.
