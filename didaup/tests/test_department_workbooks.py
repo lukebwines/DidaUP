@@ -150,6 +150,7 @@ def test_incomplete_annuality_does_not_block_generation_or_discard_row(tmp_path)
         source, hashlib.sha256(source.read_bytes()).hexdigest(),
         "Offerta sintetica", 1, assigned, "2026/27",
         excluded={("SYN-B", "Sede TEST", 2)},
+        included={("SYN-A", "Sede TEST", 1)},
     )
     assert summary["copies"] == 5
     assert summary["excluded_rows"] == 1
@@ -213,6 +214,63 @@ def test_missing_both_activity_codes_keeps_all_rows_with_distinct_ids(tmp_path):
     assert rows[6][40] != rows[7][40]
     assert rows[6][40].startswith("ACT-ROW-")
     assert rows[7][40].startswith("ACT-ROW-")
+
+
+
+def test_exclusions_ignore_case_and_surrounding_spaces(tmp_path):
+    source = tmp_path / "excluded-normalized.xlsx"
+    assigned = make_source(source)
+    packed, info = build_five_workbooks(
+        source, hashlib.sha256(source.read_bytes()).hexdigest(),
+        "Offerta sintetica", 1, assigned, "2026/27",
+        excluded={(" syn-b ", " sede test  ", 2)},
+        included={("SYN-A", "Sede TEST", 2)},
+    )
+    assert info["excluded_rows"] == 1
+    assert info["unmatched_exclusion_count"] == 0
+    assert info["historical_rows"] == 3
+    with ZipFile(io.BytesIO(packed)) as archive:
+        item = tmp_path / "normalized.xlsx"
+        item.write_bytes(archive.read(archive.namelist()[0]))
+    rows = CalamineWorkbook.from_path(item).get_sheet_by_name(
+        "Proposte SSD"
+    ).to_python(skip_empty_area=False)
+    assert all(row[1] != "SYN-B" for row in rows[6:])
+
+
+def test_missing_year_removed_only_when_all_registered_annualities_excluded(tmp_path):
+    source = tmp_path / "missing-year.xlsx"
+    assigned = make_source(source, incomplete_annuality=True)
+    packed, info = build_five_workbooks(
+        source, hashlib.sha256(source.read_bytes()).hexdigest(),
+        "Offerta sintetica", 1, assigned, "2026/27",
+        excluded={("SYN-A", "Sede TEST", 2)},
+        included=set(),
+    )
+    assert info["excluded_rows"] == 3
+    assert info["excluded_rows_with_missing_year"] == 1
+    assert info["unmatched_exclusion_count"] == 0
+    assert info["historical_rows"] == 1
+    with ZipFile(io.BytesIO(packed)) as archive:
+        item = tmp_path / "all-excluded.xlsx"
+        item.write_bytes(archive.read(archive.namelist()[0]))
+    rows = CalamineWorkbook.from_path(item).get_sheet_by_name(
+        "Proposte SSD"
+    ).to_python(skip_empty_area=False)
+    assert rows[6][1] == "SYN-B"
+
+
+def test_unmatched_exclusions_are_reported_not_silently_ignored(tmp_path):
+    source = tmp_path / "unmatched.xlsx"
+    assigned = make_source(source)
+    _, info = build_five_workbooks(
+        source, hashlib.sha256(source.read_bytes()).hexdigest(),
+        "Offerta sintetica", 1, assigned, "2026/27",
+        excluded={("NOT-IN-REPORT", "Verona", 1)},
+    )
+    assert info["excluded_rows"] == 0
+    assert info["unmatched_exclusion_count"] == 1
+    assert info["unmatched_exclusion_examples"][0]["course_code"] == "not-in-report"
 
 
 def test_per_row_academic_year_is_preserved_and_source_integrity_checked(tmp_path):
