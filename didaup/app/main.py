@@ -643,3 +643,71 @@ async def upload_source(
         raise
     finally:
         await source.close()
+
+@app.get("/api/admin/archive/summary")
+def archive_summary(request: Request):
+    current_user(request, ("admin",))
+    with closing(connect()) as cx:
+        years = cx.execute(
+            """SELECT a.id,a.code,
+               (SELECT COUNT(*) FROM cohorts c WHERE c.year_id=a.id) cohorts,
+               (SELECT COUNT(*) FROM source_imports s WHERE s.year_id=a.id) imports
+               FROM academic_years a ORDER BY code DESC"""
+        ).fetchall()
+    return [dict(year) for year in years]
+
+
+class ArchiveReset(BaseModel):
+    scope: Literal["year", "all"]
+    year_id: int | None = None
+    confirmation: str = Field(max_length=80)
+    password: str = Field(min_length=1, max_length=128)
+
+
+@app.post("/api/admin/archive/reset")
+def reset_archive(body: ArchiveReset, request: Request):
+    actor = current_user(request, ("admin",))
+    require_write(request, actor)
+    with closing(connect()) as cx:
+        stored_user = cx.execute("SELECT passhash FROM users WHERE id=?", (actor["id"],)).fetchone()
+        if stored_user is None or not verify_password(body.password, stored_user["passhash"]):
+            raise HTTPException(403, "Password amministratore non corretta")
+        if body.scope == "year":
+            if body.year_id is None:
+                raise HTTPException(422, "Selezionare un anno accademico")
+            row = cx.execute("SELECT code FROM academic_years WHERE id=?", (body.year_id,)).fetchone()
+            if row is None:
+                raise HTTPException(404, "Anno accademico inesistente")
+            if body.confirmation != "AZZERA " + row["code"]:
+                raise HTTPException(422, "Conferma testuale non valida")
+            sources = cx.execute(
+                "SELECT stored_name FROM source_imports WHERE year_id=?", (body.year_id,)
+            ).fetchall()
+            cx.execute("DELETE FROM cohorts WHERE year_id=?", (body.year_id,))
+            cx.execute("DELETE FROM source_imports WHERE year_id=?", (body.year_id,))
+            record(cx, actor["id"], "reset_year", "academic_year", body.year_id)
+        else:
+            if body.confirmation != "AZZERA ARCHIVIO":
+                raise HTTPException(422, "Conferma testuale non valida")
+            sources = cx.execute("SELECT stored_name FROM source_imports").fetchall()
+            cx.execute("DELETE FROM cohorts")
+            cx.execute("DELETE FROM source_imports")
+            cx.execute("DELETE FROM academic_years")
+            cx.execute(
+                "INSERT INTO academic_years(code,status,created_at) VALUES(?,?,?)",
+                ("2026/27", "storico_in_preparazione", int(time.time())),
+            )
+            record(cx, actor["id"], "reset_all", "academic_year", None)
+        cx.commit()
+    failures = 0
+    for src in sources:
+        try:
+            (SOURCE_DIR / src["stored_name"]).unlink(missing_ok=True)
+        except OSError:
+            failures += 1
+    if failures:
+        raise HTTPException(
+            500,
+            f"Archivio azzerato ma {failures} file locali richiedono la rimozione manuale",
+        )
+    return {"ok": True, "scope": body.scope, "deleted_files": len(sources)}
