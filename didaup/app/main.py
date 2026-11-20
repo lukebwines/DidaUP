@@ -6,6 +6,7 @@ Do not use with actual University data until environment and safeguards are appr
 from __future__ import annotations
 
 import hashlib
+import tempfile
 import hmac
 import json
 import os
@@ -17,14 +18,17 @@ from contextlib import closing
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
+from .source_import import MAX_UPLOAD_BYTES, check_signature, inspect_workbook
 
 BASE = Path(__file__).resolve().parent
 DATA = Path(os.environ.get("DIDAUP_DATA_DIR", "/data"))
 DB = DATA / "didaup.sqlite3"
+SOURCE_DIR = DATA / "sources"
 CONFIG_FILE = Path(os.environ.get("DIDAUP_OPTIONS_PATH", "/data/options.json"))
 COOKIE_NAME = "didaup_session"
 SESSION_SECONDS = 12 * 60 * 60
@@ -100,6 +104,7 @@ def startup():
     global settings
     settings = options()
     DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+    SOURCE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
     # The persistent /data directory is prepared by the add-on entrypoint.
     os.chmod(DATA, 0o700)
     with closing(connect()) as cx:
@@ -135,6 +140,17 @@ def startup():
               exclusion_reason TEXT NOT NULL DEFAULT '',
               version INTEGER NOT NULL DEFAULT 1,
               UNIQUE(year_id, course_code, campus, study_year)
+            );
+            CREATE TABLE IF NOT EXISTS source_imports(
+              id INTEGER PRIMARY KEY,
+              year_id INTEGER NOT NULL REFERENCES academic_years(id),
+              kind TEXT NOT NULL CHECK(kind IN ('offerta','docenti')),
+              original_name TEXT NOT NULL, stored_name TEXT NOT NULL UNIQUE,
+              sha256 TEXT NOT NULL, size_bytes INTEGER NOT NULL,
+              sheets_json TEXT NOT NULL,
+              status TEXT NOT NULL, created_at INTEGER NOT NULL,
+              actor_id INTEGER NOT NULL REFERENCES users(id),
+              UNIQUE(year_id,kind,sha256)
             );
             CREATE TABLE IF NOT EXISTS audit(
               id INTEGER PRIMARY KEY, at INTEGER NOT NULL, actor_id INTEGER,
@@ -250,12 +266,14 @@ def current_user(request: Request, allowed: tuple[str, ...] = ("admin", "operato
     return dict(row)
 
 
-def require_write(request: Request, user: dict):
+def require_write(request: Request, user: dict, allow_multipart: bool = False):
     site = request.headers.get("sec-fetch-site")
     if site == "cross-site":
         raise HTTPException(403, "Richiesta da origine non autorizzata")
-    if request.headers.get("content-type", "").split(";")[0].strip() != "application/json":
-        raise HTTPException(415, "Richiesto Content-Type application/json")
+    content_type = request.headers.get("content-type", "").split(";")[0].strip()
+    allowed = ("application/json", "multipart/form-data") if allow_multipart else ("application/json",)
+    if content_type not in allowed:
+        raise HTTPException(415, "Tipo contenuto non consentito")
     incoming = request.headers.get("x-csrf-token", "")
     if not incoming or not hmac.compare_digest(incoming, user["csrf"]):
         raise HTTPException(403, "Token CSRF non valido")
