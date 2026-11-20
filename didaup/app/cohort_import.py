@@ -33,11 +33,22 @@ def plain(value: Any) -> str:
     return " ".join(str(value).split()).strip()
 
 
-def course_year(value: Any) -> int | None:
+def course_years(value: Any) -> tuple[int, ...] | None:
+    """Read explicit years only. A multi-year list describes multiple annualities.
+
+    Accept 1,2,3 and 1; 2 and 1/2, never silently assign an unspecified year.
+    Duplicates are deduplicated. Unsupported strings become review anomalies.
+    """
     raw = plain(value)
-    if re.fullmatch(r"(?:[1-9]|1[0-2])", raw):
-        return int(raw)
-    return None
+    if not re.fullmatch(r"(?:[1-9]|1[0-2])(?:\s*[,;/]\s*(?:[1-9]|1[0-2]))*", raw):
+        return None
+    return tuple(sorted({int(v) for v in re.split(r"\s*[,;/]\s*", raw)}))
+
+
+def course_year(value: Any) -> int | None:
+    """Compatibility API: single course year only."""
+    years = course_years(value)
+    return years[0] if years and len(years) == 1 else None
 
 
 def academic_year(value: Any) -> str | None:
@@ -88,6 +99,9 @@ def extract_cohorts(
     total_invalid = 0
     blank_rows = 0
     valid_rows = 0
+    multi_year_source_rows = 0
+    anomalous_by_typology: dict[str, int] = defaultdict(int)
+    anomalous_examples_by_typology: dict[str, list[dict]] = defaultdict(list)
 
     def issue(row_number: int, message: str):
         nonlocal total_invalid
@@ -109,9 +123,17 @@ def extract_cohorts(
         typology = field("cds_tipologia")
         assignment_title = field("titolo_affidamento")
         year_raw = field("anno_corso")
-        study_year = course_year(year_raw)
-        if not code or not name or not campus or study_year is None:
+        study_years = course_years(year_raw)
+        if not code or not name or not campus or study_years is None:
             issue(number, "Codice CdS, denominazione, sede o anno di corso assente/non valido")
+            typology_label = typology or "Tipologia non indicata"
+            anomalous_by_typology[typology_label] += 1
+            examples = anomalous_examples_by_typology[typology_label]
+            if len(examples) < 12:
+                examples.append({
+                    "row": number, "course_name": name[:150],
+                    "course_code": code[:40], "year_value": year_raw[:50],
+                })
             continue
         if not re.fullmatch(r"[A-Za-z0-9._-]{1,40}", code):
             issue(number, "Codice CdS non compatibile con il formato del registro")
@@ -122,21 +144,27 @@ def extract_cohorts(
         # The report is already linked by the operator to the selected
         # archive year. Row-level A.A. is historic context, not an exclusion
         # criterion (including school-of-specialization conventions).
-        key = (code, campus, study_year)
-        entry = groups.get(key)
-        if entry is None:
-            groups[key] = {
-                "course_code": code, "course_name": name,
-                "campus": campus, "study_year": study_year, "source_rows": 0,
-            }
-            entry = groups[key]
-        entry["source_rows"] += 1
-        names[key].add(name)
-        typologies[key].add(typology)
-        assignment_titles[key].add(assignment_title)
+        if len(study_years) > 1:
+            multi_year_source_rows += 1
+        # An explicit list such as "1,2,3" represents all three annualities.
+        # It does not authorize marking them excluded; the saved checkboxes
+        # remain the sole source of administrative exclusion decisions.
+        for study_year in study_years:
+            key = (code, campus, study_year)
+            entry = groups.get(key)
+            if entry is None:
+                groups[key] = {
+                    "course_code": code, "course_name": name,
+                    "campus": campus, "study_year": study_year, "source_rows": 0,
+                }
+                entry = groups[key]
+            entry["source_rows"] += 1
+            names[key].add(name)
+            typologies[key].add(typology)
+            assignment_titles[key].add(assignment_title)
+            if len(groups) > MAX_COHORTS:
+                raise CohortExtractionError("Troppe annualità distinte nel file")
         valid_rows += 1
-        if len(groups) > MAX_COHORTS:
-            raise CohortExtractionError("Troppe annualità distinte nel file")
 
     ambiguous_groups = 0
     filtered = []
@@ -159,6 +187,16 @@ def extract_cohorts(
         "header_row": header_row,
         "source_rows": sheet.height - header_row,
         "valid_rows": valid_rows,
+        "multi_year_source_rows": multi_year_source_rows,
+        "invalid_source_rows_by_typology": [
+            {
+                "typology": name, "count": count,
+                "examples": anomalous_examples_by_typology[name],
+            }
+            for name, count in sorted(
+                anomalous_by_typology.items(), key=lambda item: item[0].casefold()
+            )
+        ],
         "blank_rows": blank_rows,
         "anomaly_count": total_invalid,
         "anomaly_examples": anomalies,
