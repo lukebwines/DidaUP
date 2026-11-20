@@ -1,4 +1,4 @@
-"""User-confirmed specialization academic year offset. Synthetic fixtures only."""
+"""Preserve row-level academic years as historical data. Synthetic fixtures only."""
 import hashlib
 
 import pytest
@@ -77,7 +77,6 @@ def test_specialization_year_is_not_a_cohort_anomaly(tmp_path):
     mapping = make_synthetic_school_report(path)
     result = extract_cohorts(path, "Offerta", 1, mapping, "2026/27")
     assert result["valid_rows"] == 2
-    assert result["specialization_convention_rows"] == 1
     assert result["anomaly_count"] == 0
     assert result["cohort_count"] == 2
 
@@ -104,12 +103,11 @@ def test_export_preserves_specialization_source_year_unchanged(tmp_path):
         assert rows[7][3] == "2026/27"
 
 
-def test_unidentified_previous_year_does_not_gain_exception(tmp_path):
+def test_previous_year_in_unclassified_row_is_preserved(tmp_path):
     path = tmp_path / "synthetic.xlsx"
     mapping = make_synthetic_school_report(path)
-    # Use an incorrect mapping so the institutionally relevant 'TIPOLOGIA'
-    # is missing: a source classified only by unknown codes must NOT bypass
-    # the year validation. The course name is explicit here so also remove it.
+    # A mixed-year report belongs to the archive selected at import.
+    # Even an unclassified row must retain its source year unchanged.
     wb = xlsxwriter.Workbook(str(tmp_path / "unknown.xlsx"))
     sh = wb.add_worksheet("Offerta")
     headers = [
@@ -131,8 +129,18 @@ def test_unidentified_previous_year_does_not_gain_exception(tmp_path):
             sh.write_string(1, col, val)
     wb.close()
     unknown = tmp_path / "unknown.xlsx"
-    with pytest.raises(WorkbookGenerationError, match="ammesso solo"):
-        build_five_workbooks(
-            unknown, hashlib.sha256(unknown.read_bytes()).hexdigest(),
-            "Offerta", 1, mapping, "2026/27"
-        )
+    packed, summary = build_five_workbooks(
+        unknown, hashlib.sha256(unknown.read_bytes()).hexdigest(),
+        "Offerta", 1, mapping, "2026/27"
+    )
+    assert summary["historical_rows"] == 1
+    from zipfile import ZipFile
+    from io import BytesIO
+    from python_calamine import CalamineWorkbook
+    with ZipFile(BytesIO(packed)) as archive:
+        exported = tmp_path / "unclassified.xlsx"
+        exported.write_bytes(archive.read(archive.namelist()[0]))
+        rows = CalamineWorkbook.from_path(exported).get_sheet_by_name(
+            "Proposte SSD"
+        ).to_python(skip_empty_area=False)
+        assert rows[6][3] == "2025/26"
