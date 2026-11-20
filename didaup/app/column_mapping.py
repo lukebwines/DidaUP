@@ -169,11 +169,15 @@ def source_header_conflicts(
                 "Le ore effettive non possono essere ricavate da "
                 f"«{headers[chosen]}»; scegliere «TOT ORE EFFETTIVE»"
             )
-        if (field == "ssd_docente_vecchio"
-            and selected_header == "CODICE SSD DOCENTE NUOVO"):
-            conflicts.append(
-                "«CODICE SSD DOCENTE NUOVO» non è la precedente codifica SSD del docente"
-            )
+    # This field is intentionally NOT among STRICT_SOURCE_FIELDS because
+    # the source report does not contain a verified old SSD header.
+    # Still disallow assigning the explicitly NEW SSD to the old field.
+    old_ssd = assigned.get("ssd_docente_vecchio")
+    if (old_ssd is not None and 0 <= old_ssd < len(normalized)
+            and normalized[old_ssd] == "CODICE SSD DOCENTE NUOVO"):
+        conflicts.append(
+            "«CODICE SSD DOCENTE NUOVO» non è la precedente codifica SSD del docente"
+        )
     return conflicts
 
 
