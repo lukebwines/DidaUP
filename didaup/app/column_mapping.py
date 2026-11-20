@@ -128,7 +128,8 @@ def evaluate_mapping(kind: str, assigned: dict[str, int]) -> list[str]:
         if not (assigned.get("insegnamento") is not None or assigned.get("modulo") is not None):
             missing.append("Denominazione dell'insegnamento o del modulo")
         if not (assigned.get("ssd_insegnamento_vecchio") is not None
-                or assigned.get("ssd_insegnamento_nuovo") is not None):
+                or assigned.get("ssd_insegnamento_nuovo") is not None
+                or assigned.get("ssd_insegnamento_originale") is not None):
             missing.append("SSD dell'insegnamento (vecchio o nuovo)")
         if "id_copertura" not in assigned:
             missing.append("ID copertura storica: da verificare prima della riconciliazione")
@@ -193,7 +194,7 @@ def normalize_header(value: Any) -> str:
 
     value = unicodedata.normalize("NFKD", str(value or ""))
     value = "".join(character for character in value if not unicodedata.combining(character))
-    value = re.sub(r"\\s+", " ", value.upper().strip())
+    value = re.sub(r"\s+", " ", value.upper().strip())
     return value
 
 
