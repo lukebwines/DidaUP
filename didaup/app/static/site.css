@@ -169,7 +169,7 @@ td small{display:block;color:#718398}td button{padding:7px 11px!important;font-s
 
 /* Annuality scope: independent filter facets, not administrative exclusions. */
 .cohort-filter-title{margin:20px 0 2px;font-size:.96rem}
-.cohort-facet-grid{display:grid;grid-template-columns:minmax(200px,2.5fr) minmax(150px,1fr) minmax(150px,1fr) auto;align-items:start;gap:10px;margin:12px 0}
+.cohort-facet-grid{display:grid;grid-template-columns:minmax(160px,1.3fr) minmax(210px,2.2fr) minmax(140px,1fr) minmax(140px,1fr);align-items:start;gap:10px;margin:12px 0}
 .cohort-multiselect{position:relative;min-width:0}
 .cohort-multiselect>summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:42px;padding:9px 13px;border:1px solid #b6c9dc;border-radius:9px;background:#fff;color:#203b59;cursor:pointer;font-size:.83rem;font-weight:650}
 .cohort-multiselect>summary::-webkit-details-marker{display:none}
