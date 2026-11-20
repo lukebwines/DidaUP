@@ -179,6 +179,11 @@ def test_boolean_mutuazione_is_visible_as_vero_falso_in_all_five(tmp_path):
         "Offerta sintetica", 1, assigned, "2026/27"
     )
     assert info["copies"] == 5
+    assert info["mutuazione_mapping_mode"] == "mappatura salvata"
+    assert info["mutuazione_true_rows"] == 2
+    assert info["mutuazione_false_rows"] == 2
+    assert info["mutuazione_other_rows"] == 0
+    assert info["mutuazione_empty_rows"] == 0
     with ZipFile(io.BytesIO(packed)) as archive:
         payloads = [archive.read(name) for name in archive.namelist()]
     assert len(payloads) == 5 and all(blob == payloads[0] for blob in payloads)
@@ -189,6 +194,31 @@ def test_boolean_mutuazione_is_visible_as_vero_falso_in_all_five(tmp_path):
     ).to_python(skip_empty_area=False)
     column = VISIBLE_HEADERS.index("MUTUAZIONE")
     assert [output[i][column] for i in range(6, 10)] == [
+        "VERO", "FALSO", "FALSO", "VERO"
+    ]
+
+
+def test_unmapped_legacy_mutuazione_is_recovered_only_from_exact_header(tmp_path):
+    source = tmp_path / "mutuazione-legacy.xlsx"
+    assigned = make_source(source, mutuazione_bool=True)
+    assigned.pop("mutuazione")
+    packed, info = build_five_workbooks(
+        source, hashlib.sha256(source.read_bytes()).hexdigest(),
+        "Offerta sintetica", 1, assigned, "2026/27"
+    )
+    assert info["mutuazione_mapping_mode"] == (
+        "intestazione MUTUAZIONE esatta, recuperata per export"
+    )
+    assert info["mutuazione_true_rows"] == 2
+    assert info["mutuazione_false_rows"] == 2
+    with ZipFile(io.BytesIO(packed)) as archive:
+        file = tmp_path / "mutuazione-result.xlsx"
+        file.write_bytes(archive.read(archive.namelist()[0]))
+    output = CalamineWorkbook.from_path(file).get_sheet_by_name(
+        "Proposte SSD"
+    ).to_python(skip_empty_area=False)
+    index = VISIBLE_HEADERS.index("MUTUAZIONE")
+    assert [output[i][index] for i in range(6, 10)] == [
         "VERO", "FALSO", "FALSO", "VERO"
     ]
 
