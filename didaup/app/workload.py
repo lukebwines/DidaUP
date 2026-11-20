@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from python_calamine import CalamineWorkbook
 
 from .column_mapping import normalize_header
+from .row_identity import source_row_id
 
 MAX_RULES = 500
 MAX_CHOICES = 1500
@@ -167,8 +168,21 @@ def apply_workload(planned, typology, course, taf, rules):
     return float(result), index, None
 
 
-def source_choices(path, sheet_name, header_row, assigned):
-    """Distinct exact values from the selected official source, not guesses."""
+def source_choices(
+    path, sheet_name, header_row, assigned, *,
+    source_sha256=None, allowed_source_ids=None,
+):
+    """Distinct values only from source rows retained by the export perimeter.
+
+    If allowed_source_ids is supplied, the source hash is mandatory; use
+    exactly the same source-row identities as the five Excel exports.
+    The default unfiltered mode remains available for standalone tests.
+    """
+    if allowed_source_ids is not None:
+        if (not isinstance(allowed_source_ids, (set, frozenset))
+                or not isinstance(source_sha256, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", source_sha256)):
+            raise WorkloadRuleError("Perimetro dei selettori del carico non valido")
     wb = CalamineWorkbook.from_path(path)
     if sheet_name not in wb.sheet_names:
         raise WorkloadRuleError("Foglio sorgente non disponibile")
@@ -190,9 +204,15 @@ def source_choices(path, sheet_name, header_row, assigned):
     typologies = set()
     courses = {}
     tafs = set()
-    for row in rows[header_row:]:
+    rows_in_scope = 0
+    for excel_row, row in enumerate(rows[header_row:], start=header_row + 1):
+        if allowed_source_ids is not None and source_row_id(
+            source_sha256, sheet_name, excel_row
+        ) not in allowed_source_ids:
+            continue
         if not any(value is not None and str(value).strip() for value in row):
             continue
+        rows_in_scope += 1
         typ = pick(row, assigned.get("cds_tipologia"))
         cds = pick(row, assigned.get("cds_codice"))
         name = pick(row, assigned.get("cds_nome"))
@@ -210,6 +230,7 @@ def source_choices(path, sheet_name, header_row, assigned):
         "cds": [{"code": code, "name": name} for code, name
                 in sorted(courses.items(), key=lambda x: canonical(x[1] or x[0]))],
         "taf": sorted(tafs, key=canonical),
+        "rows_in_scope": rows_in_scope,
         "mapped": {
             "tot_ore_previste": "ore_previste" in assigned,
             "tipologia": "cds_tipologia" in assigned,
