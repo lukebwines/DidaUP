@@ -589,7 +589,7 @@ def test_per_row_academic_year_is_preserved_and_source_integrity_checked(tmp_pat
                              assigned, "2026/27")
 
 
-def test_effective_hours_unmapped_and_reset_to_zero(tmp_path):
+def test_effective_hours_unmapped_take_planned_hours_by_default(tmp_path):
     src = tmp_path / "synthetic.xlsx"
     assigned = make_source(src)
     assigned.pop("ore_effettive_totali")
@@ -605,7 +605,7 @@ def test_effective_hours_unmapped_and_reset_to_zero(tmp_path):
     rows = CalamineWorkbook.from_path(path).get_sheet_by_name(
         "Proposte SSD"
     ).to_python(skip_empty_area=False)
-    assert [r[28] for r in rows[6:10]] == [0, 0, 0, 0]
+    assert [r[28] for r in rows[6:10]] == [20, 10, 0, 8]
 
 
 
