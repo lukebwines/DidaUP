@@ -1,4 +1,4 @@
-# DidaUP — Installazione e collaudo (0.1.10-alpha11)
+# DidaUP — Installazione e collaudo (0.1.10-alpha16)
 
 > Versione iniziale di sviluppo **non collaudata su una specifica istanza di Home Assistant**. Usare soltanto dati sintetici. Non caricare file reali dell'Ateneo.
 
