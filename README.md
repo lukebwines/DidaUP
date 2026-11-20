@@ -2,7 +2,7 @@
 
 **Add-on per la predisposizione di file Excel evoluti destinati ai referenti SSD.**
 
-> Stato: **0.1.3-alpha1 (primo nucleo tecnico)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. Non utilizzare dati reali dell'Ateneo durante il collaudo.
+> Stato: **0.1.4-alpha1 (primo nucleo tecnico)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. Non utilizzare dati reali dell'Ateneo durante il collaudo.
 
 ## Obiettivo
 Partire dall'offerta e dalle coperture storiche **2026/27** per costruire un archivio di riferimento verificabile. Quando saranno disponibili le estrazioni ufficiali, predisporre i fogli di programmazione **2027/28** senza trasporre automaticamente come valide assegnazioni, codici o nominativi precedenti.
@@ -52,9 +52,14 @@ Vedere [Installazione e sicurezza del tunnel](didaup/DOCS.md), [Decisioni confer
 ## Prossimi input
 Il report procedurale 2026/27 servirà a validare il tracciato di importazione, i ruoli, i controlli e il layout Excel. Eventuali dati assenti: **[DA VERIFICARE]**.
 
-## Evoluzione 0.1.3-alpha1 — mappatura
+## Evoluzione 0.1.4-alpha1 — mappatura
 - Per ogni Excel importato, la Segreteria può scegliere il foglio, indicare la riga delle intestazioni e associare manualmente le colonne ai campi previsti.
 - Si conservano separatamente SSD insegnamento e SSD docente, sia nella vecchia sia nella nuova codifica. Le altre colonne possono rimanere non associate.
 - Il sistema memorizza una bozza versionata della mappatura, con avvisi sui campi mancanti e blocco in caso di assegnazioni duplicate della stessa colonna.
 - Questa funzione **non acquisisce ancora le coperture come dati validati** e non genera ancora Excel destinati ai referenti.
 - Le anteprime restano nell'add-on, riservate agli operatori: nessun contenuto dei documenti viene pubblicato su GitHub.
+ 
+## Riconoscimento automatico 2026/27
+Il tracciato a 36 colonne fornito dall'utilizzatore è riconoscibile in **Importa report → Mappa colonne → Riconosci automaticamente**. Il sistema propone foglio, riga delle intestazioni e mappatura senza chiedere l'associazione manuale di tutte le colonne.
+
+**Uniche tre colonne di variazione:** Nuovo docente, Ore, Note. Le altre sono informazioni storiche e di contesto da mantenere non modificabili nei futuri XLSX. La lettura delle intestazioni e il salvataggio della mappatura **non** importano ancora incarichi o generano i file per i referenti.
