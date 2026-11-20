@@ -875,3 +875,204 @@ async def set_mapping(import_id: int, body: MappingDecision, request: Request):
         "version": current_version + 1, "warnings": warnings,
         "message": "Mappatura salvata, ancora da verificare prima dell'elaborazione"
     }
+
+
+def cohort_revision(cx: sqlite3.Connection, year_id: int) -> str:
+    """Detect concurrent edits without exposing private content in tokens."""
+    rows = cx.execute(
+        """SELECT id,course_code,course_name,campus,study_year,included,
+                  exclusion_reason,version
+           FROM cohorts WHERE year_id=? ORDER BY id""", (year_id,)
+    ).fetchall()
+    content = json.dumps([list(r) for r in rows], ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def load_cohort_source(cx: sqlite3.Connection, year_id: int, import_id: int):
+    ensure_year(cx, year_id)
+    source = get_source_record(cx, import_id)
+    if source["year_id"] != year_id or source["kind"] != "offerta":
+        raise HTTPException(422, "Il report selezionato non è l'offerta di questo A.A.")
+    mapping = cx.execute(
+        """SELECT sheet_name,header_row,fields_json,version
+           FROM source_mappings WHERE import_id=?""", (import_id,)
+    ).fetchone()
+    if mapping is None:
+        raise HTTPException(409, "Salvare prima la mappatura delle colonne")
+    year = cx.execute("SELECT code FROM academic_years WHERE id=?", (year_id,)).fetchone()
+    return source, mapping, year["code"]
+
+
+def analyze_cohort_source(source: sqlite3.Row, mapping: sqlite3.Row, year_code: str):
+    path = SOURCE_DIR / source["stored_name"]
+    if not path.is_file():
+        raise HTTPException(404, "Il file originale non è più disponibile")
+    try:
+        return extract_cohorts(
+            path, mapping["sheet_name"], mapping["header_row"],
+            json.loads(mapping["fields_json"]), year_code,
+        )
+    except CohortExtractionError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(422, "Impossibile ricavare le annualità dal report") from exc
+
+
+@app.get("/api/years/{year_id}/cohort-candidates")
+async def preview_cohort_candidates(year_id: int, import_id: int, request: Request):
+    current_user(request)
+    with closing(connect()) as cx:
+        source, mapping, year_code = load_cohort_source(cx, year_id, import_id)
+        mapping_version = mapping["version"]
+        source_sha256 = source["sha256"]
+    result = await run_in_threadpool(analyze_cohort_source, source, mapping, year_code)
+    with closing(connect()) as cx:
+        revision = cohort_revision(cx, year_id)
+        existing = {
+            (r["course_code"], r["campus"], r["study_year"]): r
+            for r in cx.execute(
+                """SELECT course_code,course_name,campus,study_year,included,
+                          exclusion_reason,version FROM cohorts WHERE year_id=?""",
+                (year_id,),
+            ).fetchall()
+        }
+    conflicts = []
+    for item in result["cohorts"]:
+        key = (item["course_code"], item["campus"], item["study_year"])
+        saved = existing.get(key)
+        if saved and saved["course_name"] != item["course_name"]:
+            conflicts.append({
+                "course_code": item["course_code"], "campus": item["campus"],
+                "study_year": item["study_year"],
+                "reason": "Denominazione CdS diversa da quella già censita",
+            })
+        item["excluded"] = bool(saved and not saved["included"])
+        item["exclusion_reason"] = saved["exclusion_reason"] if saved else ""
+    result.update({
+        "import_id": import_id, "year_id": year_id,
+        "mapping_version": mapping_version, "source_sha256": source_sha256,
+        "expected_revision": revision,
+        "existing_outside_report": len(existing) - len([
+            item for item in result["cohorts"]
+            if (item["course_code"], item["campus"], item["study_year"]) in existing
+        ]),
+        "conflicts": conflicts,
+    })
+    return result
+
+
+class CohortSelection(BaseModel):
+    course_code: str = Field(min_length=1, max_length=40)
+    campus: str = Field(min_length=1, max_length=80)
+    study_year: int = Field(ge=1, le=12)
+
+
+class CohortSelectionBatch(BaseModel):
+    import_id: int = Field(ge=1)
+    mapping_version: int = Field(ge=1)
+    expected_revision: str = Field(min_length=64, max_length=64)
+    excluded: list[CohortSelection] = Field(max_length=5000)
+    reason: str = Field(default="", max_length=500)
+    acknowledge_anomalies: bool = False
+
+
+@app.post("/api/years/{year_id}/cohort-candidates/apply")
+async def apply_cohort_exclusions(
+    year_id: int, request: Request, body: CohortSelectionBatch,
+):
+    actor = current_user(request, ("admin", "operatore"))
+    require_write(request, actor)
+    if not re.fullmatch(r"[a-f0-9]{64}", body.expected_revision):
+        raise HTTPException(422, "Riferimento versione non valido")
+    reason = body.reason.strip()
+    if body.excluded and len(reason) < 3:
+        raise HTTPException(422, "Indicare una motivazione per le esclusioni")
+    with closing(connect()) as cx:
+        source, mapping, year_code = load_cohort_source(cx, year_id, body.import_id)
+        if mapping["version"] != body.mapping_version:
+            raise HTTPException(409, "La mappatura è cambiata: ricaricare l'elenco")
+        source_sha = source["sha256"]
+    extracted = await run_in_threadpool(analyze_cohort_source, source, mapping, year_code)
+    if not extracted["cohorts"]:
+        raise HTTPException(409, "Nessuna annualità identificata: verificare la mappatura")
+    if extracted["anomaly_count"] and not body.acknowledge_anomalies:
+        raise HTTPException(
+            409,
+            "Sono presenti righe non riconosciute: confermare esplicitamente la loro esclusione dall'elenco",
+        )
+    available = {
+        (row["course_code"], row["campus"], row["study_year"]): row
+        for row in extracted["cohorts"]
+    }
+    exclusions = [(r.course_code, r.campus, r.study_year) for r in body.excluded]
+    if len(set(exclusions)) != len(exclusions):
+        raise HTTPException(422, "La selezione contiene annualità duplicate")
+    invalid = set(exclusions) - set(available)
+    if invalid:
+        raise HTTPException(409, "Una o più annualità non appartengono al report: ricaricare")
+    changed = 0
+    added = 0
+    with closing(connect()) as cx:
+        cx.execute("BEGIN IMMEDIATE")
+        try:
+            source_now, mapping_now, _ = load_cohort_source(cx, year_id, body.import_id)
+            if source_now["sha256"] != source_sha or mapping_now["version"] != body.mapping_version:
+                raise HTTPException(409, "Sorgente o mappatura modificata: ricaricare")
+            if cohort_revision(cx, year_id) != body.expected_revision:
+                raise HTTPException(409, "Un operatore ha modificato le annualità: ricaricare")
+            for key, item in available.items():
+                row = cx.execute(
+                    """SELECT id,course_name,included,exclusion_reason FROM cohorts
+                       WHERE year_id=? AND course_code=? AND campus=? AND study_year=?""",
+                    (year_id, *key),
+                ).fetchone()
+                desired_included = int(key not in exclusions)
+                desired_reason = "" if desired_included else reason
+                if row is None:
+                    cur = cx.execute(
+                        """INSERT INTO cohorts(year_id,course_code,course_name,campus,
+                                               study_year,included,exclusion_reason)
+                           VALUES(?,?,?,?,?,?,?)""",
+                        (year_id, item["course_code"], item["course_name"],
+                         item["campus"], item["study_year"],
+                         desired_included, desired_reason),
+                    )
+                    record(cx, actor["id"], "import_cohort", "cohort", cur.lastrowid)
+                    added += 1
+                else:
+                    if row["course_name"] != item["course_name"]:
+                        raise HTTPException(
+                            409, "Denominazione CdS discordante: controllare il report e il registro"
+                        )
+                    if row["included"] != desired_included or row["exclusion_reason"] != desired_reason:
+                        cx.execute(
+                            """UPDATE cohorts SET included=?,exclusion_reason=?,version=version+1
+                               WHERE id=?""",
+                            (desired_included, desired_reason, row["id"]),
+                        )
+                        record(
+                            cx, actor["id"],
+                            "include" if desired_included else "exclude",
+                            "cohort", row["id"],
+                        )
+                        changed += 1
+            batch = cx.execute(
+                """INSERT INTO cohort_exclusion_batches(
+                   import_id,year_id,mapping_version,source_sha256,cohort_count,
+                   exclusion_count,anomaly_count,actor_id,created_at)
+                   VALUES(?,?,?,?,?,?,?,?,?)""",
+                (body.import_id, year_id, body.mapping_version, source_sha,
+                 len(available), len(exclusions), extracted["anomaly_count"],
+                 actor["id"], int(time.time())),
+            )
+            record(cx, actor["id"], "save_cohort_scope", "cohort_exclusion_batch", batch.lastrowid)
+            cx.commit()
+        except Exception:
+            cx.rollback()
+            raise
+    return {
+        "ok": True, "total": len(available),
+        "excluded": len(exclusions), "added": added, "updated": changed,
+        "anomaly_count": extracted["anomaly_count"],
+        "message": "Ambito annualità salvato senza modificare il report originale",
+    }
