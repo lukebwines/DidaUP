@@ -1,4 +1,4 @@
-# DidaUP — Installazione e collaudo (0.1.0-alpha1)
+# DidaUP — Installazione e collaudo (0.1.1-alpha1)
 
 > Versione iniziale di sviluppo **non collaudata su una specifica istanza di Home Assistant**. Usare soltanto dati sintetici. Non caricare file reali dell'Ateneo.
 
@@ -14,6 +14,23 @@ Il repository GitHub è **privato**. Non trattarlo come un repository pubblico p
 6. Usare il selettore in alto per cambiare A.A.; il database viene mantenuto sotto la directory persistente `/data`.
 
 Le operazioni amministrative e l'archivio non vengono esportati in GitHub.
+
+
+## Recupero dell'account amministratore senza cancellare i dati
+
+Se DidaUP risponde **Credenziali non valide** anche usando la password iniziale:
+
+1. Accedere in Home Assistant come amministratore e aprire **DidaUP → Configurazione**.
+2. Inserire temporaneamente una password nuova e robusta nel campo `admin_recovery_password` (almeno 12 caratteri). **Non** modificare `bootstrap_password` come metodo di recupero: viene usato soltanto quando il database non contiene utenti.
+3. Salvare la configurazione e **riavviare l'add-on**. La procedura di recupero reimposta soltanto l'account specificato da `bootstrap_username`, revoca le sessioni di quell'account e cancella i tentativi di accesso falliti. Non elimina il database, le annualità o altri utenti.
+4. Accedere con `bootstrap_username` e la nuova password.
+5. Dopo aver verificato l'accesso, **rimuovere `admin_recovery_password` dalla configurazione e salvare**. È una credenziale amministrativa temporanea e non deve restare salvata nelle opzioni dell'add-on.
+6. Dalla sezione Sicurezza di DidaUP cambiare la password con una definitiva e non riutilizzata.
+
+Il sistema conserva una verifica salata dell'ultima password di recupero, così la stessa richiesta **non viene ripetuta ai riavvii successivi**. Per una nuova procedura di recupero è necessario usare una password diversa.
+
+La password e il suo valore non vanno inseriti in GitHub, messaggi, screenshot o issue. Se si utilizza un backup precedente alla correzione, verificare la versione e seguire nuovamente questa procedura.
+
 
 ## Porta e tunnel
 
