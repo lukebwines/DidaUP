@@ -8,7 +8,7 @@ const titles = {
   imports: ["IMPORTAZIONE", "Acquisizione report Excel"],
   mapping: ["MAPPATURA", "Riconoscimento colonne"],
   archive: ["ARCHIVIO", "Gestione e azzeramento"],
-  workbook: ["GENERA EXCEL", "Cinque file completi per dipartimento"],
+  workbook: ["GENERA EXCEL", "Cinque file e registro esclusioni"],
   users: ["GESTIONE ACCOUNT", "Utenti autorizzati"],
   security: ["SICUREZZA", "Accesso e credenziali"]
 };
@@ -370,7 +370,7 @@ async function refreshWorkbooks() {
   const existing = await api("years/" + state.selected + "/department-workbooks");
   for (const item of existing) {
     const row = body.insertRow();
-    row.insertCell().textContent = "Cinque Excel completi · #" + item.id;
+    row.insertCell().textContent = "5 Excel + righe escluse · #" + item.id;
     row.insertCell().textContent = new Date(item.generated_at * 1000).toLocaleString("it-IT");
     const c = row.insertCell();
     const button = document.createElement("button");
