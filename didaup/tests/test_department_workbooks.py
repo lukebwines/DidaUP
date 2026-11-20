@@ -39,6 +39,7 @@ def make_source(path: Path, *, malicious=False, wrong_year=False, incomplete_ann
             "CODICE UGOV": f"UGOV-{module}",
             "MODULO": module, "ANNO": ("" if incomplete_annuality and row_number == 3 else 2),
             "SSD INSEGNAMENTO": "TEST-SSD",
+            "TAF": "TAF-SINTETICO",
             "NOME DOCENTE": teacher,
             "DIPARTIMENTO AFFERENZA DOCENTE": dept,
             "TOT ORE EFFETTIVE": hours,
@@ -126,6 +127,36 @@ def test_five_copies_are_byte_identical_and_unfiltered(tmp_path):
         shared = xlsx.read("xl/sharedStrings.xml").decode()
         assert '=HYPERLINK(' in shared
         assert "https://example.invalid" in shared
+
+
+def test_taf_is_recovered_from_unique_exact_header_if_old_mapping_omits_it(tmp_path):
+    source = tmp_path / "synthetic-taf.xlsx"
+    assigned = make_source(source)
+    assigned.pop("taf")
+    packed, info = build_five_workbooks(
+        source, hashlib.sha256(source.read_bytes()).hexdigest(),
+        "Offerta sintetica", 1, assigned, "2026/27"
+    )
+    assert info["taf_mapping_mode"] == "intestazione TAF esatta, recuperata per export"
+    assert info["taf_rows_with_value"] == 4
+    assert info["taf_rows_without_value"] == 0
+    with ZipFile(io.BytesIO(packed)) as bundle:
+        first = tmp_path / "first.xlsx"
+        first.write_bytes(bundle.read(bundle.namelist()[0]))
+    sheet = CalamineWorkbook.from_path(first).get_sheet_by_name("Proposte SSD")
+    rows = sheet.to_python(skip_empty_area=False)
+    assert rows[6][VISIBLE_HEADERS.index("TAF")] == "TAF-SINTETICO"
+
+
+def test_taf_from_saved_mapping_is_preserved_without_guessing(tmp_path):
+    source = tmp_path / "synthetic-taf-mapped.xlsx"
+    assigned = make_source(source)
+    packed, info = build_five_workbooks(
+        source, hashlib.sha256(source.read_bytes()).hexdigest(),
+        "Offerta sintetica", 1, assigned, "2026/27"
+    )
+    assert info["taf_mapping_mode"] == "mappatura salvata"
+    assert info["taf_rows_with_value"] == 4
 
 
 def test_explicit_cohort_exclusions_apply_to_all_five_copies(tmp_path):
