@@ -823,8 +823,18 @@ async def set_mapping(import_id: int, body: MappingDecision, request: Request):
         for field, index in body.assigned.items():
             if isinstance(index, bool) or index < 0 or index >= sheet["columns"]:
                 raise HTTPException(422, "Indice colonna non valido")
-        if len(set(body.assigned.values())) != len(body.assigned):
-            raise HTTPException(422, "La stessa colonna risulta associata a più campi")
+        first_used: dict[int, str] = {}
+        readable_fields = {field["key"]: field["label"] for field in fields_for(report["kind"])}
+        for field, index in body.assigned.items():
+            if index in first_used:
+                previous_field = first_used[index]
+                raise HTTPException(
+                    422,
+                    f"Colonna {index + 1} assegnata a più campi: "
+                    f"{readable_fields[previous_field]} / {readable_fields[field]}. "
+                    "Lascia non associato il campo che non corrisponde all'intestazione.",
+                )
+            first_used[index] = field
         warnings = evaluate_mapping(report["kind"], body.assigned)
         if existing is None:
             cx.execute(
