@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="static/site.css">
   <script src="static/site.js" defer></script>
   <script src="static/mapping.js" defer></script>
+  <script src="static/cohort_review.js" defer></script>
 </head>
 <body>
   <section id="login-view" class="login-shell" hidden>
@@ -95,6 +96,62 @@
         </section>
 
         <section id="view-cohorts" class="screen" hidden>
+          <div class="panel cohort-review">
+            <div class="panel-heading">
+              <div>
+                <h3>Seleziona le annualità da escludere</h3>
+                <p>Spunta le annualità non più in gestione. Una riga corrisponde a codice CdS, sede e anno di corso; il report originale non viene modificato.</p>
+              </div>
+              <span class="chip">Selezione guidata</span>
+            </div>
+            <div class="cohort-source-row">
+              <label>Report dell'offerta 2026/27
+                <select id="cohort-source-select" aria-label="Sorgente delle annualità"></select>
+              </label>
+              <button class="primary" type="button" id="cohort-review-load">Ricava elenco dal report</button>
+            </div>
+            <div id="cohort-review-body" hidden>
+              <div id="cohort-review-notice" class="import-warning" role="status" aria-live="polite"></div>
+              <div class="cohort-search-row">
+                <label class="cohort-search">
+                  <span>Ricerca rapida</span>
+                  <input id="cohort-review-search" type="search" placeholder="Cerca CdS, codice, sede o anno…" autocomplete="off">
+                </label>
+                <label>Mostra
+                  <select id="cohort-review-filter">
+                    <option value="all">Tutte le annualità</option>
+                    <option value="excluded">Solo quelle spuntate</option>
+                    <option value="included">Solo quelle non spuntate</option>
+                  </select>
+                </label>
+              </div>
+              <div class="cohort-count-row">
+                <span id="cohort-review-count" class="chip"></span>
+                <span id="cohort-review-selected" class="chip"></span>
+              </div>
+              <div class="cohort-batch-actions write-only">
+                <button class="secondary" type="button" id="cohort-check-visible">Spunta risultati visibili</button>
+                <button class="secondary" type="button" id="cohort-uncheck-visible">Togli spunta ai risultati visibili</button>
+              </div>
+              <div class="table-wrap cohort-list-wrap">
+                <table aria-label="Annualità da escludere">
+                  <thead>
+                    <tr><th>Da escludere</th><th>Corso di Studio</th><th>Codice</th><th>Sede</th><th>Anno</th><th>Righe sorgente</th></tr>
+                  </thead>
+                  <tbody id="cohort-review-rows"></tbody>
+                </table>
+              </div>
+              <p id="cohort-review-empty" class="empty" hidden>Nessuna annualità corrisponde alla ricerca.</p>
+              <div class="cohort-confirm write-only">
+                <label>Motivazione delle nuove esclusioni
+                  <input id="cohort-review-reason" value="Annualità non più in gestione" maxlength="500">
+                </label>
+                <button class="primary" type="button" id="cohort-review-save">Salva le esclusioni selezionate</button>
+              </div>
+              <p class="muted">Le spunte sono soltanto una selezione fino al salvataggio. I risultati nascosti dalla ricerca mantengono la propria spunta. Al salvataggio vengono censite anche le annualità non escluse.</p>
+            </div>
+            <p id="cohort-review-placeholder" class="empty">Seleziona il report importato e premi «Ricava elenco dal report» per visualizzare le annualità.</p>
+          </div>
           <div class="panel">
             <div class="panel-heading">
               <div><h3>Annualità dei Corsi di Studio</h3><p>Le esclusioni incidono solo sulla futura generazione dei file: la fonte storica resta intatta.</p></div>
@@ -105,7 +162,7 @@
               <p id="empty-cohorts" class="empty">Nessuna annualità censita. Le righe verranno acquisite dal report ufficiale; puoi inserire una voce sintetica per collaudo.</p>
             </div>
           </div>
-          <div class="panel write-only">
+          <details class="panel write-only"><summary>Inserimento manuale per collaudo (avanzato)</summary>
             <h3>Inserimento manuale per collaudo</h3>
             <p>Non caricare dati personali o operativi dell'Ateneo in questo ambiente non ancora validato.</p>
             <form id="cohort-form" class="fields row-fields">
@@ -115,7 +172,7 @@
               <label>Anno di corso<input id="cohort-study-year" type="number" min="1" max="12" value="1" required></label>
               <button class="secondary" type="submit">Inserisci annualità</button>
             </form>
-          </div>
+          </details>
         </section>
 
         <section id="view-imports" class="screen" hidden>
