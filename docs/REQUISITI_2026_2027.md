@@ -198,3 +198,14 @@ La fonte importata e le esclusioni registrate non vengono modificate. Le copie E
 L'utente ha verificato che il campo **TAF** risultava **non associato nella mappatura**: non si trattava di un valore TAF da inventare, ma dell'assenza di una corrispondenza con la colonna del report. La soluzione operativa è selezionare la colonna **TAF** nella mappatura e salvare, quindi rigenerare i cinque Excel. Il report storico non viene modificato.
 
 Per proteggere anche i precedenti mapping incompleti, il generatore può recuperare il TAF dalla fonte **soltanto se trova un'unica intestazione esatta \"TAF\"**; segnala se la colonna manca, è ambigua, oppure quanti valori di riga sono effettivamente disponibili. Non attribuisce classificazioni TAF per analogia o interpretazione. Questa funzionalità non sostituisce la verifica esplicita della mappatura da parte dell'operatore.
+
+
+## Maschera delle esclusioni: filtri combinabili e multiselezione — revisione UI
+
+Per la selezione delle annualità da escludere viene introdotto un pannello dedicato con **ricerca libera** e filtri multiselezione indipendenti per **CdS (nome e codice), sede e anno di corso**. Il filtro di stato distingue tutte le annualità, quelle spuntate per esclusione, quelle non spuntate e le **sole modifiche non ancora salvate**.
+
+Le azioni massive di esclusione/ripristino incidono **soltanto sulle annualità effettivamente visualizzate in base ai filtri in uso**, richiedono conferma e non modificano il database fino alla pressione del pulsante di salvataggio. Le righe nascoste conservano la loro spunta e i filtri non hanno valore amministrativo. La maschera mostra in modo distinto: totale visibile, spunte in bozza, **esclusioni già registrate** e differenze (nuove esclusioni/ripristini). È possibile annullare la bozza e azzerare i filtri separatamente.
+
+Il **registro delle annualità già salvate** mantiene il suo stato effettivo, separato dalla selezione guidata, e può essere filtrato per testo e inclusione/esclusione. I controlli server di concorrenza, integrità della fonte, tracciabilità e motivazione restano attivi. Nessun elenco realmente amministrativo viene pubblicato come fixture di test.
+
+Per distinguere un Excel storico da una nuova generazione, i cinque XLSX nel pacchetto hanno un **identificativo di revisione nel nome file**. Le cinque copie restano identiche nel contenuto. La data/ID di revisione non altera lo storico né determina uno stato di approvazione.
