@@ -36,4 +36,8 @@ assert.equal(context.mappingConflicts([
   {value: "76", label: "SSD docente nuovo"},
   {value: "", label: "Non associato"},
 ]).length, 0);
+const edited = {ore_effettive_totali: "73", codice_insegnamento: "8"};
+assert.equal(context.mappingSelectedValue("ore_effettive_totali", suggested, saved, true, true, edited), "73");
+assert.equal(context.mappingSelectedValue("codice_insegnamento", suggested, saved, true, true, edited), "8");
+assert.equal(context.mappingSelectedValue("ore_copertura", suggested, saved, true, true, edited), "");
 console.log("DidaUP mapping regression tests: PASS");
