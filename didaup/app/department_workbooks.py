@@ -23,6 +23,7 @@ import xlsxwriter
 
 from .column_mapping import OFFER_HEADER_TO_FIELD, source_header_conflicts, normalize_header
 from .row_identity import source_row_id
+from .workload import WorkloadRuleError, validate_rules, apply_workload
 
 # Order of the pre-existing outgoing referent layout (not the 110-col source).
 HISTORIC_HEADERS = [
@@ -157,7 +158,9 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
              assigned: dict[str, int], history_year: str,
              excluded: set[tuple[str, str, int]],
              included: set[tuple[str, str, int]] | None = None,
-             cohort_names: dict[tuple[str, str, int], str] | None = None):
+             cohort_names: dict[tuple[str, str, int], str] | None = None,
+             workload_rules: list[dict] | None = None,
+             strict_workload: bool = True):
     if not re.fullmatch(r"[0-9a-f]{64}", source_sha256):
         raise WorkbookGenerationError("Hash dello storico non valido")
     if not source.is_file():
@@ -235,6 +238,23 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     else:
         mutuazione_mapping_mode = "campo MUTUAZIONE non associato e intestazione esatta assente"
 
+    try:
+        effective_rules = validate_rules(workload_rules or [])
+    except WorkloadRuleError as exc:
+        raise WorkbookGenerationError(str(exc)) from exc
+    if effective_rules and "ore_previste" not in assigned:
+        raise WorkbookGenerationError(
+            "Calcolo carico: associare TOT ORE PREVISTE prima di generare i file"
+        )
+    if any(rule["tipologia"] for rule in effective_rules) and "cds_tipologia" not in assigned:
+        raise WorkbookGenerationError(
+            "Calcolo carico: associare TIPOLOGIA prima di usare regole per tipologia"
+        )
+    if any(rule["taf"] for rule in effective_rules) and "taf" not in assigned:
+        raise WorkbookGenerationError(
+            "Calcolo carico: associare TAF prima di usare regole per TAF"
+        )
+
     excluded_keys = {_normalized_cohort_key(*item) for item in excluded}
     excluded_keys.discard(None)
     included_keys = {
@@ -292,6 +312,11 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     excluded_records = []
     excluded_count = 0
     excluded_by_missing_year_count = 0
+    workload_matches = 0
+    workload_unmatched = 0
+    workload_total = 0.0
+    workload_errors = []
+    workload_by_rule = [0] * len(effective_rules)
     unresolved_annuality_rows = 0
     unresolved_annuality_examples = []
     missing_activity_code_rows = 0
@@ -407,7 +432,20 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         # or old effective-hour values. The future workload rule engine will
         # populate this field from TOT ORE PREVISTE; the source is unchanged.
         # Excluded rows above retain their source values in the internal audit.
-        data["TOT ORE EFFETTIVE"] = 0
+        effective, matched_index, rule_issue = apply_workload(
+            get("ore_previste"), get("cds_tipologia"), course,
+            data.get("TAF", ""), effective_rules,
+        )
+        data["TOT ORE EFFETTIVE"] = effective
+        if matched_index is None and rule_issue is None:
+            workload_unmatched += 1
+        elif rule_issue:
+            if len(workload_errors) < 100:
+                workload_errors.append({"excel_row": excel_row, "reason": rule_issue})
+        else:
+            workload_matches += 1
+            workload_by_rule[matched_index] += 1
+            workload_total += effective
         historical_id = source_row_id(source_sha256, sheet_name, excel_row)
         if _display(data.get("TAF")):
             taf_rows_with_value += 1
@@ -433,6 +471,22 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         prepared.append((data, historical_id, _activity_id(data, historical_id)))
     if not prepared:
         raise WorkbookGenerationError("Nessuna riga storica esportabile")
+    workload_stats = {
+        "rules": len(effective_rules),
+        "rows_calculated": workload_matches,
+        "rows_without_rule": workload_unmatched,
+        "total_effective_hours": round(workload_total, 2),
+        "per_rule_rows": workload_by_rule,
+        "errors": workload_errors,
+        "blocked": bool(workload_errors),
+    }
+    if strict_workload and workload_errors:
+        first = workload_errors[0]
+        raise WorkbookGenerationError(
+            f"Calcolo carico non valido: {len(workload_errors)} errori "
+            f"(riga {first['excel_row']}: {first['reason']}). "
+            "Verificare le regole e l'anteprima."
+        )
     return (
         prepared, excluded_count, unresolved_annuality_rows,
         unresolved_annuality_examples,
@@ -449,7 +503,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         taf_mapping_mode, taf_rows_with_value, taf_rows_without_value,
         mutuazione_mapping_mode, mutuazione_true_count,
         mutuazione_false_count, mutuazione_other_count, mutuazione_blank_count,
-        excluded_records,
+        excluded_records, workload_stats,
     )
 
 
@@ -459,6 +513,7 @@ def build_five_workbooks(
     excluded: set[tuple[str, str, int]] | None = None,
     included: set[tuple[str, str, int]] | None = None,
     cohort_names: dict[tuple[str, str, int], str] | None = None,
+    workload_rules: list[dict] | None = None,
 ) -> tuple[bytes, dict]:
     """ZIP with five byte-identical referent XLSX and one internal excluded-row audit."""
     proposal_year = next_academic_year(history_year)
@@ -470,9 +525,9 @@ def build_five_workbooks(
      taf_mapping_mode, taf_rows_with_value, taf_rows_without_value,
      mutuazione_mapping_mode, mutuazione_true_count,
      mutuazione_false_count, mutuazione_other_count, mutuazione_blank_count,
-     excluded_records) = _prepare(
+     excluded_records, workload_stats) = _prepare(
         source, source_sha256, sheet_name, header_row, assigned,
-        history_year, excluded or set(), included, cohort_names,
+        history_year, excluded or set(), included, cohort_names, workload_rules,
     )
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output, {"in_memory": True})
@@ -689,6 +744,7 @@ def build_five_workbooks(
         "export_revision": export_revision,
         "copies": NUM_COPIES, "archive_files": NUM_COPIES + 1,
         "excluded_file_rows": len(excluded_records),
+        "workload": workload_stats,
         "excluded_audit_sha256": hashlib.sha256(excluded_template).hexdigest(),
         "historical_rows": len(prepared),
         "excluded_rows": excluded_count,
