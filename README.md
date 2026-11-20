@@ -2,7 +2,7 @@
 
 **Add-on per la predisposizione di file Excel evoluti destinati ai referenti SSD.**
 
-> Stato: impostazione iniziale del progetto. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata.
+> Stato: **0.1.0-alpha1 (primo nucleo tecnico)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. Non utilizzare dati reali dell'Ateneo durante il collaudo.
 
 ## Obiettivo
 Partire dall'offerta e dalle coperture storiche **2026/27** per costruire un archivio di riferimento verificabile. Quando saranno disponibili le estrazioni ufficiali, predisporre i fogli di programmazione **2027/28** senza trasporre automaticamente come valide assegnazioni, codici o nominativi precedenti.
@@ -30,7 +30,21 @@ Il regolamento già fornito è un riferimento essenziale da analizzare durante l
 ## Sicurezza
 Repository privato **solo per codice e documentazione tecnica priva di dati personali**. Non caricare file dell'Ateneo o fogli compilati, nemmeno in issue, log, workflow o allegati GitHub.
 
-Vedere [Policy privacy](docs/PRIVACY.md), [Architettura](docs/ARCHITETTURA.md) e [Specifiche interfaccia](docs/UI_UX.md).
+## Primo add-on tecnico disponibile
+
+Nella cartella [`didaup/`](didaup/) è presente la prima versione:
+- interfaccia grafica con **selettore multi-A.A.**, archivio iniziale 2026/27 e creazione degli A.A. successivi;
+- gestione manuale per collaudo delle annualità dei CdS, con **esclusione/ripristino senza cancellazione**;
+- multi-account con ruoli **admin**, **operatore** e **sola lettura**;
+- login e sessioni proprie, autorizzazioni lato server, cookie HttpOnly e CSRF;
+- accesso sia da **Home Assistant Ingress** sia dalla porta dedicata **8097/tcp**, utilizzabile da Cloudflare Tunnel protetto da Access;
+- database SQLite persistente separato dal repository.
+
+**Non implementati in questa versione:** import XLS del report 2026/27, generazione e reimportazione XLSX, gestione dei referenti SSD e avvisi regolamentari.
+
+I controlli su GitHub includono test sintetici, verifica sintattica Python e build dell'immagine Docker. La riuscita della build **non sostituisce** il collaudo su Home Assistant e sul tunnel.
+
+Vedere [Installazione e sicurezza del tunnel](didaup/DOCS.md), [Decisioni confermate](docs/REQUISITI_2026_2027.md), [Policy privacy](docs/PRIVACY.md), [Architettura](docs/ARCHITETTURA.md) e [Specifiche interfaccia](docs/UI_UX.md).
 
 ## Prossimi input
 Il report procedurale 2026/27 servirà a validare il tracciato di importazione, i ruoli, i controlli e il layout Excel. Eventuali dati assenti: **[DA VERIFICARE]**.
