@@ -24,7 +24,7 @@ def referent_names(archive):
             if "_Dipartimento_" in name and name.endswith(".xlsx")]
 
 
-def make_source(path: Path, *, malicious=False, wrong_year=False, incomplete_annuality=False, mutuazione_bool=False, with_tipologia=False):
+def make_source(path: Path, *, malicious=False, wrong_year=False, incomplete_annuality=False, mutuazione_bool=False, with_tipologia=False, blank_planned_rows=(), invalid_planned_rows=None):
     source_headers = list(HISTORIC_HEADERS) + (["TIPOLOGIA"] if with_tipologia else [])
     assert len(source_headers) == (34 if with_tipologia else 33)
     wb = xlsxwriter.Workbook(str(path))
@@ -50,7 +50,12 @@ def make_source(path: Path, *, malicious=False, wrong_year=False, incomplete_ann
             "NOME DOCENTE": teacher,
             "DIPARTIMENTO AFFERENZA DOCENTE": dept,
             "TOT ORE EFFETTIVE": hours,
-            "TOT ORE PREVISTE": hours if hours is not None else 0,
+            "TOT ORE PREVISTE": (
+                None if row_number in blank_planned_rows
+                else (invalid_planned_rows or {}).get(
+                    row_number, hours if hours is not None else 0
+                )
+            ),
             "TIPOLOGIA": "Laurea" if course == "SYN-A" else "Magistrale",
         }
         for col, header in enumerate(source_headers):
