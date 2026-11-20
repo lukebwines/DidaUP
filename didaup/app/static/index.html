@@ -326,9 +326,9 @@
         <section id="view-workbook" class="screen" hidden>
           <div class="panel">
             <div class="panel-heading">
-              <div><h3>Cinque Excel identici e completi</h3>
+              <div><h3>Cinque Excel per i referenti + registro delle righe escluse</h3>
                 <p>Un solo tracciato storico, cinque copie senza alcun filtro per dipartimento. Ogni Excel contiene tutti i CdS e gli SSD; le proposte 2027/28 sono distinte dallo storico 2026/27.</p>
-              </div><span class="chip">5 file XLSX in ZIP</span>
+              </div><span class="chip">6 file XLSX in ZIP</span>
             </div>
             <div class="import-warning">
               <strong>Fase di collaudo, solo dati sintetici.</strong>
@@ -340,10 +340,10 @@
               <label>Report di offerta storica mappato
                 <select id="workbook-import-id" required></select>
               </label>
-              <button id="workbook-generate-button" class="primary" type="submit">Genera 5 Excel identici</button>
+              <button id="workbook-generate-button" class="primary" type="submit">Genera 5 Excel + righe escluse</button>
             </form>
             <p id="workbook-progress" class="muted" aria-live="polite"></p>
-            <p class="muted">Le colonne storiche sono bloccate; solo Tipo variazione, Nuovo docente, Ore e Note sono compilabili. Le esclusioni di annualità già deliberate in DidaUP restano applicate, ma non c'è ripartizione dipartimentale.</p>
+            <p class="muted">Le colonne storiche sono bloccate; solo Tipo variazione, Nuovo docente, Ore e Note sono compilabili nei cinque Excel destinati ai referenti. Il sesto file, Righe escluse · CONTROLLO INTERNO, contiene le righe effettivamente eliminate e il motivo: non va distribuito ai referenti. Le esclusioni registrate restano applicate e non c’è ripartizione dipartimentale.</p>
             <div class="table-wrap">
               <table><thead><tr><th>Pacchetto</th><th>Generato</th><th>Download</th></tr></thead>
                 <tbody id="workbook-archives"></tbody></table>
