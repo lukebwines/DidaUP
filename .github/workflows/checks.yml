@@ -32,8 +32,11 @@ jobs:
         run: |
           node --check didaup/app/static/site.js
           node --check didaup/app/static/mapping.js
+          node --check didaup/app/static/cohort_review.js
       - name: Test JavaScript (associazioni duplicate)
         run: node didaup/tests/mapping.test.cjs
+      - name: Test JavaScript (ricerca ed esclusioni CdS)
+        run: node didaup/tests/cohort_review.test.cjs
       - name: Test con dati esclusivamente sintetici
         run: PYTHONPATH=didaup python -m pytest -q didaup/tests
       - name: Build immagine add-on
