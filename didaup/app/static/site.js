@@ -219,6 +219,16 @@ function renderSavedCohorts() {
       button.className = "secondary";
       button.textContent = row.included ? "Escludi" : "Ripristina";
       button.addEventListener("click", async () => {
+        // Never combine a direct register update with a separate unsaved
+        // guided selection: otherwise the later bulk save would be stale.
+        if (typeof pendingCohortChanges === "function") {
+          const pending = pendingCohortChanges();
+          if (pending.exclude || pending.restore) {
+            showNotice("Sono presenti modifiche non salvate nella selezione guidata. " +
+              "Salvale o annullale prima di modificare il registro.", true);
+            return;
+          }
+        }
         const reason = row.included
           ? window.prompt("Motivazione dell'esclusione (obbligatoria):", "")
           : "";
