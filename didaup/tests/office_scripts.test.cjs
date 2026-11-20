@@ -1,30 +1,31 @@
 "use strict";
-/**
- * Static checks for the OneDrive synthetic prototype. These cannot replace
- * execution inside the tenant's Excel for the Web environment.
- */
+/* Synthetic-only regression checks; Office Scripts also need tenant testing. */
 const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert/strict");
-
 const root = path.join(__dirname, "..", "prototypes", "office_scripts");
-const initialize = fs.readFileSync(path.join(root, "prepara_protezione.ts"), "utf8");
+const recovery = fs.readFileSync(path.join(root, "prepara_protezione.ts"), "utf8");
 const addRow = fs.readFileSync(path.join(root, "aggiungi_variazione.ts"), "utf8");
 
-assert.match(initialize, /getRange\("G7:J1000"\)/);
-assert.match(initialize, /setLocked\(false\)/);
-assert.match(initialize, /getRange\("A1:M1000"\)/);
-assert.match(initialize, /setLocked\(true\)/);
-assert.match(initialize, /guard\.protect\(/);
+assert.match(recovery, /getRange\("A1:AO500"\)/);
+assert.match(recovery, /getRange\("AD7:AG500"\)/);
+assert.match(recovery, /setLocked\(true\)/);
+assert.match(recovery, /setLocked\(false\)/);
+assert.match(recovery, /p\.getProtected\(\)/);
+assert.match(addRow, /FULL_COLS = 41/);
+assert.match(addRow, /VISIBLE_COLS = 37/);
+assert.match(addRow, /EDIT_START = 29/);
+assert.match(addRow, /EDIT_COUNT = 4/);
 assert.match(addRow, /getSelectedRange\(\)/);
 assert.match(addRow, /getIsPasswordProtected\(\)/);
-assert.match(addRow, /getRangeByIndexes\(insertIndex, 0, 1, WIDTH\)/);
-assert.match(addRow, /\.insert\(ExcelScript\.InsertShiftDirection\.down\)/);
-assert.match(addRow, /getRangeByIndexes\(insertIndex, 6, 1, 4\)\.setValues/);
-assert.match(addRow, /"VARIAZIONE"/);
+assert.match(addRow, /getEntireRow\(\)\.insert\(ExcelScript\.InsertShiftDirection\.down\)/);
+assert.match(addRow, /proposal\.setValues\(\[\["", "", "", ""\]\]\)/);
+assert.match(addRow, /getFormat\(\)\.getProtection\(\)\.setLocked\(true\)/);
+assert.match(addRow, /getFormat\(\)\.getProtection\(\)\.setLocked\(false\)/);
+assert.match(addRow, /"VARIAZIONE", originId/);
 assert.match(addRow, /DIDAUP-VAR-/);
-assert.match(addRow, /protection\.protect\(options\)/);
-// The prototype intentionally has no hardcoded password and no network I/O.
-assert.doesNotMatch(addRow + initialize, /\.protect\([^)]*,\s*["']/);
-assert.doesNotMatch(addRow + initialize, /fetch\s*\(|XMLHttpRequest|localStorage/);
-console.log("DidaUP Office Scripts prototype checks: PASS");
+assert.match(addRow, /protection\.protect\(savedOptions\)/);
+assert.match(addRow, /"TOT ORE EFFETTIVE"/);
+assert.match(addRow, /"Tipo variazione"/);
+assert.doesNotMatch(addRow + recovery, /fetch\s*\(|XMLHttpRequest|localStorage/);
+console.log("DidaUP 37-column Office Scripts structure tests: PASS");
