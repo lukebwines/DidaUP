@@ -83,6 +83,7 @@ def extract_cohorts(
     groups: dict[tuple[str, str, int], dict] = {}
     names: dict[tuple[str, str, int], set[str]] = defaultdict(set)
     typologies: dict[tuple[str, str, int], set[str]] = defaultdict(set)
+    assignment_titles: dict[tuple[str, str, int], set[str]] = defaultdict(set)
     anomalies: list[dict] = []
     total_invalid = 0
     blank_rows = 0
@@ -106,6 +107,7 @@ def extract_cohorts(
         name = field("cds_nome")
         campus = field("sede")
         typology = field("cds_tipologia")
+        assignment_title = field("titolo_affidamento")
         year_raw = field("anno_corso")
         study_year = course_year(year_raw)
         if not code or not name or not campus or study_year is None:
@@ -131,6 +133,7 @@ def extract_cohorts(
         entry["source_rows"] += 1
         names[key].add(name)
         typologies[key].add(typology)
+        assignment_titles[key].add(assignment_title)
         valid_rows += 1
         if len(groups) > MAX_COHORTS:
             raise CohortExtractionError("Troppe annualità distinte nel file")
@@ -145,6 +148,9 @@ def extract_cohorts(
             # Preserve every source typology for a CdS/year, including blank values.
             # One annuality may appear in activities with different typologies.
             entry["course_types"] = sorted(typologies[key], key=str.casefold)
+            entry["assignment_titles"] = sorted(
+                assignment_titles[key], key=str.casefold
+            )
             filtered.append(entry)
     filtered.sort(key=lambda v: (v["course_name"].casefold(), v["campus"].casefold(),
                                  v["study_year"], v["course_code"]))
@@ -160,6 +166,7 @@ def extract_cohorts(
         "cohorts": filtered,
         "cohort_count": len(filtered),
         "typology_mapped": "cds_tipologia" in assigned,
+        "assignment_title_mapped": "titolo_affidamento" in assigned,
         "notice": (
             "Anteprima non distruttiva. Le anomalie sono escluse dall'elenco "
             "e devono essere risolte oppure esplicitamente accettate dall'amministratore."
