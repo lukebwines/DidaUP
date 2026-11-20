@@ -31,6 +31,7 @@ BASE = Path(__file__).resolve().parent
 DATA = Path(os.environ.get("DIDAUP_DATA_DIR", "/data"))
 DB = DATA / "didaup.sqlite3"
 SOURCE_DIR = DATA / "sources"
+WORK_DIR = DATA / "working"
 CONFIG_FILE = Path(os.environ.get("DIDAUP_OPTIONS_PATH", "/data/options.json"))
 COOKIE_NAME = "didaup_session"
 SESSION_SECONDS = 12 * 60 * 60
@@ -107,6 +108,7 @@ def startup():
     settings = options()
     DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
     SOURCE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    WORK_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
     # The persistent /data directory is prepared by the add-on entrypoint.
     os.chmod(DATA, 0o700)
     with closing(connect()) as cx:
@@ -173,6 +175,13 @@ def startup():
               anomaly_count INTEGER NOT NULL,
               actor_id INTEGER NOT NULL REFERENCES users(id),
               created_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS working_artifacts(
+              id INTEGER PRIMARY KEY,
+              year_id INTEGER NOT NULL REFERENCES academic_years(id),
+              stored_name TEXT NOT NULL UNIQUE,
+              kind TEXT NOT NULL,
+              generated_at INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS audit(
               id INTEGER PRIMARY KEY, at INTEGER NOT NULL, actor_id INTEGER,
@@ -677,7 +686,11 @@ def archive_summary(request: Request):
         years = cx.execute(
             """SELECT a.id,a.code,
                (SELECT COUNT(*) FROM cohorts c WHERE c.year_id=a.id) cohorts,
-               (SELECT COUNT(*) FROM source_imports s WHERE s.year_id=a.id) imports
+               (SELECT COUNT(*) FROM cohorts c WHERE c.year_id=a.id AND c.included=0) excluded,
+               (SELECT COUNT(*) FROM source_imports s WHERE s.year_id=a.id) imports,
+               (SELECT COUNT(*) FROM source_mappings m
+                JOIN source_imports s ON s.id=m.import_id WHERE s.year_id=a.id) mappings,
+               (SELECT COUNT(*) FROM working_artifacts w WHERE w.year_id=a.id) working_items
                FROM academic_years a ORDER BY code DESC"""
         ).fetchall()
     return [dict(year) for year in years]
