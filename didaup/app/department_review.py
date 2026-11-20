@@ -183,7 +183,11 @@ def review_five_workbooks(
                 )
                 continue
             if historical_hours is None:
-                issue(file_no, excel_row, "Ore storiche non disponibili per la cessione")
+                issue(
+                    file_no, excel_row,
+                    "Carico non numerico (ad esempio N.D.): impossibile cedere ore. "
+                    "Verificare la riga e le regole di calcolo."
+                )
                 continue
             if moved > historical_hours:
                 issue(file_no, excel_row, "Ore cedute superiori alle ore storiche")
