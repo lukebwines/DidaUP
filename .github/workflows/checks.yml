@@ -29,7 +29,11 @@ jobs:
       - name: Controllo sintassi Python
         run: python -m compileall -q didaup/app
       - name: Controllo sintassi JavaScript
-        run: node --check didaup/app/static/site.js
+        run: |
+          node --check didaup/app/static/site.js
+          node --check didaup/app/static/mapping.js
+      - name: Test JavaScript (associazioni duplicate)
+        run: node didaup/tests/mapping.test.cjs
       - name: Test con dati esclusivamente sintetici
         run: PYTHONPATH=didaup python -m pytest -q didaup/tests
       - name: Build immagine add-on
