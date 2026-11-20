@@ -148,3 +148,16 @@ Questa regola **sostituisce** la precedente ipotesi di un file per SSD e la succ
 - I cinque file sono **proposte di lavoro**, non atti di affidamento né approvazioni formali. Nessuna assegnazione reale o condivisione OneDrive è stata effettuata con questa modifica alle specifiche.
 
 **Da chiarire più avanti:** criterio amministrativo di risoluzione delle proposte sovrapposte su file dipartimentali diversi, attribuzione/autorizzazione dei referenti e chiusura dei file senza proposte. Non introdurre automaticamente una suddivisione per dipartimento come soluzione a tali problemi.
+
+
+## Convenzione anno accademico Scuole di specializzazione — CONFERMATO
+
+Per le **Scuole di specializzazione** l'A.A. presente nell'estrazione è **per convenzione l'anno accademico precedente** rispetto all'A.A. corrente di riferimento. Esempio illustrativo della regola: rispetto al **2026/27**, per una Scuola di specializzazione è conforme un valore **2025/26** nel report. Tale scostamento **non è una difformità né un'anomalia da bloccare**.
+
+La deroga vale **esclusivamente** per righe riconoscibili come Scuole di specializzazione mediante una denominazione/tipologia esplicita nella fonte. Per gli altri corsi, o quando la natura della riga non è riconoscibile con sufficiente certezza, resta attivo il controllo normale sull'A.A.; non ipotizzare classificazioni sulla base di codici non verificati. Non riscrivere il valore storico originale nel foglio Excel generato.
+
+La regola è applicata sia all'estrazione delle annualità sia alla generazione dei cinque file dipartimentali completi e identici. La presenza e l'associazione corretta del campo che permette di riconoscere la scuola nell'estrazione concreta restano **[DA VERIFICARE]**. Nessuna disposizione normativa è stata presunta: è una convenzione operativa comunicata espressamente dall'utente.
+
+## Persistenza della mappatura — CORREZIONE TECNICA
+
+La mappatura salvata è associata all'ID del report e persistita nel database privato. **Rileggere l'anteprima, tornare alla schermata precedente o cambiare vista non deve resettare scelte già salvate**. Le correzioni non ancora salvate sono mantenute quando si torna allo stesso report durante la sessione corrente; al salvataggio viene eseguita una nuova lettura dal database per verificarne la persistenza. Le modifiche non salvate non sono equivalenti a una mappatura persistente: prima di uscire dall'app occorre esplicitamente salvarle.
