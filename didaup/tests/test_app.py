@@ -287,3 +287,82 @@ def test_theme_and_import_controls_exist(client):
     assert 'data-theme-toggle' in html
     assert ':root[data-theme="dark"]' in css
     assert 'localStorage.setItem("didaup-theme"' in js
+
+
+def test_source_mapping_preview_draft_and_concurrency(client):
+    csrf = signed_in(client)
+    fake = synthetic_xlsx()
+    imported = client.post(
+        "/api/years/1/imports", headers=csrf, data={
+            "kind": "offerta", "test_data_only": "true"
+        },
+        files={"source": ("synthetic.xlsx", fake, "application/octet-stream")},
+    )
+    assert imported.status_code == 200, imported.text
+    source_id = imported.json()["id"]
+    metadata = client.get(f"/api/imports/{source_id}/mapping")
+    assert metadata.status_code == 200, metadata.text
+    assert metadata.json()["mapping"] is None
+    assert any(field["key"] == "ssd_insegnamento_nuovo"
+               for field in metadata.json()["available_fields"])
+
+    preview = client.get(f"/api/imports/{source_id}/preview", params={
+        "sheet_name": "Sintetico", "header_row": 1
+    })
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["columns"][0]["label"] == "SSD"
+    assert preview.json()["columns"][1]["label"] == "Docente fittizio"
+
+    saved = client.put(f"/api/imports/{source_id}/mapping", headers=csrf, json={
+        "sheet_name": "Sintetico", "header_row": 1,
+        "assigned": {"ssd_insegnamento_nuovo": 0, "docente_nome": 1},
+        "expected_version": 0
+    })
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["status"] == "bozza_da_verificare"
+    assert saved.json()["version"] == 1
+    assert any("CdS" in message for message in saved.json()["warnings"])
+
+    stale = client.put(f"/api/imports/{source_id}/mapping", headers=csrf, json={
+        "sheet_name": "Sintetico", "header_row": 1,
+        "assigned": {"ssd_insegnamento_nuovo": 0},
+        "expected_version": 0
+    })
+    assert stale.status_code == 409
+
+    duplicate_index = client.put(f"/api/imports/{source_id}/mapping", headers=csrf, json={
+        "sheet_name": "Sintetico", "header_row": 1,
+        "assigned": {"ssd_insegnamento_nuovo": 0, "docente_nome": 0},
+        "expected_version": 1
+    })
+    assert duplicate_index.status_code == 422
+
+    invalid_column = client.put(f"/api/imports/{source_id}/mapping", headers=csrf, json={
+        "sheet_name": "Sintetico", "header_row": 1,
+        "assigned": {"ssd_insegnamento_nuovo": 13},
+        "expected_version": 1
+    })
+    assert invalid_column.status_code == 422
+    assert client.get("/api/years/1/imports").json()[0]["mapping_status"] == "bozza_da_verificare"
+
+
+def test_mapping_deleted_with_archive_but_account_retained(client):
+    csrf = signed_in(client)
+    imported = client.post(
+        "/api/years/1/imports", headers=csrf,
+        data={"kind": "offerta", "test_data_only": "true"},
+        files={"source": ("synthetic.xlsx", synthetic_xlsx(), "application/octet-stream")}
+    )
+    assert imported.status_code == 200
+    import_id = imported.json()["id"]
+    assert client.put(f"/api/imports/{import_id}/mapping", headers=csrf, json={
+        "sheet_name": "Sintetico", "header_row": 1,
+        "assigned": {"ssd_insegnamento_nuovo": 0},
+        "expected_version": 0
+    }).status_code == 200
+    assert client.post("/api/admin/archive/reset", headers=csrf, json={
+        "scope": "year", "year_id": 1,
+        "confirmation": "AZZERA 2026/27", "password": "SyntheticTestingPass!2026"
+    }).status_code == 200
+    assert client.get(f"/api/imports/{import_id}/mapping").status_code == 404
+    assert len(client.get("/api/users").json()) == 1
