@@ -788,6 +788,8 @@ def test_cohort_multiselect_ui_exposes_filters_and_draft_status(client):
         'id="cohort-cds-filter"', 'id="cohort-cds-options"',
         'id="cohort-campus-filter"', 'id="cohort-campus-options"',
         'id="cohort-year-filter"', 'id="cohort-year-options"',
+        'id="cohort-assignment-filter"', 'id="cohort-assignment-options"',
+        'id="cohort-assignment-pick"', 'id="cohort-assignment-clear"',
         'id="cohort-review-pending"', 'id="cohort-review-saved"',
         'id="cohort-discard-pending"', 'id="cohort-clear-filters"',
         'id="cohort-registry-search"', 'id="cohort-registry-status"',
@@ -797,3 +799,47 @@ def test_cohort_multiselect_ui_exposes_filters_and_draft_status(client):
     assert "Escludi tutte le annualità visualizzate" in html
     assert "Registro delle annualità già salvate" in html
 
+
+
+def test_assignment_title_filter_is_descriptive_not_an_exclusion(tmp_path):
+    """Title is aggregated from source rows; it is not a separate CdS key."""
+    import xlsxwriter
+    from app.cohort_import import extract_cohorts
+
+    path = tmp_path / "titoli-sintetici.xlsx"
+    wb = xlsxwriter.Workbook(str(path))
+    sh = wb.add_worksheet("Synthetics")
+    for col, label in enumerate((
+        "CODICE CORSO", "CDS", "SEDE CORSO", "ANNO", "TITOLO AFFIDAMENTO"
+    )):
+        sh.write_string(0, col, label)
+    for row, item in enumerate((
+        ("CDS-A", "CdS sintetico A", "Sede demo", 1, "Interno"),
+        ("CDS-A", "CdS sintetico A", "Sede demo", 1, "Esterno"),
+        ("CDS-A", "CdS sintetico A", "Sede demo", 2, "Esterno"),
+        ("CDS-B", "CdS sintetico B", "Sede demo", 1, ""),
+    ), 1):
+        for col, value in enumerate(item):
+            if isinstance(value, int):
+                sh.write_number(row, col, value)
+            else:
+                sh.write_string(row, col, value)
+    wb.close()
+    mapping = {
+        "cds_codice": 0, "cds_nome": 1, "sede": 2,
+        "anno_corso": 3, "titolo_affidamento": 4,
+    }
+    results = extract_cohorts(path, "Synthetics", 1, mapping, "2026/27")
+    assert results["assignment_title_mapped"] is True
+    assert results["cohort_count"] == 3
+    a_first = next(x for x in results["cohorts"]
+                   if x["course_code"] == "CDS-A" and x["study_year"] == 1)
+    assert a_first["source_rows"] == 2
+    assert a_first["assignment_titles"] == ["Esterno", "Interno"]
+    assert all("assignment_titles" in item for item in results["cohorts"])
+    unmapped = dict(mapping)
+    unmapped.pop("titolo_affidamento")
+    alt = extract_cohorts(path, "Synthetics", 1, unmapped, "2026/27")
+    assert alt["assignment_title_mapped"] is False
+    assert alt["cohort_count"] == 3
+    assert a_first["study_year"] == 1
