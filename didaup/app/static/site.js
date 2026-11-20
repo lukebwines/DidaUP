@@ -368,6 +368,7 @@ function hookForms() {
     if (file.size > 32 * 1024 * 1024) { showNotice("File superiore a 32 MB", true); return; }
     const form = new FormData();
     form.append("kind", el("import-kind").value);
+    form.append("test_data_only", String(el("import-synthetic").checked));
     form.append("source", file, file.name);
     const submit = el("import-submit");
     submit.disabled = true;
