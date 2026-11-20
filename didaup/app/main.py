@@ -578,7 +578,8 @@ def list_imports(year_id: int, request: Request):
     with closing(connect()) as cx:
         ensure_year(cx, year_id)
         rows = cx.execute(
-            """SELECT id,kind,original_name,sha256,size_bytes,sheets_json,status,created_at
+            """SELECT id,kind,original_name,sha256,size_bytes,sheets_json,status,created_at,
+               (SELECT status FROM source_mappings m WHERE m.import_id=source_imports.id) AS mapping_status
                FROM source_imports WHERE year_id=? ORDER BY id DESC""",
             (year_id,),
         ).fetchall()
