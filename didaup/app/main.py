@@ -1005,9 +1005,10 @@ async def apply_cohort_exclusions(
         for row in extracted["cohorts"]
     }
     exclusions = [(r.course_code, r.campus, r.study_year) for r in body.excluded]
-    if len(set(exclusions)) != len(exclusions):
+    excluded_keys = set(exclusions)
+    if len(excluded_keys) != len(exclusions):
         raise HTTPException(422, "La selezione contiene annualità duplicate")
-    invalid = set(exclusions) - set(available)
+    invalid = excluded_keys - set(available)
     if invalid:
         raise HTTPException(409, "Una o più annualità non appartengono al report: ricaricare")
     changed = 0
@@ -1026,8 +1027,13 @@ async def apply_cohort_exclusions(
                        WHERE year_id=? AND course_code=? AND campus=? AND study_year=?""",
                     (year_id, *key),
                 ).fetchone()
-                desired_included = int(key not in exclusions)
-                desired_reason = "" if desired_included else reason
+                desired_included = int(key not in excluded_keys)
+                # Preserve previously recorded individual reasons unless the
+                # operator actually changes a row from included to excluded.
+                desired_reason = (
+                    "" if desired_included else
+                    (row["exclusion_reason"] if row is not None and not row["included"] else reason)
+                )
                 if row is None:
                     cur = cx.execute(
                         """INSERT INTO cohorts(year_id,course_code,course_name,campus,
