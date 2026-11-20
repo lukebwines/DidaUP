@@ -1,6 +1,6 @@
 name: "DidaUP"
 slug: "didaup"
-version: "0.1.10-alpha13"
+version: "0.1.10-alpha14"
 description: "Programmazione didattica: cinque Excel completi e confronto delle proposte (collaudo)"
 arch:
   - aarch64
