@@ -197,6 +197,12 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         raise WorkbookGenerationError(
             "Mappatura salvata da correggere: " + "; ".join(conflicts[:5])
         )
+    excluded_keys = {_normalized_cohort_key(*item) for item in excluded}
+    excluded_keys.discard(None)
+    included_keys = {
+        _normalized_cohort_key(*item) for item in (included or set())
+    }
+    included_keys.discard(None)
     # Name-based matching is ONLY a fallback for a missing/inconsistent
     # course code. Require a unique documented CdS identity in BOTH the
     # saved cohort register and the selected report. Ambiguity => no deletion.
@@ -235,12 +241,6 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
                     (src_title, src_site[1]), set()
                 ).add(src_site)
 
-    excluded_keys = {_normalized_cohort_key(*item) for item in excluded}
-    excluded_keys.discard(None)
-    included_keys = {
-        _normalized_cohort_key(*item) for item in (included or set())
-    }
-    included_keys.discard(None)
     excluded_sites = {key[:2] for key in excluded_keys}
     retained_sites = {key[:2] for key in included_keys}
     registered_sites = excluded_sites | retained_sites
