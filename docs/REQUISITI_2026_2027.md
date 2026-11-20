@@ -76,3 +76,24 @@ Per mantenere distinte le righe senza modificarle si potrà usare un ID tecnico 
 
 ## Protezione permanente delle impostazioni durante l'azzeramento (conferma utente)
 Qualsiasi azzeramento delle lavorazioni deve mantenere tutte le mappature salvate e le associazioni CdS/anno/sede incluse o escluse, con le motivazioni e i riferimenti alle fonti. Per non generare riferimenti orfani, preservare anche i report originali importati, l'A.A. e la cronologia. Implementare un archivio separato per output temporanei rigenerabili; la cancellazione integrale del database o delle fonti **non fa parte** dell'operazione ordinaria di azzeramento. Verificare per test sia il singolo A.A. sia tutti gli A.A., anche dopo un riavvio.
+
+
+## Regole operative confermate per XLSX referenti 2027/28
+
+Decisioni esplicite dell'utilizzatore (definizioni funzionali; **nessuna modifica automatica agli incarichi prima di approvazione**):
+
+1. Per coperture con più docenti, mantenere **una riga per ciascun docente** dello storico; non accorpare le ore di docenti differenti.
+2. Comprendere anche le attività **senza docente assegnato**.
+3. Aggiungere **Tipo variazione** come quarta colonna modificabile del futuro Excel, accanto a **Nuovo docente, Ore, Note**. Le categorie definitive e la loro semantica saranno precisate prima dell'implementazione.
+4. Per il campo **Ore** lasciato vuoto, è stata concordata l'adozione delle ore storiche nei casi applicabili; **la regola particolare per sostituzione parziale e aggiunta è ancora da definire**.
+5. Il criterio di distribuzione ai referenti SSD è l'**SSD dell'insegnamento**, non quello del docente storico.
+6. **Nuovo docente**: selezione assistita dall'elenco dei docenti, con possibilità di inserire un nominativo non presente, da verificare.
+7. L'assenza di variazioni nel file restituito equivale a **conferma da parte del referente**, non all'approvazione formale dell'affidamento per il nuovo A.A.
+8. Esplicitare sempre **storico 2026/27** e **proposta 2027/28** come dati distinti.
+9. **Unico riferimento per i calcoli delle ore della copertura storica: `TOT ORE EFFETTIVE`.** Non usare `OREPREVLEZ`, `TOT ORE PREVISTE` o altri campi come base dei trasferimenti/sostituzioni. Tali colonne possono rimanere come dati informativi, ove necessario.
+
+### Sostituzione parziale: proposta operativa in discussione [DA DEFINIRE]
+
+Esempio fittizio: storico A=20 ore, B=10 ore; proposta di trasferire 12 ore da A a C, con risultato A=8, B=10, C=12. Ipotesi di inserimento sul record storico A: **Tipo variazione=Sostituzione parziale, Nuovo docente=C, Ore=12**. In tale ipotesi, il campo Ore indica le **ore trasferite**; per evitare ambiguità dovrebbe essere obbligatorio e maggiore di zero e minore delle ore storiche del docente interessato. È una proposta redazionale/tecnica **non ancora confermata** per l'implementazione. Il valore vuoto delle ore nella sostituzione **totale** manterrebbe la regola concordata: assumere `TOT ORE EFFETTIVE` della singola riga docente; non dell'intero modulo.
+
+È ancora da definire la semantica del campo Ore nelle **aggiunte** e nelle **modifiche ore** (ore finali oppure differenza); nessuna assunzione automatica su questi due casi finché non confermata.
