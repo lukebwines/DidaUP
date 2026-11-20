@@ -95,6 +95,8 @@ def extract_cohorts(
     names: dict[tuple[str, str, int], set[str]] = defaultdict(set)
     typologies: dict[tuple[str, str, int], set[str]] = defaultdict(set)
     assignment_titles: dict[tuple[str, str, int], set[str]] = defaultdict(set)
+    original_year_values: dict[tuple[str, str, int], set[str]] = defaultdict(set)
+    all_source_year_values: set[str] = set()
     anomalies: list[dict] = []
     total_invalid = 0
     blank_rows = 0
@@ -123,6 +125,9 @@ def extract_cohorts(
         typology = field("cds_tipologia")
         assignment_title = field("titolo_affidamento")
         year_raw = field("anno_corso")
+        # The FILTER uses text exactly as read from the mapped report.
+        # It does not reinterpret "1,2,3" as the dropdown labels 1/2/3.
+        all_source_year_values.add(year_raw)
         study_years = course_years(year_raw)
         if not code or not name or not campus or study_years is None:
             issue(number, "Codice CdS, denominazione, sede o anno di corso assente/non valido")
@@ -162,6 +167,7 @@ def extract_cohorts(
             names[key].add(name)
             typologies[key].add(typology)
             assignment_titles[key].add(assignment_title)
+            original_year_values[key].add(year_raw)
             if len(groups) > MAX_COHORTS:
                 raise CohortExtractionError("Troppe annualità distinte nel file")
         valid_rows += 1
@@ -179,6 +185,9 @@ def extract_cohorts(
             entry["assignment_titles"] = sorted(
                 assignment_titles[key], key=str.casefold
             )
+            entry["source_year_values"] = sorted(
+                original_year_values[key], key=str.casefold
+            )
             filtered.append(entry)
     filtered.sort(key=lambda v: (v["course_name"].casefold(), v["campus"].casefold(),
                                  v["study_year"], v["course_code"]))
@@ -188,6 +197,7 @@ def extract_cohorts(
         "source_rows": sheet.height - header_row,
         "valid_rows": valid_rows,
         "multi_year_source_rows": multi_year_source_rows,
+        "source_year_filter_values": sorted(all_source_year_values, key=str.casefold),
         "invalid_source_rows_by_typology": [
             {
                 "typology": name, "count": count,
