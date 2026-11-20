@@ -685,9 +685,9 @@ def test_cohort_checklist_preview_and_bulk_exclusion(client, tmp_path):
     preview = client.get("/api/years/1/cohort-candidates", params={"import_id": report_id})
     assert preview.status_code == 200, preview.text
     data = preview.json()
-    assert data["cohort_count"] == 3  # two identical activity rows -> one cohort
-    assert data["valid_rows"] == 4
-    assert data["anomaly_count"] == 1
+    assert data["cohort_count"] == 4  # previous row A.A. remains in the selected report
+    assert data["valid_rows"] == 5
+    assert data["anomaly_count"] == 0
     assert data["cohorts"][0]["source_rows"] == 2
     assert all(not item["excluded"] for item in data["cohorts"])
     assert client.get("/api/years/1/cohorts").json() == []  # Preview is strictly read-only.
@@ -698,19 +698,15 @@ def test_cohort_checklist_preview_and_bulk_exclusion(client, tmp_path):
         "expected_revision": data["expected_revision"], "excluded": chosen,
         "reason": "Non più in gestione", "acknowledge_anomalies": False,
     }
-    no_ack = client.post("/api/years/1/cohort-candidates/apply", headers=headers, json=request)
-    assert no_ack.status_code == 409
-    assert client.get("/api/years/1/cohorts").json() == []
-
-    request["acknowledge_anomalies"] = True
+    # No anomaly acknowledgment is needed for a different source-row A.A.
     applied = client.post("/api/years/1/cohort-candidates/apply", headers=headers, json=request)
     assert applied.status_code == 200, applied.text
-    assert applied.json()["total"] == 3
+    assert applied.json()["total"] == 4
     assert applied.json()["excluded"] == 1
-    assert applied.json()["added"] == 3
+    assert applied.json()["added"] == 4
 
     all_cohorts = client.get("/api/years/1/cohorts").json()
-    assert len(all_cohorts) == 3
+    assert len(all_cohorts) == 4
     excluded = [row for row in all_cohorts if not row["included"]]
     assert len(excluded) == 1
     assert excluded[0]["study_year"] == 2
@@ -724,7 +720,7 @@ def test_cohort_checklist_preview_and_bulk_exclusion(client, tmp_path):
 
     stale = client.post("/api/years/1/cohort-candidates/apply", headers=headers, json=request)
     assert stale.status_code == 409  # Concurrent-edit token has changed.
-    assert len(client.get("/api/years/1/cohorts").json()) == 3
+    assert len(client.get("/api/years/1/cohorts").json()) == 4
 
     refreshed = client.get("/api/years/1/cohort-candidates", params={"import_id": report_id})
     assert refreshed.status_code == 200
