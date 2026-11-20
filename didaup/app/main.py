@@ -119,6 +119,9 @@ def startup():
             CREATE TABLE IF NOT EXISTS login_attempts(
               attempt_key TEXT PRIMARY KEY, started_at INTEGER NOT NULL, failures INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS recovery_operations(
+              id INTEGER PRIMARY KEY CHECK(id=1), credential_hash TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS academic_years(
               id INTEGER PRIMARY KEY, code TEXT UNIQUE NOT NULL, status TEXT NOT NULL,
               created_at INTEGER NOT NULL
@@ -151,6 +154,39 @@ def startup():
                 "INSERT INTO users(username,passhash,role,created_at) VALUES(?,?,?,?)",
                 (username, password_hash(password), "admin", int(time.time())),
             )
+        # Emergency reset is activated only from Home Assistant add-on options.
+        # A salted hash of the last used recovery password prevents reapplying the
+        # same recovery after future restarts (including after in-app changes).
+        recovery_password = str(settings.get("admin_recovery_password") or "")
+        if recovery_password:
+            if not 12 <= len(recovery_password) <= 128:
+                raise RuntimeError("admin_recovery_password deve avere tra 12 e 128 caratteri")
+            previous = cx.execute(
+                "SELECT credential_hash FROM recovery_operations WHERE id=1"
+            ).fetchone()
+            if previous is None or not verify_password(recovery_password, previous["credential_hash"]):
+                admin_login = str(settings.get("bootstrap_username", "admin")).strip()
+                admin = cx.execute(
+                    "SELECT id FROM users WHERE username=? COLLATE NOCASE",
+                    (admin_login,),
+                ).fetchone()
+                if admin is None:
+                    raise RuntimeError(
+                        "Recupero admin impossibile: l'utente bootstrap non esiste. "
+                        "Non cancellare il database."
+                    )
+                cx.execute(
+                    """UPDATE users SET passhash=?,active=1,role='admin',version=version+1
+                       WHERE id=?""",
+                    (password_hash(recovery_password), admin["id"]),
+                )
+                cx.execute("DELETE FROM sessions WHERE user_id=?", (admin["id"],))
+                cx.execute("DELETE FROM login_attempts")
+                cx.execute(
+                    "INSERT OR REPLACE INTO recovery_operations(id,credential_hash) VALUES(1,?)",
+                    (password_hash(recovery_password),),
+                )
+                record(cx, admin["id"], "recover_admin", "user", admin["id"])
         cx.execute(
             "INSERT OR IGNORE INTO academic_years(code,status,created_at) VALUES(?,?,?)",
             ("2026/27", "storico_in_preparazione", int(time.time())),
