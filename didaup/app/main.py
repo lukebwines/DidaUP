@@ -580,11 +580,14 @@ def list_imports(year_id: int, request: Request):
 async def upload_source(
     year_id: int, request: Request,
     kind: str = Form(...), source: UploadFile = File(...),
+    test_data_only: bool = Form(False),
 ):
     actor = current_user(request, ("admin", "operatore"))
     require_write(request, actor, allow_multipart=True)
     if kind not in ("offerta", "docenti"):
         raise HTTPException(422, "Tipologia di report non valida")
+    if not test_data_only:
+        raise HTTPException(422, "Collaudo consentito solo con dati sintetici")
     original_name = Path((source.filename or "").replace("\\", "/")).name
     suffix = Path(original_name).suffix.lower()
     if suffix not in (".xls", ".xlsx") or len(original_name) > 180:
