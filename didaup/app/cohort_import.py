@@ -41,7 +41,13 @@ def course_year(value: Any) -> int | None:
 
 
 def academic_year(value: Any) -> str | None:
-    result = ACADEMIC.fullmatch(plain(value))
+    raw = plain(value)
+    # A four-digit starting year can identify the corresponding academic year
+    # when explicitly stored under the "Anno Accademico" column.
+    if re.fullmatch(r"20\\d{2}", raw):
+        start = int(raw)
+        return f"{start}/{(start + 1) % 100:02d}"
+    result = ACADEMIC.fullmatch(raw)
     if not result:
         return None
     start, end = int(result.group(1)), int(result.group(2))
