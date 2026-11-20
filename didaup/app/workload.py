@@ -24,6 +24,11 @@ def canonical(value):
     return " ".join(unicodedata.normalize("NFKC", str(value or "")).split()).casefold()
 
 
+def is_missing_planned_hours(value):
+    """Only genuinely empty input cells count as missing, not invalid text."""
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
 def decimal_hours(value):
     if value is None or isinstance(value, bool):
         return None
@@ -122,9 +127,14 @@ def apply_workload(planned, typology, course, taf, rules):
     if len(selected) > 1:
         return 0, None, "Conflitto tra regole con la stessa specificità"
     _, index, rule = selected[0]
+    # A blank planned-hours cell must not prevent export of thousands of
+    # unrelated activities. It remains ZERO and is reported as an explicit
+    # warning, distinct from invalid nonblank source data.
+    if is_missing_planned_hours(planned):
+        return 0, index, "TOT ORE PREVISTE mancante: carico mantenuto a 0"
     hours = decimal_hours(planned)
     if hours is None:
-        return 0, index, "TOT ORE PREVISTE mancante, negativo o non numerico"
+        return 0, index, "TOT ORE PREVISTE non numerico o negativo: correggere la fonte o l'associazione"
     rate = Decimal(rule["value"])
     result = (hours * rate / 100 if rule["mode"] == "percentuale"
               else rate).quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP)
