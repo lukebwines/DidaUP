@@ -1,4 +1,4 @@
-# DidaUP — Installazione e collaudo (0.1.2-alpha1)
+# DidaUP — Installazione e collaudo (0.1.3-alpha1)
 
 > Versione iniziale di sviluppo **non collaudata su una specifica istanza di Home Assistant**. Usare soltanto dati sintetici. Non caricare file reali dell'Ateneo.
 
@@ -85,3 +85,13 @@ La versione 0.1 è un **primo nucleo tecnico**, non l'applicazione finale:
 - non dispone ancora di test di sicurezza end-to-end e collaudo su tunnel reale.
 
 Prima di utilizzare dati dell'Ateneo sono necessari autorizzazioni, revisione della sicurezza, verifica del trattamento dei dati e collaudo sull'infrastruttura appropriata.
+
+## Mappatura delle colonne: 0.1.3-alpha1
+
+Dopo aver acquisito un report sintetico, aprire **Importa report → Mappa colonne**. Selezionare il foglio e la riga delle intestazioni (da 1 a 40), poi premere **Leggi colonne**. Associare le colonne del report ai campi proposti e scegliere **Salva mappatura in bozza**.
+
+La mappatura distingue codifica precedente e nuova dell'SSD dell'insegnamento e dell'SSD del docente; il report dei docenti ha campi separati. Le colonne non pertinenti possono restare non associate. Sono segnalate informazioni mancanti e associazioni non valide. Il file originario resta immutato e la mappatura è versionata.
+
+**Importante:** la mappatura non importa ancora incarichi e docenti nelle tabelle didattiche e non genera gli Excel per i referenti. Occorreranno riconciliazione del report, controlli e verifica amministrativa.
+
+Non condividere screenshot di anteprime con nominativi o dati reali. Il collaudo domestico resta riservato a dati sintetici.
