@@ -50,6 +50,7 @@ def make_source(path: Path, *, malicious=False, wrong_year=False, incomplete_ann
             "NOME DOCENTE": teacher,
             "DIPARTIMENTO AFFERENZA DOCENTE": dept,
             "TOT ORE EFFETTIVE": hours,
+            "TOT ORE PREVISTE": hours if hours is not None else 0,
         }
         for col, header in enumerate(source_headers):
             val = values.get(header)
@@ -109,9 +110,7 @@ def test_five_copies_are_byte_identical_and_unfiltered(tmp_path):
     assert rows[7][1] == "SYN-A"
     assert rows[8][1] == "SYN-A"
     assert rows[9][1] == "SYN-B"
-    assert rows[6][28] == 20
-    assert rows[7][28] == 10
-    assert rows[8][28] in ("", None)
+    assert [row[28] for row in rows[6:10]] == [0, 0, 0, 0]
     assert rows[6][29:33] in (["", "", "", ""], [None, None, None, None])
     assert rows[6][37] == "STORICO"
     assert rows[6][38] == rows[6][39]
@@ -584,15 +583,23 @@ def test_per_row_academic_year_is_preserved_and_source_integrity_checked(tmp_pat
                              assigned, "2026/27")
 
 
-def test_mandatory_mapped_hours_not_substituted_with_planned(tmp_path):
+def test_effective_hours_unmapped_and_reset_to_zero(tmp_path):
     src = tmp_path / "synthetic.xlsx"
     assigned = make_source(src)
     assigned.pop("ore_effettive_totali")
-    with pytest.raises(WorkbookGenerationError, match="ore_effettive_totali"):
-        build_five_workbooks(
-            src, hashlib.sha256(src.read_bytes()).hexdigest(),
-            "Offerta sintetica", 1, assigned, "2026/27"
-        )
+    original_hash = hashlib.sha256(src.read_bytes()).hexdigest()
+    bundle, stats = build_five_workbooks(
+        src, original_hash, "Offerta sintetica", 1, assigned, "2026/27"
+    )
+    assert stats["workload"]["rows_without_rule"] == 4
+    assert hashlib.sha256(src.read_bytes()).hexdigest() == original_hash
+    with ZipFile(io.BytesIO(bundle)) as archive:
+        path = tmp_path / "unmapped.xlsx"
+        path.write_bytes(archive.read(referent_names(archive)[0]))
+    rows = CalamineWorkbook.from_path(path).get_sheet_by_name(
+        "Proposte SSD"
+    ).to_python(skip_empty_area=False)
+    assert [r[28] for r in rows[6:10]] == [0, 0, 0, 0]
 
 
 
