@@ -209,3 +209,12 @@ Le azioni massive di esclusione/ripristino incidono **soltanto sulle annualità 
 Il **registro delle annualità già salvate** mantiene il suo stato effettivo, separato dalla selezione guidata, e può essere filtrato per testo e inclusione/esclusione. I controlli server di concorrenza, integrità della fonte, tracciabilità e motivazione restano attivi. Nessun elenco realmente amministrativo viene pubblicato come fixture di test.
 
 Per distinguere un Excel storico da una nuova generazione, i cinque XLSX nel pacchetto hanno un **identificativo di revisione nel nome file**. Le cinque copie restano identiche nel contenuto. La data/ID di revisione non altera lo storico né determina uno stato di approvazione.
+
+
+## Filtro multiselezione TITOLO AFFIDAMENTO — confermato
+
+Nella selezione guidata **Annualità CdS** è disponibile anche il filtro **Titolo affidamento**: il menu ricava i valori esclusivamente dalla colonna del report esplicitamente mappata come `titolo_affidamento`, con ricerca testuale e scelta contemporanea di più valori. Può essere combinato con i filtri già presenti per tipologia CdS, codice/denominazione CdS, sede e anno di corso.
+
+Lo stesso CdS/sede/anno può comprendere attività con più titoli affidamento: la maschera visualizza **tutti i valori rilevati nello storico**. Il filtro seleziona le annualità che hanno **almeno un'attività** corrispondente al titolo, ma **non crea esclusioni di singoli insegnamenti o incarichi**. Anche con questo filtro, il salvataggio riguarda l'intera annualità; in presenza di titoli misti l'interfaccia avvisa l'operatore prima di applicare le spunte in blocco.
+
+Il campo deve essere presente nella mappatura del report. Se manca, il sistema avvisa senza attribuire alcun titolo presunto. I filtri non cambiano il database, le esclusioni precedenti restano intatte e sono necessari il salvataggio esplicito e il controllo delle anteprime prima di generare gli Excel.
