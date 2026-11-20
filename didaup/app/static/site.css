@@ -256,3 +256,10 @@ td small{display:block;color:#718398}td button{padding:7px 11px!important;font-s
 [data-theme="dark"] .workload-multi-options{border-color:#39516b}
 [data-theme="dark"] .workload-multi-option:hover{background:#254562}
 @media(max-width:650px){.workload-multi-panel{max-width:min(340px,88vw)}}
+
+/* Values retained in older rules but no longer present in included cohorts. */
+.workload-multi-stale{margin-top:8px;padding:9px;border-radius:6px;border:1px solid #d6a24b;background:#fff8e9;color:#674f26;font-size:.78rem}
+.workload-multi-stale strong{display:block;margin-bottom:5px}
+.workload-multi-stale div{display:flex;align-items:center;justify-content:space-between;gap:8px;overflow-wrap:anywhere}
+.workload-multi-stale .secondary{padding:3px 8px!important;font-size:.73rem!important;flex-shrink:0}
+[data-theme="dark"] .workload-multi-stale{background:#483a25;border-color:#8e7038;color:#ffdf97}
