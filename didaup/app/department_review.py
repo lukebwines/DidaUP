@@ -58,7 +58,7 @@ def review_five_workbooks(
          taf_mapping_mode, taf_rows_with_value, taf_rows_without_value,
          mutuazione_mapping_mode, mutuazione_true_count,
          mutuazione_false_count, mutuazione_other_count, mutuazione_blank_count,
-         excluded_records, workload_stats) = _prepare(
+         excluded_records, reconciliation, workload_stats) = _prepare(
             original, source_sha256, sheet_name, header_row, assigned,
             history_year, excluded or set(), included, cohort_names,
             workload_rules,
