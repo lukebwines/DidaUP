@@ -18,7 +18,7 @@ from app.department_workbooks import (
 )
 
 
-def make_source(path: Path, *, malicious=False, wrong_year=False):
+def make_source(path: Path, *, malicious=False, wrong_year=False, incomplete_annuality=False):
     source_headers = list(HISTORIC_HEADERS)
     assert len(source_headers) == 33
     wb = xlsxwriter.Workbook(str(path))
@@ -52,6 +52,8 @@ def make_source(path: Path, *, malicious=False, wrong_year=False):
     write_row(1, course="SYN-A", module="SYN-1", teacher="Docente A", hours=20, dept="D1")
     write_row(2, course="SYN-A", module="SYN-1", teacher="Docente B", hours=10, dept="D2")
     write_row(3, course="SYN-A", module="SYN-2", teacher="", hours=None, dept="")
+    if incomplete_annuality:
+        sh.write_blank(3, source_headers.index("ANNO"), None)
     write_row(4, course="SYN-B", module="SYN-3", teacher="Docente D", hours=8, dept="D5")
     wb.close()
     assigned = {
@@ -126,6 +128,32 @@ def test_explicit_cohort_exclusions_apply_to_all_five_copies(tmp_path):
     with ZipFile(io.BytesIO(packed)) as archive:
         contents = [archive.read(name) for name in archive.namelist()]
         assert all(x == contents[0] for x in contents)
+
+
+def test_incomplete_annuality_does_not_block_generation_or_discard_row(tmp_path):
+    source = tmp_path / "synthetic-incomplete.xlsx"
+    assigned = make_source(source, incomplete_annuality=True)
+    packed, summary = build_five_workbooks(
+        source, hashlib.sha256(source.read_bytes()).hexdigest(),
+        "Offerta sintetica", 1, assigned, "2026/27",
+        excluded={("SYN-B", "Sede TEST", 2)},
+    )
+    assert summary["copies"] == 5
+    assert summary["excluded_rows"] == 1
+    assert summary["unresolved_annuality_rows_included"] == 1
+    assert summary["unresolved_annuality_example_rows"] == [4]
+    assert summary["historical_rows"] == 3
+    with ZipFile(io.BytesIO(packed)) as archive:
+        copies = [archive.read(name) for name in archive.namelist()]
+        assert len(copies) == 5
+        assert all(data == copies[0] for data in copies)
+    exported = tmp_path / "exported.xlsx"
+    exported.write_bytes(copies[0])
+    values = CalamineWorkbook.from_path(exported).get_sheet_by_name(
+        "Proposte SSD"
+    ).to_python(skip_empty_area=False)
+    # The incomplete source annuality remains in the generated workbook.
+    assert values[8][5] == "SYN-2"
 
 
 def test_per_row_academic_year_is_preserved_and_source_integrity_checked(tmp_path):
