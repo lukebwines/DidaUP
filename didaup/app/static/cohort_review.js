@@ -129,6 +129,8 @@ function resetCohortFacets() {
 
 function clearCohortReview() {
   cohortReview.data = null;
+  el("cohort-extraction-diagnostics").hidden = true;
+  el("cohort-extraction-diagnostics-body").replaceChildren();
   cohortReview.selected.clear();
   cohortReview.saved.clear();
   for (const facet of Object.values(cohortReview.filters)) facet.clear();
@@ -210,6 +212,34 @@ function visibleCohortCandidates() {
        item.study_year, item.study_year + " anno"].join(" ")
     ).includes(q);
   });
+}
+
+function renderCohortDiagnostics() {
+  const data = cohortReview.data;
+  const panel = el("cohort-extraction-diagnostics");
+  const body = el("cohort-extraction-diagnostics-body");
+  body.replaceChildren();
+  const groups = data?.invalid_source_rows_by_typology || [];
+  if (!groups.length) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  const count = groups.reduce((acc, g) => acc + g.count, 0);
+  setText("cohort-extraction-diagnostics-summary",
+    count + " righe non classificabili · dettagli per tipologia");
+  for (const group of groups) {
+    const section = document.createElement("p");
+    const title = document.createElement("strong");
+    title.textContent = group.typology + " (" + group.count + " righe)";
+    section.appendChild(title);
+    const examples = document.createElement("span");
+    examples.textContent = ": " + (group.examples || [])
+      .map(x => "riga " + x.row + ", ANNO «" + x.year_value + "»")
+      .join("; ");
+    section.appendChild(examples);
+    body.appendChild(section);
+  }
 }
 
 function renderCohortChecklist() {
@@ -301,9 +331,12 @@ async function loadCohortCandidates() {
     el("cohort-assignment-search").value = "";
     el("cohort-review-search").value = "";
     el("cohort-review-filter").value = "all";
-    for (const kind of ["types", "courses", "campuses", "years"]) {
+    // Initialize every filter from the source. An omitted kind would make
+    // the dropdown visible but its options permanently empty.
+    for (const kind of ["types", "assignments", "courses", "campuses", "years"]) {
       renderCohortFacet(kind);
     }
+    renderCohortDiagnostics();
     el("cohort-review-body").hidden = false;
     el("cohort-review-placeholder").hidden = true;
     const notices = [];
