@@ -178,6 +178,14 @@ La vecchia funzione di azzeramento era distruttiva anche per le mappature e le e
 6. L'apertura e la condivisione sul **OneDrive istituzionale** sono ancora operazioni manuali: l'add-on **non** pubblica automaticamente. **Non** caricare file veri nel laboratorio finché la destinazione e la sicurezza non sono state autorizzate.
 7. Al rientro, caricare esattamente cinque XLSX compilati nella sezione **Controllo delle proposte restituite**. Il sistema esegue una **sola anteprima di verifica** su fonte, ID, ore e sovrapposizioni tra file e non salva alcun affidamento proposto o approvato. L'esito viene mostrato senza modificare gli archivi storici.
 
+### Verifica di completezza dei cinque Excel
+
+Ad ogni generazione DidaUP confronta **tutte le righe non vuote del foglio di offerta selezionato** con i due insiemi di destinazione: le righe mantenute in ciascuno dei cinque Excel per i referenti e le righe rimosse, presenti soltanto nel sesto Excel riservato al controllo interno. L'identità si basa sull'hash del report, sul foglio e sul numero di riga originale; due righe con contenuto identico sono comunque due record distinti.
+
+La quadratura deve rispettare **righe sorgente = righe presenti in ciascuno dei cinque Excel + righe escluse**; nessuna riga può apparire in entrambi o più volte. Il generatore riapre inoltre l'XLSX effettivamente prodotto e il registro interno, verificando che tutti gli ID attesi siano stati scritti una sola volta e nello stesso ordine. In caso di riga mancante, extra o duplicata, l'archivio non viene consegnato e compare un errore. Il riepilogo della generazione e il sesto Excel riportano il conteggio delle righe.
+
+Le righe con annualità composta, in cui soltanto alcuni anni risultano esclusi, **rimangono intere** nei file: DidaUP le segnala come da verificare, senza attribuirle automaticamente ai soli anni conservati. Il controllo di completezza riguarda la presenza delle righe: non sostituisce la verifica istruttoria dell'esattezza di codice CdS, annualità e associazioni, né certifica dati di produzione finché non viene effettuato un collaudo istituzionale.
+
 Il tasto Excel **«+ Aggiungi variazione» non è ancora incorporato** nei file generati: è disponibile un Office Script sperimentale in `prototypes/office_scripts/aggiungi_variazione.ts`, da collaudare e associare al file master nel tenant Microsoft 365 dell'Ateneo. I cinque file non devono essere distribuiti per uso amministrativo definitivo prima di questa verifica e prima dell'implementazione delle autorizzazioni e del controllo istituzionale delle proposte.
 
 
