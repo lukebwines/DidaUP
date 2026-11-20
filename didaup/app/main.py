@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from .source_import import MAX_UPLOAD_BYTES, check_signature, inspect_workbook
-from .column_mapping import fields_for, preview as read_mapping_preview, evaluate_mapping, autodetect_workbook
+from .column_mapping import fields_for, preview as read_mapping_preview, evaluate_mapping, autodetect_workbook, source_header_conflicts
 from .cohort_import import CohortExtractionError, extract_cohorts
 from .department_workbooks import build_five_workbooks, WorkbookGenerationError
 from .department_review import review_five_workbooks, ReviewError
@@ -900,6 +900,28 @@ async def set_mapping(import_id: int, body: MappingDecision, request: Request):
                     "Lascia non associato il campo che non corrisponde all'intestazione.",
                 )
             first_used[index] = field
+        # Prevent dangerous misassignment before it enters the persistent mapping.
+        # Existing stored mappings are independently checked again at export.
+        source_path = SOURCE_DIR / report["stored_name"]
+        from python_calamine import CalamineWorkbook
+        try:
+            source_wb = CalamineWorkbook.from_path(source_path)
+            source_sheet = source_wb.get_sheet_by_name(body.sheet_name)
+            first_rows = source_sheet.to_python(
+                skip_empty_area=False, nrows=body.header_row
+            )
+            raw_headers = first_rows[body.header_row - 1]
+        except Exception as exc:
+            raise HTTPException(422, "Impossibile verificare le intestazioni del report") from exc
+        header_conflicts = source_header_conflicts(
+            report["kind"], body.assigned, raw_headers
+        )
+        if header_conflicts:
+            raise HTTPException(
+                422,
+                "Mappatura incoerente con le intestazioni ufficiali: "
+                + "; ".join(header_conflicts[:5])
+            )
         warnings = evaluate_mapping(report["kind"], body.assigned)
         if existing is None:
             cx.execute(
