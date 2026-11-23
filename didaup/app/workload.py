@@ -117,10 +117,10 @@ def validate_rules(rules):
     return accepted
 
 
-def apply_workload(planned, typology, course, taf, rules):
-    """Return (hours, matching_rule_index, issue). Without a rule, use planned hours."""
+def matching_rule_indices(typology, course, taf, rules):
+    """Return the 1-based rules tied at the highest matching specificity."""
     matches = []
-    for i, rule in enumerate(rules):
+    for index, rule in enumerate(rules, start=1):
         if any(
             selected and canonical(actual) not in {canonical(value) for value in selected}
             for selected, actual in (
@@ -130,9 +130,20 @@ def apply_workload(planned, typology, course, taf, rules):
             )
         ):
             continue
-        specificity = sum(bool(rule[key]) for key in ("tipologia", "cds", "taf"))
-        matches.append((specificity, i, rule))
+        matches.append((
+            sum(bool(rule[key]) for key in ("tipologia", "cds", "taf")),
+            index,
+        ))
     if not matches:
+        return []
+    highest = max(specificity for specificity, _ in matches)
+    return [index for specificity, index in matches if specificity == highest]
+
+
+def apply_workload(planned, typology, course, taf, rules):
+    """Return (hours, matching_rule_index, issue). Without a rule, use planned hours."""
+    matched = matching_rule_indices(typology, course, taf, rules)
+    if not matched:
         if is_missing_planned_hours(planned):
             return 0, None, "TOT ORE PREVISTE mancante: carico mantenuto a 0"
         original = decimal_hours(planned)
@@ -141,11 +152,13 @@ def apply_workload(planned, typology, course, taf, rules):
         if original > 99999999:
             return 0, None, "TOT ORE PREVISTE superiore al limite delle ore ammesse"
         return float(original), None, None
-    highest = max(match[0] for match in matches)
-    selected = [m for m in matches if m[0] == highest]
-    if len(selected) > 1:
-        return 0, None, "Conflitto tra regole con la stessa specificità"
-    _, index, rule = selected[0]
+    if len(matched) > 1:
+        numbers = ", ".join(str(index) for index in matched)
+        return 0, None, (
+            f"Conflitto tra regole {numbers} con la stessa specificità"
+        )
+    index = matched[0] - 1
+    rule = rules[index]
     if rule["mode"] == "non_disponibile":
         # An explicit administrative marker is meaningful even when source
         # planned hours are absent, invalid or negative.
