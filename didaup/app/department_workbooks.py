@@ -13,6 +13,7 @@ import json
 import math
 import secrets
 from datetime import datetime, timezone
+from itertools import combinations
 import re
 import unicodedata
 from pathlib import Path
@@ -25,6 +26,7 @@ from .column_mapping import OFFER_HEADER_TO_FIELD, source_header_conflicts, norm
 from .row_identity import source_row_id
 from .workload import (
     WorkloadRuleError, validate_rules, apply_workload, is_missing_planned_hours,
+    matching_rule_indices,
 )
 
 # Order of the pre-existing outgoing referent layout (not the 110-col source).
@@ -378,6 +380,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     workload_total = 0.0
     workload_errors = []
     workload_error_count = 0
+    workload_conflicts = {}
     workload_missing_warnings = []
     workload_missing_count = 0
     workload_by_rule = [0] * len(effective_rules)
@@ -519,11 +522,25 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
                 })
         elif rule_issue:
             workload_error_count += 1
+            conflicting_rules = (
+                matching_rule_indices(
+                    get("cds_tipologia"), course, data.get("TAF", ""), effective_rules
+                ) if rule_issue.startswith("Conflitto tra regole ") else []
+            )
+            if len(conflicting_rules) > 1:
+                for pair in combinations(conflicting_rules, 2):
+                    bucket = workload_conflicts.setdefault(
+                        pair, {"rows": 0, "examples": []}
+                    )
+                    bucket["rows"] += 1
+                    if len(bucket["examples"]) < 12:
+                        bucket["examples"].append(excel_row)
             if len(workload_errors) < 100:
                 workload_errors.append({
                     "excel_row": excel_row,
                     "reason": rule_issue,
                     "rule_number": (matched_index + 1 if matched_index is not None else None),
+                    "conflicting_rules": conflicting_rules,
                     "source_value": _display(planned_hours)[:75],
                 })
         else:
@@ -601,6 +618,17 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         "missing_planned_hours_examples": workload_missing_warnings,
         "error_count": workload_error_count,
         "errors": workload_errors,
+        "conflict_pairs": [
+            {
+                "rules": list(pair),
+                "rows": bucket["rows"],
+                "examples": bucket["examples"],
+            }
+            for pair, bucket in sorted(
+                workload_conflicts.items(),
+                key=lambda item: (-item[1]["rows"], item[0]),
+            )
+        ],
         "blocked": workload_error_count > 0,
     }
     if strict_workload and workload_error_count:
