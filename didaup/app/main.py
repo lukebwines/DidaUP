@@ -265,6 +265,9 @@ def startup():
         )
         cx.execute("DELETE FROM sessions WHERE expires_at < ?", (int(time.time()),))
         cx.commit()
+    # Complete or undo any ZIP deletions interrupted by a previous shutdown,
+    # after the artifact register has been initialized.
+    recover_staged_department_deletions()
     try:
         os.chmod(DB, 0o600)
     except OSError:
