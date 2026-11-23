@@ -26,7 +26,10 @@ from starlette.concurrency import run_in_threadpool
 from .source_import import MAX_UPLOAD_BYTES, check_signature, inspect_workbook
 from .column_mapping import fields_for, preview as read_mapping_preview, evaluate_mapping, autodetect_workbook, source_header_conflicts
 from .cohort_import import CohortExtractionError, extract_cohorts
-from .department_workbooks import build_five_workbooks, WorkbookGenerationError, _prepare
+from .department_workbooks import (
+    build_five_workbooks, WorkbookGenerationError, _prepare,
+    workbook_exclusion_choices, normalize_workbook_exclusion_filters,
+)
 from .workload import WorkloadRuleError, validate_rules, source_choices
 from .department_review import review_five_workbooks, ReviewError
 
@@ -183,6 +186,18 @@ def startup():
               year_id INTEGER PRIMARY KEY REFERENCES academic_years(id),
               rules_json TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,
               updated_at INTEGER NOT NULL, actor_id INTEGER NOT NULL REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS workbook_exclusion_profiles(
+              year_id INTEGER NOT NULL REFERENCES academic_years(id),
+              import_id INTEGER NOT NULL REFERENCES source_imports(id) ON DELETE CASCADE,
+              source_sha256 TEXT NOT NULL,
+              mapping_version INTEGER NOT NULL,
+              cohort_revision TEXT NOT NULL,
+              filters_json TEXT NOT NULL,
+              version INTEGER NOT NULL DEFAULT 1,
+              updated_at INTEGER NOT NULL,
+              actor_id INTEGER NOT NULL REFERENCES users(id),
+              PRIMARY KEY(year_id, import_id)
             );
             CREATE TABLE IF NOT EXISTS working_artifacts(
               id INTEGER PRIMARY KEY,
