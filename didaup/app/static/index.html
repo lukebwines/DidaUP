@@ -337,7 +337,7 @@
             <div class="import-warning">
               Una sola regola per riga: prevale la combinazione più specifica di tipologia, CdS e TAF.
               Regole ugualmente specifiche che intercettano la stessa riga sono un conflitto e bloccano la generazione.
-              In assenza di una regola applicabile, le ore effettive coincidono con le ore previste. La modalità N.D. prevale sulle ore previste per le righe selezionate e non contribuisce al totale numerico. Se TOT ORE PREVISTE è vuoto e manca una regola N.D., il carico resta 0 con avviso; valori non numerici o negativi, conflitti e quote fisse eccedenti bloccano la generazione.
+              In assenza di una regola applicabile, le ore effettive coincidono con le ore previste. In ogni caso TOT ORE PREVISTE è il limite massimo: se una percentuale o una quota fissa produce un valore superiore, DidaUP assegna automaticamente le ore previste e segnala quante righe sono state limitate. La modalità N.D. prevale sulle ore previste per le righe selezionate e non contribuisce al totale numerico. Se TOT ORE PREVISTE è vuoto e manca una regola N.D., il carico resta 0 con avviso; valori non numerici o negativi e conflitti bloccano la generazione.
             </div>
             <div class="workload-source">
               <label>Report di offerta associato
@@ -432,9 +432,11 @@
                 <div><small>Ore di carico complessive (solo numeriche)</small><strong id="workload-total">0</strong></div>
                 <div><small>Righe N.D. · Non disponibile</small><strong id="workload-count-nd">0</strong></div>
                 <div><small>Righe con ore previste vuote · carico 0</small><strong id="workload-count-missing">0</strong></div>
+                <div><small>Righe limitate alle ore previste</small><strong id="workload-count-capped">0</strong></div>
                 <div><small>Errori bloccanti</small><strong id="workload-count-errors">0</strong></div>
               </div>
               <p id="workload-missing-warnings" class="workload-error-list"></p>
+              <p id="workload-capped-info" class="workload-info-list"></p>
               <p id="workload-errors" class="workload-error-list"></p>
               <div id="workload-conflict-panel" hidden>
                 <h4>Regole che generano conflitti</h4>
