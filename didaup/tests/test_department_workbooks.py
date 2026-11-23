@@ -1160,3 +1160,275 @@ def test_archive_management_controls_and_labels_in_ui(client):
     assert "deleteDepartmentArchives" in script
     assert "downloadDepartmentArchive(item.download_url, button, item.download_filename)" in script
     assert "ELIMINA" in script
+
+
+def _uploaded_synthetic_offer_for_reference(client, csrf, tmp_path):
+    source = tmp_path / "reference-source.xlsx"
+    mapping = make_source(
+        source, with_tipologia=True,
+        assignment_titles_by_row={
+            1: "Titolo da mantenere", 2: "Titolo escluso",
+            3: "Titolo da mantenere", 4: "Titolo da mantenere",
+        },
+    )
+    upload = client.post(
+        "/api/years/1/imports", headers=csrf,
+        data={"kind": "offerta", "test_data_only": "true"},
+        files={"source": (
+            "reference-synthetic.xlsx", source.read_bytes(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )},
+    )
+    assert upload.status_code == 200, upload.text
+    import_id = upload.json()["id"]
+    mapped = client.put(
+        f"/api/imports/{import_id}/mapping", headers=csrf,
+        json={"sheet_name": "Offerta sintetica", "header_row": 1,
+              "assigned": mapping, "expected_version": 0},
+    )
+    assert mapped.status_code == 200, mapped.text
+    return import_id
+
+
+def _send_reference_review(client, csrf, artifact_id, bytes_per_file):
+    return client.post(
+        "/api/years/1/department-workbooks/review", headers=csrf,
+        data={"reference_artifact_id": str(artifact_id), "test_data_only": "true"},
+        files=[
+            ("files", (f"synthetic-return-{index}.xlsx", content,
+                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            for index, content in enumerate(bytes_per_file, start=1)
+        ],
+    )
+
+
+def test_reference_selection_can_be_corrected_and_preserves_original_workload(client, tmp_path):
+    """The comparison follows the chosen ZIP, not live calculations or exclusions."""
+    csrf = signed_in(client)
+    import_id = _uploaded_synthetic_offer_for_reference(client, csrf, tmp_path)
+    first = _create_synthetic_archive_for_management(
+        client, csrf, import_id, "Prima prova"
+    )
+    # A second generated export uses the same immutable report but different
+    # workload rules. The first export remains a valid comparison baseline.
+    new_rules = client.put(
+        "/api/years/1/workload", headers=csrf,
+        json={"expected_version": 0, "rules": [{
+            "tipologia": [], "cds": [], "taf": [],
+            "mode": "percentuale", "value": "50",
+        }]},
+    )
+    assert new_rules.status_code == 200, new_rules.text
+    second = _create_synthetic_archive_for_management(
+        client, csrf, import_id, "Riferimento corretto"
+    )
+    assert second["id"] != first["id"]
+    with ZipFile(io.BytesIO(client.get(
+        f"/api/years/1/department-workbooks/{first['id']}/download"
+    ).content)) as archive:
+        original_files = [archive.read(name) for name in referent_names(archive)]
+
+    # No automatic choice. Selection requires the administrator.
+    no_reference = _send_reference_review(client, csrf, first["id"], original_files)
+    assert no_reference.status_code == 409
+    assert "Selezionare prima" in no_reference.json()["detail"]
+
+    first_choice = client.put(
+        "/api/years/1/department-workbooks/reference", headers=csrf,
+        json={"artifact_id": first["id"], "expected_version": 0},
+    )
+    assert first_choice.status_code == 200, first_choice.text
+    assert first_choice.json()["version"] == 1
+    assert client.get(
+        "/api/years/1/department-workbooks/reference"
+    ).json()["artifact_id"] == first["id"]
+    assert _send_reference_review(
+        client, csrf, first["id"], original_files
+    ).json()["blocked"] is False
+
+    # A different workload profile has already been saved; the old original
+    # values still match the first ZIP, and must NOT be recalculated.
+    changed = client.put(
+        "/api/years/1/workload", headers=csrf,
+        json={"expected_version": 1, "rules": [{
+            "tipologia": [], "cds": [], "taf": [],
+            "mode": "percentuale", "value": "25",
+        }]},
+    )
+    assert changed.status_code == 200, changed.text
+    remains_valid = _send_reference_review(client, csrf, first["id"], original_files)
+    assert remains_valid.status_code == 200, remains_valid.text
+    assert remains_valid.json()["blocked"] is False
+    assert remains_valid.json()["reference_artifact_id"] == first["id"]
+    assert remains_valid.json()["expected_historical_rows_per_file"] == 4
+
+    # An accidental reference can be replaced, but the correction must be
+    # motivated and recorded. A stale version must not overwrite newer data.
+    no_reason = client.put(
+        "/api/years/1/department-workbooks/reference", headers=csrf,
+        json={"artifact_id": second["id"], "expected_version": 1},
+    )
+    assert no_reason.status_code == 422
+    corrected = client.put(
+        "/api/years/1/department-workbooks/reference", headers=csrf,
+        json={"artifact_id": second["id"], "expected_version": 1,
+              "reason": "Prima estrazione scelta per errore"},
+    )
+    assert corrected.status_code == 200, corrected.text
+    assert corrected.json()["version"] == 2
+    assert corrected.json()["previous_artifact_id"] == first["id"]
+    assert client.put(
+        "/api/years/1/department-workbooks/reference", headers=csrf,
+        json={"artifact_id": first["id"], "expected_version": 1,
+              "reason": "Aggiornamento obsoleto"},
+    ).status_code == 409
+    assert _send_reference_review(
+        client, csrf, first["id"], original_files
+    ).status_code == 409
+
+    with ZipFile(io.BytesIO(client.get(
+        f"/api/years/1/department-workbooks/{second['id']}/download"
+    ).content)) as archive:
+        second_files = [archive.read(name) for name in referent_names(archive)]
+    verified = _send_reference_review(client, csrf, second["id"], second_files)
+    assert verified.status_code == 200, verified.text
+    assert verified.json()["blocked"] is False
+    with __import__("contextlib").closing(__import__("app.main", fromlist=["connect"]).connect()) as cx:
+        history = cx.execute(
+            "SELECT old_artifact_id,new_artifact_id,reason "
+            "FROM workbook_reference_changes ORDER BY id"
+        ).fetchall()
+    assert len(history) == 2
+    assert history[0]["new_artifact_id"] == first["id"]
+    assert history[1]["old_artifact_id"] == first["id"]
+    assert history[1]["new_artifact_id"] == second["id"]
+    assert history[1]["reason"] == "Prima estrazione scelta per errore"
+
+
+def test_selected_reference_cannot_be_deleted_until_replaced(client, tmp_path):
+    csrf = signed_in(client)
+    import_id = _uploaded_synthetic_offer_for_reference(client, csrf, tmp_path)
+    first = _create_synthetic_archive_for_management(
+        client, csrf, import_id, "Da proteggere"
+    )
+    second = _create_synthetic_archive_for_management(
+        client, csrf, import_id, "Altro pacchetto"
+    )
+    ref = "/api/years/1/department-workbooks/reference"
+    assert client.put(ref, headers=csrf, json={
+        "artifact_id": first["id"], "expected_version": 0,
+    }).status_code == 200
+    denied = client.request(
+        "DELETE", "/api/years/1/department-workbooks", headers=csrf,
+        json={"ids": [first["id"], second["id"]]},
+    )
+    assert denied.status_code == 409
+    assert len(client.get("/api/years/1/department-workbooks").json()) == 2
+    updated = client.put(ref, headers=csrf, json={
+        "artifact_id": second["id"], "expected_version": 1,
+        "reason": "Sostituzione del riferimento errato",
+    })
+    assert updated.status_code == 200, updated.text
+    old_deleted = client.request(
+        "DELETE", "/api/years/1/department-workbooks", headers=csrf,
+        json={"ids": [first["id"]]},
+    )
+    assert old_deleted.status_code == 200, old_deleted.text
+    assert client.request(
+        "DELETE", "/api/years/1/department-workbooks", headers=csrf,
+        json={"ids": [second["id"]]},
+    ).status_code == 409
+    cleared = client.put(ref, headers=csrf, json={
+        "artifact_id": None, "expected_version": 2,
+        "reason": "Riferimento non più necessario",
+    })
+    assert cleared.status_code == 200, cleared.text
+    assert client.get(ref).json()["artifact_id"] is None
+    assert client.request(
+        "DELETE", "/api/years/1/department-workbooks", headers=csrf,
+        json={"ids": [second["id"]]},
+    ).status_code == 200
+
+
+def test_reference_snapshot_uses_title_exclusions_after_settings_change(client, tmp_path):
+    csrf = signed_in(client)
+    import_id = _uploaded_synthetic_offer_for_reference(client, csrf, tmp_path)
+    base = "/api/years/1/department-workbooks/exclusions"
+    loaded = client.get(base, params={"import_id": import_id}).json()
+    saved = client.put(base, headers=csrf, json={
+        "import_id": import_id, "expected_version": loaded["version"],
+        "source_sha256": loaded["source_sha256"],
+        "mapping_version": loaded["mapping_version"],
+        "cohort_revision": loaded["cohort_revision"],
+        "filters": {"titoli": ["Titolo escluso"]},
+    })
+    assert saved.status_code == 200, saved.text
+    original = _create_synthetic_archive_for_management(
+        client, csrf, import_id, "Con esclusioni"
+    )
+    assert original["excluded_by_assignment_filters"] == 1
+    archive_bytes = client.get(
+        f"/api/years/1/department-workbooks/{original['id']}/download"
+    ).content
+    with ZipFile(io.BytesIO(archive_bytes)) as archive:
+        returned = [archive.read(name) for name in referent_names(archive)]
+    assert client.put(
+        "/api/years/1/department-workbooks/reference", headers=csrf,
+        json={"artifact_id": original["id"], "expected_version": 0},
+    ).status_code == 200
+    # A second generation with no title exclusions cannot change the selected
+    # reference. We can therefore review the old files without missing rows.
+    revision = client.put(base, headers=csrf, json={
+        "import_id": import_id, "expected_version": 1,
+        "source_sha256": loaded["source_sha256"],
+        "mapping_version": loaded["mapping_version"],
+        "cohort_revision": loaded["cohort_revision"],
+        "filters": {},
+    })
+    assert revision.status_code == 200, revision.text
+    new_export = _create_synthetic_archive_for_management(
+        client, csrf, import_id, "Senza esclusioni"
+    )
+    assert new_export["historical_rows"] == 4
+    old_checked = _send_reference_review(
+        client, csrf, original["id"], returned
+    )
+    assert old_checked.status_code == 200, old_checked.text
+    assert old_checked.json()["blocked"] is False
+    assert old_checked.json()["expected_historical_rows_per_file"] == 3
+    assert old_checked.json()["excluded_rows_per_file"] == 1
+
+
+def test_reference_integrity_blocks_modified_disk_zip(client, tmp_path):
+    csrf = signed_in(client)
+    import_id = _uploaded_synthetic_offer_for_reference(client, csrf, tmp_path)
+    artifact = _create_synthetic_archive_for_management(client, csrf, import_id)
+    path_endpoint = (
+        f"/api/years/1/department-workbooks/{artifact['id']}/download"
+    )
+    with ZipFile(io.BytesIO(client.get(path_endpoint).content)) as archive:
+        returned = [archive.read(name) for name in referent_names(archive)]
+    assert client.put(
+        "/api/years/1/department-workbooks/reference", headers=csrf,
+        json={"artifact_id": artifact["id"], "expected_version": 0},
+    ).status_code == 200
+    import app.main as main
+    with main.connect() as cx:
+        record = cx.execute(
+            "SELECT stored_name FROM working_artifacts WHERE id=?",
+            (artifact["id"],),
+        ).fetchone()
+    path = main.WORK_DIR / record["stored_name"]
+    path.write_bytes(path.read_bytes() + b"tampered")
+    result = _send_reference_review(client, csrf, artifact["id"], returned)
+    assert result.status_code == 409
+    assert "contenuto" in result.json()["detail"]
+
+
+def test_reference_selection_controls_are_visible(client):
+    html = client.get("/").text
+    script = client.get("/static/site.js").text
+    assert 'id="workbook-reference-current"' in html
+    assert 'id="workbook-reference-clear"' in html
+    assert "Cambia riferimento" in script
+    assert "reference_artifact_id" in script
