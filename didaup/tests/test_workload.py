@@ -758,4 +758,4 @@ def test_workbook_assignment_exclusion_ui_has_all_multiselect_facets(client):
         assert f'id="{element}"' in html
     assert "Seleziona risultati" in html
     assert "hasUnsavedChanges" in script
-    assert "Filtri diversi sono combinati (AND)" in html
+    assert "filtri diversi sono combinati (AND)" in html
