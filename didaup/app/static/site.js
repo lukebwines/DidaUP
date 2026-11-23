@@ -324,7 +324,7 @@ async function refreshUsers() {
 }
 
 
-async function downloadDepartmentArchive(path, button) {
+async function downloadDepartmentArchive(path, button, filename) {
   button.disabled = true;
   try {
     const response = await fetch(path, {
@@ -339,7 +339,7 @@ async function downloadDepartmentArchive(path, button) {
     try {
       const a = document.createElement("a");
       a.href = url;
-      a.download = "DidaUP_5_file_completi.zip";
+      a.download = filename || "DidaUP_5_file_completi.zip";
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -347,12 +347,163 @@ async function downloadDepartmentArchive(path, button) {
   } finally { button.disabled = false; }
 }
 
+function selectedWorkbookArchiveIds() {
+  return [...el("workbook-archives").querySelectorAll("input[type=checkbox]:checked")]
+    .map(checkbox => Number(checkbox.dataset.artifactId))
+    .filter(id => Number.isSafeInteger(id) && id > 0);
+}
+
+function updateWorkbookArchiveSelection() {
+  const checkboxes = [...el("workbook-archives").querySelectorAll("input[type=checkbox]")];
+  const count = checkboxes.filter(box => box.checked).length;
+  const selectAll = el("workbook-archive-select-all");
+  selectAll.disabled = !checkboxes.length || state.user?.role !== "admin";
+  selectAll.checked = Boolean(checkboxes.length) && count === checkboxes.length;
+  selectAll.indeterminate = count > 0 && count < checkboxes.length;
+  el("workbook-archive-selected-summary").textContent =
+    count ? count + (count === 1 ? " pacchetto selezionato" : " pacchetti selezionati")
+      : "Nessun pacchetto selezionato";
+  el("workbook-archive-delete-selected").disabled = count === 0;
+}
+
+async function deleteDepartmentArchives(ids) {
+  if (!ids.length || state.user?.role !== "admin" || !state.selected) return;
+  const count = ids.length;
+  const confirmation = window.prompt(
+    "Eliminazione definitiva di " + count +
+    (count === 1 ? " estrazione" : " estrazioni") +
+    " dal registro DidaUP e dal disco del Raspberry Pi. " +
+    "I report originali, le mappature e i criteri resteranno invariati. " +
+    "Questa operazione non può essere annullata. Per confermare digita ELIMINA:",
+    ""
+  );
+  if (confirmation !== "ELIMINA") return;
+  const action = el("workbook-archive-delete-selected");
+  action.disabled = true;
+  try {
+    const result = await api("years/" + state.selected + "/department-workbooks",
+      "DELETE", {ids});
+    await refreshWorkbookArchiveList();
+    showNotice(
+      result.deleted_count + " " +
+      (result.deleted_count === 1 ? "pacchetto eliminato. " : "pacchetti eliminati. ") +
+      result.message +
+      (result.missing_files ? " File già assenti dal disco: " + result.missing_files + "." : "") +
+      (result.pending_cleanup ? " Pulizia disco ancora in sospeso: " + result.pending_cleanup + "." : ""),
+      Boolean(result.pending_cleanup)
+    );
+  } catch (error) {
+    showNotice(error.message, true);
+  } finally {
+    updateWorkbookArchiveSelection();
+  }
+}
+
+async function renameDepartmentArchive(item) {
+  if (!state.selected) return;
+  const text = window.prompt(
+    "Etichetta personalizzata dell'estrazione #" + item.id +
+      " (massimo 120 caratteri; vuoto per rimuoverla):",
+    item.label || ""
+  );
+  if (text === null) return;
+  if (text.length > 120) {
+    showNotice("L'etichetta può contenere al massimo 120 caratteri.", true);
+    return;
+  }
+  try {
+    await api(
+      "years/" + state.selected + "/department-workbooks/" + item.id + "/label",
+      "PATCH", {label: text}
+    );
+    await refreshWorkbookArchiveList();
+    showNotice("Etichetta dell'estrazione #" + item.id + " aggiornata.");
+  } catch (error) {
+    showNotice(error.message, true);
+  }
+}
+
+async function refreshWorkbookArchiveList() {
+  const body = el("workbook-archives");
+  body.replaceChildren();
+  const admin = state.user?.role === "admin";
+  el("workbook-archive-bulk-actions").hidden = !admin;
+  el("workbook-archive-select-all").hidden = !admin;
+  if (!state.selected || state.user?.role === "lettura") {
+    updateWorkbookArchiveSelection();
+    return;
+  }
+  const existing = await api("years/" + state.selected + "/department-workbooks");
+  for (const item of existing) {
+    const row = body.insertRow();
+    const selectCell = row.insertCell();
+    selectCell.className = "workbook-archive-select-cell";
+    if (admin) {
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.dataset.artifactId = String(item.id);
+      checkbox.setAttribute("aria-label", "Seleziona estrazione #" + item.id);
+      checkbox.addEventListener("change", updateWorkbookArchiveSelection);
+      selectCell.appendChild(checkbox);
+    }
+    const name = row.insertCell();
+    const title = document.createElement("strong");
+    title.textContent = item.label
+      ? "Estrazione #" + item.id + " · " + item.label
+      : "5 Excel + righe escluse · #" + item.id;
+    name.appendChild(title);
+    const detail = document.createElement("small");
+    detail.textContent = "5 Excel + registro righe escluse" +
+      (item.label ? " · Etichetta personalizzata" : " · Senza etichetta");
+    name.appendChild(detail);
+    row.insertCell().textContent =
+      new Date(item.generated_at * 1000).toLocaleString("it-IT");
+    row.insertCell().textContent = item.available
+      ? (Number(item.file_bytes || 0) / (1024 * 1024)).toLocaleString("it-IT", {
+          maximumFractionDigits: 2
+        }) + " MB"
+      : "ZIP non disponibile";
+    const actions = row.insertCell();
+    actions.className = "workbook-archive-row-actions";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary";
+    button.textContent = "Scarica ZIP";
+    button.disabled = !item.available;
+    button.addEventListener("click", () => {
+      downloadDepartmentArchive(item.download_url, button, item.download_filename)
+        .catch(e => showNotice(e.message, true));
+    });
+    actions.appendChild(button);
+    const rename = document.createElement("button");
+    rename.type = "button";
+    rename.className = "secondary";
+    rename.textContent = "Etichetta";
+    rename.title = "Modifica l'etichetta dell'estrazione";
+    rename.addEventListener("click", () => {
+      renameDepartmentArchive(item).catch(e => showNotice(e.message, true));
+    });
+    actions.appendChild(rename);
+    if (admin) {
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "workbook-archive-remove";
+      remove.textContent = "Elimina";
+      remove.setAttribute("aria-label", "Elimina estrazione #" + item.id);
+      remove.addEventListener("click", () => {
+        deleteDepartmentArchives([item.id])
+          .catch(e => showNotice(e.message, true));
+      });
+      actions.appendChild(remove);
+    }
+  }
+  updateWorkbookArchiveSelection();
+}
+
 async function refreshWorkbooks() {
   const select = el("workbook-import-id");
   const currentSource = select.value;
-  const body = el("workbook-archives");
   select.replaceChildren();
-  body.replaceChildren();
   if (!state.selected) return;
   if (state.user?.role === "lettura") {
     el("workbook-progress").textContent = "Generazione riservata ad amministratori e operatori.";
@@ -373,22 +524,7 @@ async function refreshWorkbooks() {
   el("workbook-progress").textContent = mapped.length
     ? "La generazione usa tutte le attività della fonte, senza filtri per dipartimento."
     : "Nessun report di offerta mappato: acquisire e mappare prima un report sintetico.";
-  const existing = await api("years/" + state.selected + "/department-workbooks");
-  for (const item of existing) {
-    const row = body.insertRow();
-    row.insertCell().textContent = "5 Excel + righe escluse · #" + item.id;
-    row.insertCell().textContent = new Date(item.generated_at * 1000).toLocaleString("it-IT");
-    const c = row.insertCell();
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "secondary";
-    button.textContent = "Scarica ZIP";
-    button.addEventListener("click", () => {
-      downloadDepartmentArchive(item.download_url, button)
-        .catch(e => showNotice(e.message, true));
-    });
-    c.appendChild(button);
-  }
+  await refreshWorkbookArchiveList();
   await window.DidaUPWorkbookExclusions?.load(true);
 }
 
@@ -522,6 +658,18 @@ function hookForms() {
     }
   });
 
+  el("workbook-archive-select-all").addEventListener("change", event => {
+    const isChecked = event.target.checked;
+    el("workbook-archives").querySelectorAll("input[type=checkbox]").forEach(box => {
+      box.checked = isChecked;
+    });
+    updateWorkbookArchiveSelection();
+  });
+  el("workbook-archive-delete-selected").addEventListener("click", () => {
+    deleteDepartmentArchives(selectedWorkbookArchiveIds())
+      .catch(error => showNotice(error.message, true));
+  });
+
   el("workbook-generate-form").addEventListener("submit", async event => {
     event.preventDefault();
     if (!state.selected) return;
@@ -536,7 +684,8 @@ function hookForms() {
     el("workbook-progress").textContent = "Creazione dei cinque Excel e del registro interno delle righe escluse…";
     try {
       const result = await api("years/" + state.selected + "/department-workbooks",
-        "POST", {import_id: sourceId});
+        "POST", {import_id: sourceId, label: el("workbook-export-label").value.trim()});
+      if (el("workbook-export-label")) el("workbook-export-label").value = "";
       const excludedRows = Number(result.excluded_rows || 0);
       const assignmentExcluded = Number(result.excluded_by_assignment_filters || 0);
       const assignmentExclusionInfo = assignmentExcluded
