@@ -131,6 +131,168 @@ def _canonical(value: object) -> str:
     return " ".join(unicodedata.normalize("NFKC", _display(value)).split()).casefold()
 
 
+WORKBOOK_EXCLUSION_FILTER_KEYS = {
+    "titoli": "titolo_affidamento",
+    "tipologie": "cds_tipologia",
+    "cds": "cds_codice",
+    "sedi": "sede",
+    "annualita": "anno_corso",
+    "taf": "taf",
+}
+
+
+def _workbook_exclusion_cds_value(code: object, name: object) -> str:
+    return json.dumps(
+        [_display(code), _display(name)],
+        ensure_ascii=False, separators=(",", ":"),
+    )
+
+
+def workbook_exclusion_choices(
+    source: Path, source_sha256: str, sheet_name: str, header_row: int,
+    assigned: dict[str, int], allowed_source_ids: set[str] | None = None,
+) -> dict:
+    """Distinct, counted exclusion facets from the rows retained for export."""
+    if not re.fullmatch(r"[0-9a-f]{64}", source_sha256) or not source.is_file():
+        raise WorkbookGenerationError("Fonte non valida per i filtri di esclusione")
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    if digest != source_sha256:
+        raise WorkbookGenerationError("Il report non corrisponde alla fonte selezionata")
+    workbook = CalamineWorkbook.from_path(source)
+    if sheet_name not in workbook.sheet_names:
+        raise WorkbookGenerationError("Foglio non presente nella fonte selezionata")
+    sheet = workbook.get_sheet_by_name(sheet_name)
+    if not 1 <= header_row <= 40 or sheet.height <= header_row:
+        raise WorkbookGenerationError("Intestazione non valida per i filtri di esclusione")
+    rows = sheet.to_python(skip_empty_area=False)
+    mapped = {
+        "titoli": "titolo_affidamento" in assigned,
+        "tipologie": "cds_tipologia" in assigned,
+        "cds": "cds_codice" in assigned or "cds_nome" in assigned,
+        "sedi": "sede" in assigned,
+        "annualita": "anno_corso" in assigned,
+        "taf": "taf" in assigned,
+    }
+    values: dict[str, dict[str, dict]] = {
+        key: {} for key in WORKBOOK_EXCLUSION_FILTER_KEYS
+    }
+    rows_in_scope = 0
+    for excel_row, row in enumerate(rows[header_row:], start=header_row + 1):
+        if not _source_row_has_content(row):
+            continue
+        if allowed_source_ids is not None and source_row_id(
+            source_sha256, sheet_name, excel_row
+        ) not in allowed_source_ids:
+            continue
+        rows_in_scope += 1
+
+        def raw(key):
+            column = assigned.get(key)
+            return row[column] if column is not None and column < len(row) else ""
+
+        for facet, field in WORKBOOK_EXCLUSION_FILTER_KEYS.items():
+            if not mapped[facet]:
+                continue
+            if facet == "cds":
+                code, name = _display(raw("cds_codice")), _display(raw("cds_nome"))
+                value = _workbook_exclusion_cds_value(code, name)
+                label = " · ".join(part for part in (name, code) if part)
+            else:
+                value = _display(raw(field))
+                label = value
+            if not value.strip():
+                continue
+            identity = _canonical(value)
+            if facet == "cds":
+                identity = _canonical(code) + "\\0" + _canonical(name)
+            if identity not in values[facet]:
+                values[facet][identity] = {
+                    "value": value, "label": label, "count": 0,
+                }
+            values[facet][identity]["count"] += 1
+
+    choices = {}
+    for facet, options in values.items():
+        choices[facet] = sorted(
+            options.values(),
+            key=lambda item: item["label"].casefold(),
+        )
+    return {"mapped": mapped, "choices": choices, "rows_in_scope": rows_in_scope}
+
+
+def normalize_workbook_exclusion_filters(
+    raw_filters: dict | None, choices: dict, assigned: dict[str, int],
+) -> dict[str, list[str]]:
+    """Validate user selections against values actually present in this report."""
+    if raw_filters is None:
+        raw_filters = {}
+    if not isinstance(raw_filters, dict):
+        raise WorkbookGenerationError("Filtri di esclusione non validi")
+    unknown = set(raw_filters) - set(WORKBOOK_EXCLUSION_FILTER_KEYS)
+    if unknown:
+        raise WorkbookGenerationError("Uno o più filtri di esclusione non sono riconosciuti")
+    normalized: dict[str, list[str]] = {}
+    any_selected = False
+    for facet in WORKBOOK_EXCLUSION_FILTER_KEYS:
+        selected = raw_filters.get(facet, [])
+        if not isinstance(selected, list) or len(selected) > 1000:
+            raise WorkbookGenerationError("Selezione multipla non valida")
+        clean = []
+        for value in selected:
+            if not isinstance(value, str) or not value.strip() or len(value) > 1000:
+                raise WorkbookGenerationError("Valore selezionato non valido")
+            if value not in clean:
+                clean.append(value)
+        if clean and not choices["mapped"].get(facet):
+            raise WorkbookGenerationError(
+                f"Il campo necessario al filtro «{facet}» non è associato nella mappatura"
+            )
+        available = {item["value"] for item in choices["choices"].get(facet, [])}
+        if set(clean) - available:
+            raise WorkbookGenerationError(
+                f"Il filtro «{facet}» contiene valori non presenti nelle righe incluse del report"
+            )
+        normalized[facet] = clean
+        any_selected = any_selected or bool(clean)
+    if any_selected and not normalized["titoli"]:
+        raise WorkbookGenerationError(
+            "Selezionare almeno un Titolo affidamento: gli altri filtri servono a restringerne l'ambito"
+        )
+    return normalized
+
+
+def matches_workbook_exclusion_filters(
+    filters: dict[str, list[str]], get,
+) -> bool:
+    """Match titles as the primary criterion; optional facets narrow it with AND."""
+    if not filters or not filters.get("titoli"):
+        return False
+
+    def selected_match(facet: str, actual: object) -> bool:
+        selected = filters.get(facet) or []
+        return not selected or _canonical(actual) in {
+            _canonical(value) for value in selected
+        }
+
+    if not selected_match("titoli", get("titolo_affidamento")):
+        return False
+    if not selected_match("tipologie", get("cds_tipologia")):
+        return False
+    if not selected_match("sedi", get("sede")):
+        return False
+    if not selected_match("annualita", get("anno_corso")):
+        return False
+    if not selected_match("taf", get("taf")):
+        return False
+    if filters.get("cds"):
+        actual = _workbook_exclusion_cds_value(
+            get("cds_codice"), get("cds_nome")
+        )
+        if actual not in filters["cds"]:
+            return False
+    return True
+
+
 def _normalized_cohort_key(course: object, campus: object, year: object):
     code, location = _canonical(course), _canonical(campus)
     year_str = _display(year)
