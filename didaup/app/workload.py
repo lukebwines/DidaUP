@@ -140,6 +140,24 @@ def matching_rule_indices(typology, course, taf, rules):
     return [index for specificity, index in matches if specificity == highest]
 
 
+def workload_cap_applied(planned, typology, course, taf, rules):
+    """True when a matched numeric rule would exceed the planned-hours ceiling."""
+    matched = matching_rule_indices(typology, course, taf, rules)
+    if len(matched) != 1:
+        return False
+    rule = rules[matched[0] - 1]
+    if rule["mode"] == "non_disponibile":
+        return False
+    hours = decimal_hours(planned)
+    if hours is None:
+        return False
+    rate = Decimal(rule["value"])
+    result = (
+        hours * rate / 100 if rule["mode"] == "percentuale" else rate
+    ).quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP)
+    return result > hours
+
+
 def apply_workload(planned, typology, course, taf, rules):
     """Return (hours, matching_rule_index, issue). Without a rule, use planned hours."""
     matched = matching_rule_indices(typology, course, taf, rules)
@@ -174,8 +192,11 @@ def apply_workload(planned, typology, course, taf, rules):
     rate = Decimal(rule["value"])
     result = (hours * rate / 100 if rule["mode"] == "percentuale"
               else rate).quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP)
-    if rule["mode"] == "fissa" and rate > hours:
-        return 0, index, "Quota fissa superiore a TOT ORE PREVISTE"
+    # TOT ORE PREVISTE is a hard ceiling for every numeric rule. A quota or
+    # percentage above the ceiling is automatically capped, not treated as
+    # a blocking error. The original planned value is never increased.
+    if result > hours:
+        result = hours
     if result > 99999999:
         return 0, index, "Risultato superiore al limite delle ore ammesse"
     return float(result), index, None
