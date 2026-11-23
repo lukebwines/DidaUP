@@ -534,6 +534,11 @@ function hookForms() {
       const result = await api("years/" + state.selected + "/department-workbooks",
         "POST", {import_id: sourceId});
       const excludedRows = Number(result.excluded_rows || 0);
+      const assignmentExcluded = Number(result.excluded_by_assignment_filters || 0);
+      const assignmentExclusionInfo = assignmentExcluded
+        ? " Escluse anche " + assignmentExcluded +
+          " righe per Titolo affidamento e filtri aggiuntivi; sono riportate nel sesto file interno."
+        : "";
       const auditRows = Number(result.excluded_file_rows ?? -1);
       const auditInfo = " Sesto file riservato CONTROLLO INTERNO: " +
         auditRows + " righe escluse, con motivo dell'esclusione. " +
@@ -629,7 +634,7 @@ function hookForms() {
       showNotice("Generati cinque file identici con " +
         result.historical_rows + " righe storiche ciascuno; nessun filtro dipartimentale. " +
         "Righe escluse: " + excludedRows + ". " +
-        reconciliationInfo + workloadInfo +
+        assignmentExclusionInfo + reconciliationInfo + workloadInfo +
         "Il pacchetto ZIP con 6 Excel è disponibile per il download. " +
         auditInfo +
         "Revisione: " + (result.export_revision || "non disponibile") +
@@ -641,6 +646,7 @@ function hookForms() {
       el("workbook-progress").textContent =
         "Revisione " + (result.export_revision || "—") +
         ". Escluse " + excludedRows + " righe, tutte presenti nel sesto Excel interno. " +
+        (assignmentExcluded ? assignmentExcluded + " escluse per criteri incarico. " : "") +
         reconciliationInfo +
         (missed ? missed + " annualità escluse senza corrispondenza nel report. " : "") +
         (matchedByName ? matchedByName + " riconciliate per denominazione univoca. " : "") +
