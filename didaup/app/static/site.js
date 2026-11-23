@@ -385,6 +385,7 @@ async function refreshWorkbooks() {
     });
     c.appendChild(button);
   }
+  await window.DidaUPWorkbookExclusions?.load(true);
 }
 
 function hookForms() {
@@ -520,6 +521,10 @@ function hookForms() {
   el("workbook-generate-form").addEventListener("submit", async event => {
     event.preventDefault();
     if (!state.selected) return;
+    if (window.DidaUPWorkbookExclusions?.hasUnsavedChanges()) {
+      showNotice("Ci sono filtri di esclusione incarichi non salvati. Calcola l'anteprima e salva i criteri prima di generare i cinque Excel.", true);
+      return;
+    }
     const sourceId = Number(el("workbook-import-id").value);
     if (!Number.isInteger(sourceId) || sourceId < 1) return;
     const button = el("workbook-generate-button");
@@ -743,6 +748,7 @@ function hookForms() {
       updateResetPhrase();
     }
   });
+  window.DidaUPWorkbookExclusions?.hook();
   document.querySelectorAll(".nav-item").forEach(node => node.addEventListener("click", () => switchView(node.dataset.view)));
 }
 
