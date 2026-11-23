@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -624,3 +625,137 @@ def test_saved_rule_for_excluded_course_is_flagged_but_kept_for_admin_review(cli
     assert "unmatched_exclusion_count" in frontend
     assert "mixed_annuality_rows_retained" in frontend
     assert "group.options.push({value" not in frontend
+
+
+def test_workbook_assignment_exclusions_are_saved_previewed_and_applied(client, tmp_path):
+    source = tmp_path / "offer-with-assignment-titles.xlsx"
+    mapping = make_source(
+        source, with_tipologia=True,
+        assignment_titles_by_row={
+            1: "Titolo A", 2: "Titolo B", 3: "Titolo A", 4: "Titolo A",
+        },
+    )
+    csrf = signed_in(client)
+    import_id = _upload_mapped_synthetic_report(client, csrf, source, mapping)
+    base = f"/api/years/1/department-workbooks/exclusions"
+    loaded = client.get(base, params={"import_id": import_id})
+    assert loaded.status_code == 200, loaded.text
+    data = loaded.json()
+    assert data["mapped"]["titoli"] is True
+    assert data["rows_in_scope"] == 4
+    assert data["version"] == 0
+    cds_a = next(
+        item["value"] for item in data["choices"]["cds"]
+        if item["label"].endswith("SYN-A")
+    )
+    filters = {
+        "titoli": ["Titolo A"],
+        "tipologie": ["Laurea"],
+        "cds": [cds_a],
+        "sedi": ["Sede TEST"],
+        "annualita": ["2"],
+        "taf": ["TAF-SINTETICO"],
+    }
+    payload = {
+        "import_id": import_id,
+        "expected_version": data["version"],
+        "source_sha256": data["source_sha256"],
+        "mapping_version": data["mapping_version"],
+        "cohort_revision": data["cohort_revision"],
+        "filters": filters,
+    }
+    preview = client.post(base + "/preview", headers=csrf, json=payload)
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["matched_rows"] == 2
+    assert [item["excel_row"] for item in preview.json()["examples"]] == [2, 4]
+
+    saved = client.put(base, headers=csrf, json=payload)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["version"] == 1
+    assert saved.json()["matched_rows"] == 2
+
+    refreshed = client.get(base, params={"import_id": import_id})
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()["filters"] == filters
+    assert refreshed.json()["stale"] is False
+
+    generated = client.post(
+        "/api/years/1/department-workbooks", headers=csrf,
+        json={"import_id": import_id},
+    )
+    assert generated.status_code == 200, generated.text
+    assert generated.json()["excluded_by_assignment_filters"] == 2
+    assert generated.json()["excluded_rows"] == 2
+    assert generated.json()["reconciliation"]["included_in_each_workbook"] == 2
+    assert generated.json()["reconciliation"]["excluded_in_internal_register"] == 2
+    download = client.get("/" + generated.json()["download_url"])
+    assert download.status_code == 200, download.text
+    with ZipFile(io.BytesIO(download.content)) as archive:
+        copies = referent_names(archive)
+        assert len(copies) == 5
+        assert len({archive.read(name) for name in copies}) == 1
+        audit_names = [name for name in archive.namelist()
+                       if "CONTROLLO_INTERNO" in name]
+        assert len(audit_names) == 1
+        audit_path = tmp_path / "assignment-exclusions-audit.xlsx"
+        audit_path.write_bytes(archive.read(audit_names[0]))
+    audit = CalamineWorkbook.from_path(audit_path)
+    audit_rows = audit.get_sheet_by_name("Righe escluse").to_python(
+        skip_empty_area=False
+    )[5:]
+    assert [row[33] for row in audit_rows] == [
+        "Titolo A", "Titolo A"
+    ]
+
+
+def test_workbook_assignment_exclusions_become_stale_after_annuality_changes(client, tmp_path):
+    source = tmp_path / "offer-stale-assignment-exclusions.xlsx"
+    mapping = make_source(
+        source, with_tipologia=True,
+        assignment_titles_by_row={
+            1: "Titolo A", 2: "Titolo B", 3: "Titolo A", 4: "Titolo A",
+        },
+    )
+    csrf = signed_in(client)
+    import_id = _upload_mapped_synthetic_report(client, csrf, source, mapping)
+    base = "/api/years/1/department-workbooks/exclusions"
+    loaded = client.get(base, params={"import_id": import_id})
+    assert loaded.status_code == 200, loaded.text
+    data = loaded.json()
+    payload = {
+        "import_id": import_id, "expected_version": 0,
+        "source_sha256": data["source_sha256"],
+        "mapping_version": data["mapping_version"],
+        "cohort_revision": data["cohort_revision"],
+        "filters": {"titoli": ["Titolo A"]},
+    }
+    saved = client.put(base, headers=csrf, json=payload)
+    assert saved.status_code == 200, saved.text
+    _cohort_set_inclusion(client, csrf, "SYN-B", 2, False)
+    stale = client.get(base, params={"import_id": import_id})
+    assert stale.status_code == 200, stale.text
+    assert stale.json()["stale"] is True
+    assert stale.json()["filters"] == {}
+    generated = client.post(
+        "/api/years/1/department-workbooks", headers=csrf,
+        json={"import_id": import_id},
+    )
+    assert generated.status_code == 409
+    assert "annualità precedente" in generated.json()["detail"]
+
+
+def test_workbook_assignment_exclusion_ui_has_all_multiselect_facets(client):
+    html = client.get("/").text
+    script = client.get("/static/workbook_exclusions.js").text
+    for element in (
+        "workbook-exclusion-title-filter",
+        "workbook-exclusion-type-filter",
+        "workbook-exclusion-cds-filter",
+        "workbook-exclusion-campus-filter",
+        "workbook-exclusion-year-filter",
+        "workbook-exclusion-taf-filter",
+    ):
+        assert f'id="{element}"' in html
+    assert "Seleziona risultati" in html
+    assert "hasUnsavedChanges" in script
+    assert "Filtri diversi sono combinati (AND)" in html
