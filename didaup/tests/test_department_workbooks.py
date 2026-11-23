@@ -16,6 +16,7 @@ from app.row_identity import source_row_id
 from app.department_workbooks import (
     HISTORIC_HEADERS, VISIBLE_HEADERS, TECH_HEADERS, HIDDEN_REFERENT_HEADERS,
     WorkbookGenerationError, build_five_workbooks, _verify_xlsx_ids,
+    workbook_exclusion_choices, normalize_workbook_exclusion_filters,
 )
 
 
@@ -816,3 +817,84 @@ def test_api_generates_private_five_file_zip_and_reviews_unchanged(client, tmp_p
     assert client.get(download_path).status_code == 404
     assert client.get(f"/api/imports/{source_id}/mapping").status_code == 200
     assert len(client.get("/api/years/1/imports").json()) == 1
+
+
+def test_assignment_title_exclusions_combine_multiple_facets_and_audit_rows(tmp_path):
+    source = tmp_path / "assignment-exclusions.xlsx"
+    assigned = make_source(
+        source, with_tipologia=True,
+        assignment_titles_by_row={
+            1: "Titolo A", 2: "Titolo B", 3: "Titolo A", 4: "Titolo A",
+        },
+    )
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    choices = workbook_exclusion_choices(
+        source, digest, "Offerta sintetica", 1, assigned,
+    )
+    assert choices["rows_in_scope"] == 4
+    assert choices["mapped"]["titoli"] is True
+    assert {item["value"] for item in choices["choices"]["titoli"]} == {
+        "Titolo A", "Titolo B"
+    }
+    cds_a = next(
+        item["value"] for item in choices["choices"]["cds"]
+        if item["label"].endswith("SYN-A")
+    )
+    filters = normalize_workbook_exclusion_filters({
+        "titoli": ["Titolo A"],
+        "tipologie": ["Laurea"],
+        "cds": [cds_a],
+        "sedi": ["Sede TEST"],
+        "annualita": ["2"],
+        "taf": ["TAF-SINTETICO"],
+    }, choices, assigned)
+
+    packed, info = build_five_workbooks(
+        source, digest, "Offerta sintetica", 1, assigned, "2026/27",
+        assignment_exclusions=filters,
+    )
+    assert info["excluded_rows"] == 2
+    assert info["excluded_by_assignment_filters"] == 2
+    assert info["historical_rows"] == 2
+    assert info["excluded_file_rows"] == 2
+    assert info["reconciliation"]["verified"] is True
+    assert info["reconciliation"]["excluded_by_assignment_filters"] == 2
+
+    with ZipFile(io.BytesIO(packed)) as archive:
+        names = referent_names(archive)
+        assert len(names) == 5
+        assert len({archive.read(name) for name in names}) == 1
+        audit_name = next(name for name in archive.namelist()
+                          if "CONTROLLO_INTERNO" in name)
+        audit_path = tmp_path / "excluded-audit.xlsx"
+        audit_path.write_bytes(archive.read(audit_name))
+    audit = CalamineWorkbook.from_path(audit_path)
+    rows = audit.get_sheet_by_name("Righe escluse").to_python(
+        skip_empty_area=False
+    )
+    data = rows[5:]
+    assert [row[len(HISTORIC_HEADERS)] for row in data] == [2, 4]
+    assert all(
+        "Esclusione per titolo affidamento" in row[len(HISTORIC_HEADERS) + 1]
+        for row in data
+    )
+    assert [row[HISTORIC_HEADERS.index("TITOLO AFFIDAMENTO")] for row in data] == [
+        "Titolo A", "Titolo A"
+    ]
+
+
+def test_assignment_exclusion_requires_a_primary_title_and_valid_mapped_values(tmp_path):
+    source = tmp_path / "assignment-exclusions-invalid.xlsx"
+    assigned = make_source(source, with_tipologia=True)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    choices = workbook_exclusion_choices(
+        source, digest, "Offerta sintetica", 1, assigned,
+    )
+    with pytest.raises(WorkbookGenerationError, match="Titolo affidamento"):
+        normalize_workbook_exclusion_filters(
+            {"tipologie": ["Laurea"]}, choices, assigned
+        )
+    with pytest.raises(WorkbookGenerationError, match="non presenti"):
+        normalize_workbook_exclusion_filters(
+            {"titoli": ["Titolo inventato"]}, choices, assigned
+        )
