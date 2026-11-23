@@ -1617,14 +1617,42 @@ async def generate_department_workbooks(
         ).fetchone()
         workload_rules = json.loads(workload_row["rules_json"]) if workload_row else []
         workload_version = workload_row["version"] if workload_row else 0
+        exclusion_profile = cx.execute(
+            "SELECT * FROM workbook_exclusion_profiles WHERE year_id=? AND import_id=?",
+            (year_id, body.import_id),
+        ).fetchone()
+        exclusion_version = exclusion_profile["version"] if exclusion_profile else 0
+        exclusion_revision = cohort_revision(cx, year_id)
         # Snapshot values for optimistic concurrency checks after generation.
         mapping_version = mapping["version"]
         source_sha = source["sha256"]
+    assignment_exclusions = {}
+    exclusion_context = {
+        "source": source, "mapping": mapping, "year": year,
+        "excluded": excluded, "included": included,
+        "cohort_names": cohort_names,
+        "cohort_revision": exclusion_revision,
+        "profile": exclusion_profile,
+    }
+    if exclusion_profile is not None:
+        if not workbook_exclusion_profile_is_current(exclusion_profile, exclusion_context):
+            raise HTTPException(
+                409,
+                "I criteri di esclusione incarichi sono riferiti a una mappatura o a un ambito annualità precedente: ricaricare e salvare nuovamente i filtri.",
+            )
+        try:
+            choices = await workbook_exclusion_scope(exclusion_context)
+            assignment_exclusions = normalize_workbook_exclusion_filters(
+                json.loads(exclusion_profile["filters_json"]), choices, assigned
+            )
+        except WorkbookGenerationError as exc:
+            raise HTTPException(409, "Criteri di esclusione incarichi da verificare: " + str(exc)) from exc
     try:
         archive, summary = await run_in_threadpool(
             build_five_workbooks,
             source_path, source_sha, mapping["sheet_name"], mapping["header_row"],
-            assigned, year["code"], excluded, included, cohort_names, workload_rules,
+            assigned, year["code"], excluded, included, cohort_names,
+            workload_rules, assignment_exclusions,
         )
     except WorkbookGenerationError as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -1655,6 +1683,13 @@ async def generate_department_workbooks(
                 "SELECT version FROM workload_profiles WHERE year_id=?", (year_id,)
             ).fetchone()
             current_workload_version = workload_now["version"] if workload_now else 0
+            exclusion_now = cx.execute(
+                "SELECT version,source_sha256,mapping_version,cohort_revision "
+                "FROM workbook_exclusion_profiles WHERE year_id=? AND import_id=?",
+                (year_id, body.import_id),
+            ).fetchone()
+            current_exclusion_version = exclusion_now["version"] if exclusion_now else 0
+            current_cohort_revision = cohort_revision(cx, year_id)
             current_cohorts = cx.execute(
                 "SELECT course_code,course_name,campus,study_year,included FROM cohorts "
                 "WHERE year_id=?", (year_id,),
@@ -1670,6 +1705,13 @@ async def generate_department_workbooks(
             if (source_now is None or source_now["sha256"] != source_sha
                 or mapping_now is None or mapping_now["version"] != mapping_version
                 or current_workload_version != workload_version
+                or current_exclusion_version != exclusion_version
+                or current_cohort_revision != exclusion_revision
+                or (exclusion_now is not None and (
+                    exclusion_now["source_sha256"] != source_sha
+                    or exclusion_now["mapping_version"] != mapping_version
+                    or exclusion_now["cohort_revision"] != exclusion_revision
+                ))
                 or now_excluded != excluded or now_included != included
                 or {
                     (r["course_code"], r["campus"], r["study_year"]): r["course_name"]
