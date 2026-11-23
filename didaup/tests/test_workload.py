@@ -103,7 +103,7 @@ def test_workload_ambiguous_rules_block_generation_but_preview_reports(tmp_path)
         "Conflitto tra regole 1, 2 con la stessa specificità"
     )
     assert snapshot[-1]["conflict_pairs"] == [{
-        "rules": [1, 2], "rows": 2, "examples": [2, 3]
+        "rules": [1, 2], "rows": 3, "examples": [2, 3, 4]
     }]
 
 
@@ -563,7 +563,7 @@ def test_workload_release_assets_are_versioned_to_avoid_old_cached_selectors(cli
     manifest = (Path(__file__).resolve().parents[1] / "config.yaml").read_text(
         encoding="utf-8"
     )
-    release = "0.1.10-alpha16"
+    release = "0.1.10-alpha17"
     assert f'version: "{release}"' in manifest
     assert f'ALPHA · {release}' in html
     for asset in ("site.css", "site.js", "mapping.js", "cohort_review.js", "workload.js"):
