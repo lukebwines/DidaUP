@@ -628,6 +628,8 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         site = _normalized_course_site(course, campus)
         years = _source_years(year_text)
         matched_by_name = False
+        partial_annuality = False
+        unresolved_annuality = False
 
         # A source-row course code sometimes differs from the saved cohort
         # register. Reconcile by FULL course name and campus only when the
@@ -677,14 +679,11 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
                     ", ".join(str(year) for year in sorted(years)),
                 ))
                 continue
-            if excluded_in_row and len(partial_year_rows) < 30:
-                # A single historic row covers included AND excluded years:
-                # must not delete it or silently rewrite "1,2,3" into "2,3".
-                partial_year_rows.append(excel_row)
+            if excluded_in_row:
+                # Count as retained only if a later filter does not remove it.
+                partial_annuality = True
         elif excluded_keys:
-            unresolved_annuality_rows += 1
-            if len(unresolved_annuality_examples) < 30:
-                unresolved_annuality_examples.append(excel_row)
+            unresolved_annuality = True
         # Apply the assignment-title selection only after the existing
         # CdS/annuality rules, so an already excluded row is counted once.
         if matches_workbook_exclusion_filters(
@@ -711,6 +710,13 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
                 _display(get("anno_corso"))[:120],
             ))
             continue
+
+        if partial_annuality and len(partial_year_rows) < 30:
+            partial_year_rows.append(excel_row)
+        if unresolved_annuality:
+            unresolved_annuality_rows += 1
+            if len(unresolved_annuality_examples) < 30:
+                unresolved_annuality_examples.append(excel_row)
 
         # The year of reference is the imported report's archived year, not
         # a per-row equality check; keep the original A.A. value unchanged,
