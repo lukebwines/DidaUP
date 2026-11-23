@@ -1,4 +1,4 @@
-# DidaUP — Installazione e collaudo (0.1.10-alpha17)
+# DidaUP — Installazione e collaudo (0.1.10-alpha18)
 
 > Versione iniziale di sviluppo **non collaudata su una specifica istanza di Home Assistant**. Usare soltanto dati sintetici. Non caricare file reali dell'Ateneo.
 
@@ -198,6 +198,11 @@ Il riquadro **Registro delle annualità già salvate** dispone di ricerca e filt
 Attenzione: una riga originale con annualità multiple oppure con identificativi ambigui non deve essere interpretata come certezza di appartenenza; verificare gli avvisi di generazione prima di distribuire i file.
 
 
-## 0.1.10-alpha17 — Diagnostica dei conflitti tra regole di carico
+## 0.1.10-alpha18 — Diagnostica dei conflitti tra regole di carico
 
 L'anteprima del carico identifica le regole che si sovrappongono con la stessa specificità. Il messaggio di errore riporta i numeri delle regole; la tabella diagnostica raggruppa ogni coppia di regole, conta le righe coinvolte e mostra alcune righe del report come esempio. La tabella delle regole è numerata per consentire di individuare immediatamente le configurazioni da correggere. Nessuna regola viene modificata o eliminata automaticamente: la precedenza tra regole di pari specificità deve essere decisa dall'amministratore.
+
+
+## 0.1.10-alpha18 — Limite massimo delle ore effettive
+
+Per ogni regola numerica (percentuale o quota fissa), **TOT ORE PREVISTE costituisce il tetto massimo** di TOT ORE EFFETTIVE. Se il risultato matematico, arrotondato a due decimali, supera le ore previste, il valore effettivo viene automaticamente ricondotto alle ore previste. La situazione non è più un errore bloccante. L'anteprima mostra il numero di righe su cui è stato applicato il limite e alcuni esempi con riga sorgente, numero della regola, ore previste e ore effettive. Il comportamento non si applica a N.D.; le celle previste vuote continuano a essere segnalate separatamente e mantenute a zero. Valori previsti non numerici o negativi e conflitti tra regole restano bloccanti.
