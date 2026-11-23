@@ -2209,11 +2209,11 @@ def download_department_workbooks(year_id: int, artifact_id: int, request: Reque
 @app.post("/api/years/{year_id}/department-workbooks/review")
 async def preview_five_department_proposals(
     year_id: int, request: Request,
-    import_id: int = Form(...),
+    reference_artifact_id: int = Form(...),
     test_data_only: bool = Form(False),
     files: list[UploadFile] = File(...),
 ):
-    """Read-only reconciliation preview; NEVER approves or imports proposals."""
+    """Read-only reconciliation against the admin-selected immutable ZIP."""
     actor = current_user(request, ("admin", "operatore"))
     require_write(request, actor, allow_multipart=True)
     if not test_data_only:
@@ -2222,52 +2222,49 @@ async def preview_five_department_proposals(
         raise HTTPException(422, "Caricare esattamente cinque file XLSX")
     with closing(connect()) as cx:
         ensure_year(cx, year_id)
-        year = cx.execute(
-            "SELECT code FROM academic_years WHERE id=?", (year_id,)
+        reference = cx.execute(
+            "SELECT r.artifact_id,r.archive_sha256,r.version,a.stored_name,"
+            "a.label FROM workbook_references r "
+            "JOIN working_artifacts a ON a.id=r.artifact_id "
+            "WHERE r.year_id=? AND a.year_id=? "
+            "AND a.kind='five_department_workbooks'",
+            (year_id, year_id),
         ).fetchone()
-        source = cx.execute(
-            "SELECT * FROM source_imports WHERE id=? AND year_id=? AND kind='offerta'",
-            (import_id, year_id),
-        ).fetchone()
-        mapping = cx.execute(
-            "SELECT * FROM source_mappings WHERE import_id=?", (import_id,)
-        ).fetchone()
-        if source is None or mapping is None:
-            raise HTTPException(409, "Report storico o mappatura non disponibili")
-        cohort_rows = cx.execute(
-            "SELECT course_code,course_name,campus,study_year,included FROM cohorts "
-            "WHERE year_id=?", (year_id,)
-        ).fetchall()
-        excluded = {
-            (r["course_code"], r["campus"], r["study_year"])
-            for r in cohort_rows if not r["included"]
-        }
-        included = {
-            (r["course_code"], r["campus"], r["study_year"])
-            for r in cohort_rows if r["included"]
-        }
-        cohort_names = {
-            (r["course_code"], r["campus"], r["study_year"]): r["course_name"]
-            for r in cohort_rows
-        }
-        assigned = json.loads(mapping["fields_json"])
-        mapping_version = mapping["version"]
-        workload_row = cx.execute(
-            "SELECT rules_json,version FROM workload_profiles WHERE year_id=?",
-            (year_id,),
-        ).fetchone()
-        workload_rules = json.loads(workload_row["rules_json"]) if workload_row else []
-        workload_version = workload_row["version"] if workload_row else 0
+        if reference is None:
+            raise HTTPException(
+                409, "Selezionare prima un'estrazione di riferimento per il confronto"
+            )
+        if reference["artifact_id"] != reference_artifact_id:
+            raise HTTPException(
+                409, "L'estrazione di riferimento è cambiata: aggiornare la schermata"
+            )
+        reference_version = reference["version"]
+        reference_digest = reference["archive_sha256"]
+        reference_label = reference["label"]
+        reference_file = reference["stored_name"]
+    path, _size, available = checked_department_archive(reference_file)
+    if not available:
+        raise HTTPException(409, "Lo ZIP di riferimento non è presente sul Raspberry Pi")
+    try:
+        snapshot = await run_in_threadpool(read_reference_snapshot, path)
+    except ReferenceSnapshotError as exc:
+        raise HTTPException(409, "Riferimento non utilizzabile: " + str(exc)) from exc
+    if snapshot["archive_sha256"] != reference_digest:
+        raise HTTPException(
+            409, "Il contenuto dello ZIP di riferimento è cambiato: confronto bloccato"
+        )
     temp_files = []
     try:
         for uploaded in files:
             original_name = Path((uploaded.filename or "").replace("\\", "/")).name
             if (Path(original_name).suffix.lower() != ".xlsx"
-                or len(original_name) > 180):
+                    or len(original_name) > 180):
                 raise HTTPException(422, "Caricare soltanto file .xlsx")
-            fd, temp_name = tempfile.mkstemp(prefix="review_", suffix=".xlsx", dir=WORK_DIR)
-            path = Path(temp_name)
-            temp_files.append(path)
+            fd, temp_name = tempfile.mkstemp(
+                prefix="review_", suffix=".xlsx", dir=WORK_DIR
+            )
+            temp_path = Path(temp_name)
+            temp_files.append(temp_path)
             size = 0
             with os.fdopen(fd, "wb") as output:
                 while True:
@@ -2281,54 +2278,49 @@ async def preview_five_department_proposals(
             if not size:
                 raise HTTPException(422, "Uno dei cinque file è vuoto")
             try:
-                check_signature(path, ".xlsx")
+                check_signature(temp_path, ".xlsx")
             except ValueError as exc:
                 raise HTTPException(422, "Uno dei file Excel non è valido") from exc
         try:
             summary = await run_in_threadpool(
-                review_five_workbooks, SOURCE_DIR / source["stored_name"],
-                source["sha256"], mapping["sheet_name"], mapping["header_row"],
-                assigned, year["code"], temp_files, excluded, included, cohort_names,
-                workload_rules,
+                review_five_workbooks, None, "", "", 1, {}, "",
+                temp_files, reference_snapshot=snapshot,
             )
         except ReviewError as exc:
             raise HTTPException(422, str(exc)) from exc
         except Exception as exc:
             raise HTTPException(422, "Analisi dei cinque file non riuscita") from exc
+
         with closing(connect()) as cx:
-            check = cx.execute(
-                "SELECT version FROM source_mappings WHERE import_id=?",
-                (import_id,),
+            now = cx.execute(
+                "SELECT artifact_id,archive_sha256,version "
+                "FROM workbook_references WHERE year_id=?",
+                (year_id,),
             ).fetchone()
-            workload_now = cx.execute(
-                "SELECT version FROM workload_profiles WHERE year_id=?", (year_id,)
-            ).fetchone()
-            current_workload_version = workload_now["version"] if workload_now else 0
-            now_cohorts = cx.execute(
-                "SELECT course_code,course_name,campus,study_year,included FROM cohorts "
-                "WHERE year_id=?", (year_id,),
-            ).fetchall()
-            if (check is None or check["version"] != mapping_version
-                or current_workload_version != workload_version
-                or {
-                    (r["course_code"], r["campus"], r["study_year"])
-                    for r in now_cohorts if not r["included"]
-                } != excluded
-                or {
-                    (r["course_code"], r["campus"], r["study_year"])
-                    for r in now_cohorts if r["included"]
-                } != included
-                or {
-                    (r["course_code"], r["campus"], r["study_year"]): r["course_name"]
-                    for r in now_cohorts
-                } != cohort_names):
-                raise HTTPException(409, "Mappatura, esclusioni o regole di carico cambiate durante la revisione")
-            record(cx, actor["id"], "review_five_department_proposals",
-                   "source_import", import_id)
+            if (now is None or now["artifact_id"] != reference_artifact_id
+                    or now["version"] != reference_version
+                    or now["archive_sha256"] != reference_digest):
+                raise HTTPException(
+                    409, "Riferimento cambiato durante la revisione: ripetere il controllo"
+                )
+            # The artifact cannot be deleted while selected, but recheck the
+            # physical bytes as an additional fail-closed precaution.
+            final_path, _size, exists = checked_department_archive(reference_file)
+            if not exists or hashlib.sha256(final_path.read_bytes()).hexdigest() != reference_digest:
+                raise HTTPException(
+                    409, "Integrità del riferimento cambiata durante la verifica"
+                )
+            record(
+                cx, actor["id"], "review_five_department_proposals",
+                "working_artifact", reference_artifact_id,
+            )
             cx.commit()
+        summary["reference_artifact_id"] = reference_artifact_id
+        summary["reference_label"] = reference_label
+        summary["reference_archive_sha256"] = reference_digest
         return summary
     finally:
         for uploaded in files:
             await uploaded.close()
-        for path in temp_files:
-            path.unlink(missing_ok=True)
+        for temp_path in temp_files:
+            temp_path.unlink(missing_ok=True)
