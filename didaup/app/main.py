@@ -1350,6 +1350,219 @@ async def preview_workload(year_id: int, import_id: int, request: Request):
     }
 
 
+class DepartmentWorkbookExclusionRequest(BaseModel):
+    import_id: int = Field(ge=1)
+    expected_version: int = Field(ge=0)
+    source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    mapping_version: int = Field(ge=1)
+    cohort_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    filters: dict[str, list[str]] = Field(default_factory=dict)
+
+
+def workbook_exclusion_context(cx, year_id: int, import_id: int):
+    source, mapping = workload_source_snapshot(cx, year_id, import_id)
+    year = cx.execute(
+        "SELECT code FROM academic_years WHERE id=?", (year_id,)
+    ).fetchone()
+    cohort_rows = cx.execute(
+        "SELECT course_code,course_name,campus,study_year,included FROM cohorts "
+        "WHERE year_id=?", (year_id,),
+    ).fetchall()
+    excluded = {
+        (row["course_code"], row["campus"], row["study_year"])
+        for row in cohort_rows if not row["included"]
+    }
+    included = {
+        (row["course_code"], row["campus"], row["study_year"])
+        for row in cohort_rows if row["included"]
+    }
+    cohort_names = {
+        (row["course_code"], row["campus"], row["study_year"]): row["course_name"]
+        for row in cohort_rows
+    }
+    profile = cx.execute(
+        "SELECT * FROM workbook_exclusion_profiles WHERE year_id=? AND import_id=?",
+        (year_id, import_id),
+    ).fetchone()
+    return {
+        "source": source, "mapping": mapping, "year": year,
+        "excluded": excluded, "included": included,
+        "cohort_names": cohort_names,
+        "cohort_revision": cohort_revision(cx, year_id),
+        "profile": profile,
+    }
+
+
+async def workbook_exclusion_scope(context):
+    source, mapping = context["source"], context["mapping"]
+    path = SOURCE_DIR / source["stored_name"]
+    assigned = json.loads(mapping["fields_json"])
+    prepared = await run_in_threadpool(
+        _prepare, path, source["sha256"], mapping["sheet_name"],
+        mapping["header_row"], assigned, context["year"]["code"],
+        context["excluded"], context["included"], context["cohort_names"],
+        None, False, True,
+    )
+    retained_ids = {record[1] for record in prepared[0]}
+    choices = await run_in_threadpool(
+        workbook_exclusion_choices, path, source["sha256"],
+        mapping["sheet_name"], mapping["header_row"], assigned, retained_ids,
+    )
+    return choices
+
+
+def workbook_exclusion_profile_is_current(profile, context) -> bool:
+    return bool(
+        profile is not None
+        and profile["source_sha256"] == context["source"]["sha256"]
+        and profile["mapping_version"] == context["mapping"]["version"]
+        and profile["cohort_revision"] == context["cohort_revision"]
+    )
+
+
+async def preview_workbook_exclusions(context, filters):
+    source, mapping = context["source"], context["mapping"]
+    assigned = json.loads(mapping["fields_json"])
+    prepared = await run_in_threadpool(
+        _prepare, SOURCE_DIR / source["stored_name"], source["sha256"],
+        mapping["sheet_name"], mapping["header_row"], assigned,
+        context["year"]["code"], context["excluded"], context["included"],
+        context["cohort_names"], None, False, True,
+        assignment_exclusions=filters,
+    )
+    reconciliation = prepared[24]
+    return {
+        "matched_rows": reconciliation["excluded_by_assignment_filters"],
+        "examples": reconciliation["assignment_exclusion_examples"],
+        "rows_in_scope": len(prepared[0]) + reconciliation["excluded_by_assignment_filters"],
+    }
+
+
+@app.get("/api/years/{year_id}/department-workbooks/exclusions")
+async def get_department_workbook_exclusions(
+    year_id: int, import_id: int, request: Request,
+):
+    current_user(request)
+    with closing(connect()) as cx:
+        context = workbook_exclusion_context(cx, year_id, import_id)
+    try:
+        choices = await workbook_exclusion_scope(context)
+        profile = context["profile"]
+        stale = profile is not None and not workbook_exclusion_profile_is_current(
+            profile, context
+        )
+        filters = {}
+        version = profile["version"] if profile is not None else 0
+        if profile is not None and not stale:
+            filters = normalize_workbook_exclusion_filters(
+                json.loads(profile["filters_json"]), choices,
+                json.loads(context["mapping"]["fields_json"]),
+            )
+        return {
+            "import_id": import_id,
+            "source_sha256": context["source"]["sha256"],
+            "mapping_version": context["mapping"]["version"],
+            "cohort_revision": context["cohort_revision"],
+            "version": version,
+            "has_saved_profile": profile is not None,
+            "stale": stale,
+            "filters": filters,
+            **choices,
+        }
+    except WorkbookGenerationError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(422, "Impossibile preparare i filtri di esclusione") from exc
+
+
+@app.post("/api/years/{year_id}/department-workbooks/exclusions/preview")
+async def preview_department_workbook_exclusions(
+    year_id: int, body: DepartmentWorkbookExclusionRequest, request: Request,
+):
+    current_user(request)
+    with closing(connect()) as cx:
+        context = workbook_exclusion_context(cx, year_id, body.import_id)
+    if (body.source_sha256 != context["source"]["sha256"]
+            or body.mapping_version != context["mapping"]["version"]
+            or body.cohort_revision != context["cohort_revision"]):
+        raise HTTPException(409, "Fonte, mappatura o annualità cambiate: ricaricare i filtri")
+    try:
+        choices = await workbook_exclusion_scope(context)
+        filters = normalize_workbook_exclusion_filters(
+            body.filters, choices, json.loads(context["mapping"]["fields_json"])
+        )
+        result = await preview_workbook_exclusions(context, filters)
+        return {"filters": filters, **result}
+    except WorkbookGenerationError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.put("/api/years/{year_id}/department-workbooks/exclusions")
+async def save_department_workbook_exclusions(
+    year_id: int, body: DepartmentWorkbookExclusionRequest, request: Request,
+):
+    actor = current_user(request, ("admin", "operatore"))
+    require_write(request, actor)
+    with closing(connect()) as cx:
+        context = workbook_exclusion_context(cx, year_id, body.import_id)
+    if (body.source_sha256 != context["source"]["sha256"]
+            or body.mapping_version != context["mapping"]["version"]
+            or body.cohort_revision != context["cohort_revision"]):
+        raise HTTPException(409, "Fonte, mappatura o annualità cambiate: ricaricare i filtri")
+    profile = context["profile"]
+    current_version = profile["version"] if profile is not None else 0
+    if body.expected_version != current_version:
+        raise HTTPException(409, "Criteri di esclusione modificati da un altro operatore: ricaricare")
+    try:
+        choices = await workbook_exclusion_scope(context)
+        filters = normalize_workbook_exclusion_filters(
+            body.filters, choices, json.loads(context["mapping"]["fields_json"])
+        )
+        result = await preview_workbook_exclusions(context, filters)
+    except WorkbookGenerationError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    with closing(connect()) as cx:
+        cx.execute("BEGIN IMMEDIATE")
+        current = workbook_exclusion_context(cx, year_id, body.import_id)
+        existing = current["profile"]
+        existing_version = existing["version"] if existing is not None else 0
+        if (existing_version != body.expected_version
+                or body.source_sha256 != current["source"]["sha256"]
+                or body.mapping_version != current["mapping"]["version"]
+                or body.cohort_revision != current["cohort_revision"]):
+            cx.rollback()
+            raise HTTPException(
+                409, "Fonte, mappatura, annualità o criteri modificati: ricaricare e ripetere il salvataggio"
+            )
+        next_version = existing_version + 1
+        cx.execute(
+            """INSERT INTO workbook_exclusion_profiles(
+                 year_id,import_id,source_sha256,mapping_version,cohort_revision,
+                 filters_json,version,updated_at,actor_id
+               ) VALUES(?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(year_id,import_id) DO UPDATE SET
+                 source_sha256=excluded.source_sha256,
+                 mapping_version=excluded.mapping_version,
+                 cohort_revision=excluded.cohort_revision,
+                 filters_json=excluded.filters_json,
+                 version=excluded.version,
+                 updated_at=excluded.updated_at,
+                 actor_id=excluded.actor_id""",
+            (
+                year_id, body.import_id, body.source_sha256, body.mapping_version,
+                body.cohort_revision, json.dumps(filters, ensure_ascii=False),
+                next_version, int(time.time()), actor["id"],
+            ),
+        )
+        record(
+            cx, actor["id"], "save_workbook_exclusions",
+            "source_import", body.import_id,
+        )
+        cx.commit()
+    return {"version": next_version, "filters": filters, **result}
+
+
 # ----- Five identical, complete workbooks: NO department-specific row filtering -----
 # Deliberately NOT a OneDrive publishing endpoint. This release exports five
 # review workbooks from a source previously accepted for synthetic-only testing.
