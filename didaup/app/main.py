@@ -1413,9 +1413,20 @@ async def workbook_exclusion_scope(context):
 
 
 def workbook_exclusion_profile_is_current(profile, context) -> bool:
+    if profile is None:
+        return False
+    try:
+        stored_filters = json.loads(profile["filters_json"])
+    except (TypeError, ValueError):
+        return False
+    # An explicitly saved empty selection has no dependency on the mapping
+    # or annuality perimeter and must never block an otherwise valid export.
+    if not any(stored_filters.get(key) for key in (
+        "titoli", "tipologie", "cds", "sedi", "annualita", "taf"
+    )):
+        return True
     return bool(
-        profile is not None
-        and profile["source_sha256"] == context["source"]["sha256"]
+        profile["source_sha256"] == context["source"]["sha256"]
         and profile["mapping_version"] == context["mapping"]["version"]
         and profile["cohort_revision"] == context["cohort_revision"]
     )
@@ -1708,11 +1719,6 @@ async def generate_department_workbooks(
                 or current_workload_version != workload_version
                 or current_exclusion_version != exclusion_version
                 or current_cohort_revision != exclusion_revision
-                or (exclusion_now is not None and (
-                    exclusion_now["source_sha256"] != source_sha
-                    or exclusion_now["mapping_version"] != mapping_version
-                    or exclusion_now["cohort_revision"] != exclusion_revision
-                ))
                 or now_excluded != excluded or now_included != included
                 or {
                     (r["course_code"], r["campus"], r["study_year"]): r["course_name"]
