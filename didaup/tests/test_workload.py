@@ -593,7 +593,7 @@ def test_workload_release_assets_are_versioned_to_avoid_old_cached_selectors(cli
     release = "0.1.10-alpha19"
     assert f'version: "{release}"' in manifest
     assert f'ALPHA · {release}' in html
-    for asset in ("site.css", "site.js", "mapping.js", "cohort_review.js", "workload.js"):
+    for asset in ("site.css", "site.js", "mapping.js", "cohort_review.js", "workload.js", "workbook_exclusions.js"):
         assert f'static/{asset}?v={release}' in html
 
 
