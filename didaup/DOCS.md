@@ -1,4 +1,4 @@
-# DidaUP — Installazione e collaudo (0.1.10-alpha18)
+# DidaUP — Installazione e collaudo (0.1.10-alpha19)
 
 > Versione iniziale di sviluppo **non collaudata su una specifica istanza di Home Assistant**. Usare soltanto dati sintetici. Non caricare file reali dell'Ateneo.
 
@@ -198,11 +198,16 @@ Il riquadro **Registro delle annualità già salvate** dispone di ricerca e filt
 Attenzione: una riga originale con annualità multiple oppure con identificativi ambigui non deve essere interpretata come certezza di appartenenza; verificare gli avvisi di generazione prima di distribuire i file.
 
 
-## 0.1.10-alpha18 — Diagnostica dei conflitti tra regole di carico
+## 0.1.10-alpha19 — Diagnostica dei conflitti tra regole di carico
 
 L'anteprima del carico identifica le regole che si sovrappongono con la stessa specificità. Il messaggio di errore riporta i numeri delle regole; la tabella diagnostica raggruppa ogni coppia di regole, conta le righe coinvolte e mostra alcune righe del report come esempio. La tabella delle regole è numerata per consentire di individuare immediatamente le configurazioni da correggere. Nessuna regola viene modificata o eliminata automaticamente: la precedenza tra regole di pari specificità deve essere decisa dall'amministratore.
 
 
-## 0.1.10-alpha18 — Limite massimo delle ore effettive
+## 0.1.10-alpha19 — Limite massimo delle ore effettive
 
 Per ogni regola numerica (percentuale o quota fissa), **TOT ORE PREVISTE costituisce il tetto massimo** di TOT ORE EFFETTIVE. Se il risultato matematico, arrotondato a due decimali, supera le ore previste, il valore effettivo viene automaticamente ricondotto alle ore previste. La situazione non è più un errore bloccante. L'anteprima mostra il numero di righe su cui è stato applicato il limite e alcuni esempi con riga sorgente, numero della regola, ore previste e ore effettive. Il comportamento non si applica a N.D.; le celle previste vuote continuano a essere segnalate separatamente e mantenute a zero. Valori previsti non numerici o negativi e conflitti tra regole restano bloccanti.
+
+
+## 0.1.10-alpha19 — Esclusione incarichi con filtri multipli
+
+In **Prepara Excel** è presente una maschera di esclusione mirata per singolo incarico. Il Titolo affidamento è il criterio principale; Tipologia CdS, CdS, Sede, Annualità e TAF sono filtri facoltativi di restringimento. Le selezioni multiple all'interno di un filtro sono combinate con OR; filtri differenti sono combinati con AND. I valori disponibili sono estratti dalle righe che rimangono nel perimetro dopo le esclusioni per annualità. L'utente calcola un'anteprima prima di salvare i criteri. I criteri sono versionati per report e anno accademico e legati a hash della fonte, versione della mappatura e revisione delle annualità. Se uno di questi elementi cambia, la generazione è bloccata fino a nuova verifica e salvataggio. Le righe escluse per i nuovi criteri sono inserite nel registro interno delle esclusioni con motivazione e criteri applicati; i cinque Excel restano identici tra loro. Nessuna riga già esclusa per annualità viene conteggiata due volte.
