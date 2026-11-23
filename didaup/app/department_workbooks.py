@@ -293,6 +293,23 @@ def matches_workbook_exclusion_filters(
     return True
 
 
+def assignment_exclusion_summary(excluded_records: list[tuple]) -> dict:
+    matched = [
+        item for item in excluded_records
+        if item[2] == "Esclusione per titolo affidamento e filtri aggiuntivi"
+    ]
+    examples = []
+    for excel_row, data, *_ in matched[:50]:
+        examples.append({
+            "excel_row": excel_row,
+            "assignment_title": _display(data.get("TITOLO AFFIDAMENTO"))[:200],
+            "course": _display(data.get("CDS"))[:200],
+            "course_code": _display(data.get("CODICE CORSO"))[:80],
+            "campus": _display(data.get("SEDE CORSO"))[:100],
+        })
+    return {"count": len(matched), "examples": examples}
+
+
 def _normalized_cohort_key(course: object, campus: object, year: object):
     code, location = _canonical(course), _canonical(campus)
     year_str = _display(year)
@@ -547,8 +564,6 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     prepared = []
     excluded_records = []
     excluded_count = 0
-    excluded_by_assignment_count = 0
-    excluded_by_assignment_examples = []
     excluded_by_missing_year_count = 0
     workload_matches = 0
     workload_unmatched = 0
@@ -676,7 +691,6 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
             effective_assignment_exclusions, get
         ):
             excluded_count += 1
-            excluded_by_assignment_count += 1
             selected_title = _display(get("titolo_affidamento"))
             selected_facets = [
                 ("Tipologia CdS", "tipologie"),
@@ -696,14 +710,6 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
                 matched_description[:1000],
                 _display(get("anno_corso"))[:120],
             ))
-            if len(excluded_by_assignment_examples) < 50:
-                excluded_by_assignment_examples.append({
-                    "excel_row": excel_row,
-                    "assignment_title": selected_title[:200],
-                    "course": _display(get("cds_nome"))[:200],
-                    "course_code": _display(get("cds_codice"))[:80],
-                    "campus": _display(get("sede"))[:100],
-                })
             continue
 
         # The year of reference is the imported report's archived year, not
@@ -830,8 +836,6 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         "source_nonempty_rows": len(source_row_numbers),
         "included_in_each_workbook": len(kept_ids),
         "excluded_in_internal_register": len(excluded_ids),
-        "excluded_by_assignment_filters": excluded_by_assignment_count,
-        "assignment_exclusion_examples": excluded_by_assignment_examples,
         "missing_from_outputs": 0,
         "duplicate_ids": 0,
     }
@@ -914,6 +918,7 @@ def build_five_workbooks(
         history_year, excluded or set(), included, cohort_names, workload_rules,
         assignment_exclusions=assignment_exclusions,
     )
+    assignment_exclusion_info = assignment_exclusion_summary(excluded_records)
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output, {"in_memory": True})
     workbook.set_properties({"title": "DidaUP - Proposte didattiche",
@@ -1160,8 +1165,8 @@ def build_five_workbooks(
         "excluded_audit_sha256": hashlib.sha256(excluded_template).hexdigest(),
         "historical_rows": len(prepared),
         "excluded_rows": excluded_count,
-        "excluded_by_assignment_filters": reconciliation["excluded_by_assignment_filters"],
-        "assignment_exclusion_examples": reconciliation["assignment_exclusion_examples"],
+        "excluded_by_assignment_filters": assignment_exclusion_info["count"],
+        "assignment_exclusion_examples": assignment_exclusion_info["examples"],
         "excluded_rows_with_missing_year": excluded_ambiguous_count,
         "unmatched_exclusion_count": unmatched_exclusions_count,
         "unmatched_exclusion_examples": unmatched_exclusion_examples,
