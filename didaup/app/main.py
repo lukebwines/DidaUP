@@ -29,6 +29,7 @@ from .cohort_import import CohortExtractionError, extract_cohorts
 from .department_workbooks import (
     build_five_workbooks, WorkbookGenerationError, _prepare,
     workbook_exclusion_choices, normalize_workbook_exclusion_filters,
+    assignment_exclusion_summary,
 )
 from .workload import WorkloadRuleError, validate_rules, source_choices
 from .department_review import review_five_workbooks, ReviewError
@@ -1430,11 +1431,11 @@ async def preview_workbook_exclusions(context, filters):
         context["cohort_names"], None, False, True,
         assignment_exclusions=filters,
     )
-    reconciliation = prepared[24]
+    assignment_summary = assignment_exclusion_summary(prepared[23])
     return {
-        "matched_rows": reconciliation["excluded_by_assignment_filters"],
-        "examples": reconciliation["assignment_exclusion_examples"],
-        "rows_in_scope": len(prepared[0]) + reconciliation["excluded_by_assignment_filters"],
+        "matched_rows": assignment_summary["count"],
+        "examples": assignment_summary["examples"],
+        "rows_in_scope": len(prepared[0]) + assignment_summary["count"],
     }
 
 
