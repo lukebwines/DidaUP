@@ -1,4 +1,4 @@
-# DidaUP — Installazione e collaudo (0.1.10-alpha20)
+# DidaUP — Installazione e collaudo (0.1.10-alpha21)
 
 > Versione iniziale di sviluppo **non collaudata su una specifica istanza di Home Assistant**. Usare soltanto dati sintetici. Non caricare file reali dell'Ateneo.
 
@@ -198,25 +198,32 @@ Il riquadro **Registro delle annualità già salvate** dispone di ricerca e filt
 Attenzione: una riga originale con annualità multiple oppure con identificativi ambigui non deve essere interpretata come certezza di appartenenza; verificare gli avvisi di generazione prima di distribuire i file.
 
 
-## 0.1.10-alpha20 — Diagnostica dei conflitti tra regole di carico
+## 0.1.10-alpha21 — Diagnostica dei conflitti tra regole di carico
 
 L'anteprima del carico identifica le regole che si sovrappongono con la stessa specificità. Il messaggio di errore riporta i numeri delle regole; la tabella diagnostica raggruppa ogni coppia di regole, conta le righe coinvolte e mostra alcune righe del report come esempio. La tabella delle regole è numerata per consentire di individuare immediatamente le configurazioni da correggere. Nessuna regola viene modificata o eliminata automaticamente: la precedenza tra regole di pari specificità deve essere decisa dall'amministratore.
 
 
-## 0.1.10-alpha20 — Limite massimo delle ore effettive
+## 0.1.10-alpha21 — Limite massimo delle ore effettive
 
 Per ogni regola numerica (percentuale o quota fissa), **TOT ORE PREVISTE costituisce il tetto massimo** di TOT ORE EFFETTIVE. Se il risultato matematico, arrotondato a due decimali, supera le ore previste, il valore effettivo viene automaticamente ricondotto alle ore previste. La situazione non è più un errore bloccante. L'anteprima mostra il numero di righe su cui è stato applicato il limite e alcuni esempi con riga sorgente, numero della regola, ore previste e ore effettive. Il comportamento non si applica a N.D.; le celle previste vuote continuano a essere segnalate separatamente e mantenute a zero. Valori previsti non numerici o negativi e conflitti tra regole restano bloccanti.
 
 
-## 0.1.10-alpha20 — Esclusione incarichi con filtri multipli
+## 0.1.10-alpha21 — Esclusione incarichi con filtri multipli
 
 In **Prepara Excel** è presente una maschera di esclusione mirata per singolo incarico. Il Titolo affidamento è il criterio principale; Tipologia CdS, CdS, Sede, Annualità e TAF sono filtri facoltativi di restringimento. Le selezioni multiple all'interno di un filtro sono combinate con OR; filtri differenti sono combinati con AND. I valori disponibili sono estratti dalle righe che rimangono nel perimetro dopo le esclusioni per annualità. L'utente calcola un'anteprima prima di salvare i criteri. I criteri sono versionati per report e anno accademico e legati a hash della fonte, versione della mappatura e revisione delle annualità. Se uno di questi elementi cambia, la generazione è bloccata fino a nuova verifica e salvataggio. Le righe escluse per i nuovi criteri sono inserite nel registro interno delle esclusioni con motivazione e criteri applicati; i cinque Excel restano identici tra loro. Nessuna riga già esclusa per annualità viene conteggiata due volte.
 
 
-## 0.1.10-alpha20 — Etichette e pulizia dei pacchetti generati sul Raspberry Pi
+## 0.1.10-alpha21 — Etichette e pulizia dei pacchetti generati sul Raspberry Pi
 
 Nella scheda **Prepara Excel** la nuova casella **Etichetta estrazione (facoltativa)** consente di distinguere i pacchetti generati. L'etichetta è riportata nell'elenco di generazione e nel nome di download; può essere modificata successivamente (anche per pacchetti creati prima dell'aggiornamento) con il pulsante **Etichetta**. I file ZIP fisici mantengono un nome tecnico non alterabile e sono memorizzati in `/data/working` sul Raspberry Pi.
 
 L'amministratore può usare **Elimina** per un pacchetto o le caselle di selezione ed **Elimina selezionati** per più pacchetti. È richiesta una conferma testuale `ELIMINA`; la richiesta richiede sessione admin e token CSRF. Vengono eliminati i soli ZIP prodotti dalla funzione Cinque Excel e i corrispondenti record del database, mantenendo ogni fonte ufficiale e tutte le mappature e selezioni. L'eliminazione è registrata nell'audit. I nomi file sono verificati rigorosamente; i collegamenti simbolici e i percorsi esterni non sono ammessi. File temporanei di una cancellazione interrotta vengono ripristinati o rimossi al riavvio, in coerenza con il database. La cancellazione non tocca i download presenti su PC né le copie contenute in backup precedenti.
 
 Il database esistente viene aggiornato con una nuova colonna `label` senza perdere le estrazioni salvate. Un'etichetta vuota conserva il comportamento precedente. L'azione di eliminazione è disponibile soltanto per amministratori; gli operatori possono scaricare e modificare le etichette.
+
+
+## 0.1.10-alpha21 — Riferimento per il confronto, modificabile con motivazione
+
+Da **Prepara Excel → Estrazioni generate** si seleziona con **Usa per confronto** un solo ZIP per anno accademico. La voce attiva è identificata da **RIFERIMENTO PER CONFRONTO**. Il pulsante **Cambia riferimento** permette di correggere un errore indicando obbligatoriamente un motivo, registrato con ID della precedente e della nuova estrazione, data e amministratore nel database. **Rimuovi riferimento** azzera la scelta con motivazione. È esclusivamente l'admin a poter operare; gli operatori possono effettuare la revisione usando il riferimento selezionato.
+
+Le cinque restituzioni vengono confrontate con lo snapshot storico letto e verificato dal ZIP scelto, senza ricalcolare l'ambito CdS, le ore o le esclusioni usando configurazioni successive. Il riferimento selezionato è protetto da cancellazioni individuali, multiple e azzeramento generale o dell'anno. È verificata l'integrità SHA-256 del ZIP, i cinque workbook identici, gli ID delle righe originali e l'assenza di sovrapposizione con il sesto registro interno. L'anteprima segnala gli errori o le sovrapposizioni e non approva le proposte.
