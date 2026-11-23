@@ -200,7 +200,14 @@ async function loadWorkbookExclusions(force = false) {
     workbookExclusionFiltersKey(workbookExclusion.saved);
   if (hasDraft && force &&
       !window.confirm("Sono presenti modifiche non salvate ai filtri. Ricaricare e perderle?")) {
-    if (sameSource) el("workbook-import-id").value = String(workbookExclusion.importId);
+    if (sameSource) {
+      el("workbook-import-id").value = String(workbookExclusion.importId);
+    } else {
+      workbookExclusionClear();
+      workbookExclusionSetStatus(
+        "La bozza precedente è stata chiusa senza salvarla; selezionare nuovamente il report per caricare i relativi criteri."
+      );
+    }
     return;
   }
   workbookExclusion.loading = true;
