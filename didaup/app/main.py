@@ -801,12 +801,15 @@ def reset_archive(body: ArchiveReset, request: Request):
 
             # Protect the definitive comparison baseline even from the
             # bulk "reset working area" action, not only the ZIP delete route.
-            locked = cx.execute(
-                "SELECT r.artifact_id FROM workbook_references r "
-                "JOIN working_artifacts a ON a.id=r.artifact_id "
-                "WHERE a.id IN (" + ",".join("?" for _ in artifacts) + ")",
-                tuple(artifact["id"] for artifact in artifacts),
-            ).fetchone() if artifacts else None
+            if body.scope == "year":
+                locked = cx.execute(
+                    "SELECT artifact_id FROM workbook_references WHERE year_id=?",
+                    (body.year_id,),
+                ).fetchone()
+            else:
+                locked = cx.execute(
+                    "SELECT artifact_id FROM workbook_references LIMIT 1"
+                ).fetchone()
             if locked is not None:
                 raise HTTPException(
                     409,
