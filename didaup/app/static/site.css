@@ -272,3 +272,18 @@ td small{display:block;color:#718398}td button{padding:7px 11px!important;font-s
   .workload-rule-out-of-scope{background:#3b3125}
   .workload-rule-warning{color:#ffd394}
 }
+
+
+/* Targeted assignment exclusions in the five-workbook export. */
+.workbook-exclusion-panel{border-top:1px solid #dce6f0;margin-top:22px;padding-top:20px}
+.workbook-exclusion-panel .panel-heading{margin-bottom:8px}
+.workbook-exclusion-grid{grid-template-columns:repeat(3,minmax(0,1fr));margin:14px 0}
+.workbook-exclusion-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:12px 0}
+.workbook-exclusion-actions .chip{margin-right:auto}
+#workbook-exclusion-status{margin:10px 0;white-space:normal;overflow-wrap:anywhere}
+#workbook-exclusion-preview-result{white-space:normal;overflow-wrap:anywhere;padding:10px 12px;border-radius:8px;background:#f3f8fd;color:#315477}
+#workbook-exclusion-preview-result:empty{display:none}
+[data-theme="dark"] .workbook-exclusion-panel{border-top-color:#39516b}
+[data-theme="dark"] #workbook-exclusion-preview-result{background:#1c304b;color:#c6d8ec}
+@media(max-width:980px){.workbook-exclusion-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:590px){.workbook-exclusion-grid{grid-template-columns:1fr}.workbook-exclusion-actions{align-items:stretch;flex-direction:column}.workbook-exclusion-actions .chip{margin-right:0}.workbook-exclusion-actions button{width:100%}}
