@@ -2,7 +2,7 @@
 
 **Add-on per la programmazione didattica 2027/28 con cinque Excel completi e identici destinati ai dipartimenti.**
 
-> Stato: **0.1.10-alpha16 (filtri Calcolo carico allineati a annualità e cinque Excel)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. **Solo dati sintetici** durante il collaudo.
+> Stato: **0.1.10-alpha17 (diagnostica dei conflitti tra regole di carico)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. **Solo dati sintetici** durante il collaudo.
 
 ## Obiettivo
 Partire dall'offerta e dalle coperture storiche **2026/27** per costruire un archivio di riferimento verificabile. Quando saranno disponibili le estrazioni ufficiali, predisporre i fogli di programmazione **2027/28** senza trasporre automaticamente come valide assegnazioni, codici o nominativi precedenti.
