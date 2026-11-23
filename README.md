@@ -2,7 +2,7 @@
 
 **Add-on per la programmazione didattica 2027/28 con cinque Excel completi e identici destinati ai dipartimenti.**
 
-> Stato: **0.1.10-alpha18 (limite automatico delle ore effettive alle ore previste)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. **Solo dati sintetici** durante il collaudo.
+> Stato: **0.1.10-alpha19 (esclusione incarichi con filtri multipli nei cinque Excel)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. **Solo dati sintetici** durante il collaudo.
 
 ## Obiettivo
 Partire dall'offerta e dalle coperture storiche **2026/27** per costruire un archivio di riferimento verificabile. Quando saranno disponibili le estrazioni ufficiali, predisporre i fogli di programmazione **2027/28** senza trasporre automaticamente come valide assegnazioni, codici o nominativi precedenti.
@@ -90,3 +90,8 @@ Nella maschera **Annualità CdS** puoi combinare ricerca, selezione multipla di 
 Il riquadro **Registro delle annualità già salvate** dispone di ricerca e filtro per incluse/escluse e mostra esclusivamente lo stato persistito. I cinque Excel generati mantengono lo stesso contenuto in tutte le copie ma ora comprendono nel **nome del file** una revisione diversa a ogni generazione, per non confonderli con quelli già caricati su OneDrive. Nessun documento già caricato viene automaticamente sostituito.
 
 Attenzione: una riga originale con annualità multiple oppure con identificativi ambigui non deve essere interpretata come certezza di appartenenza; verificare gli avvisi di generazione prima di distribuire i file.
+
+
+## Esclusione mirata degli incarichi
+
+Nella sezione **Prepara Excel** è disponibile una selezione multipla per escludere singoli incarichi in base al Titolo affidamento. I filtri aggiuntivi (Tipologia CdS, Corso di studio, Sede, Annualità e TAF) restringono l'ambito. Più valori nello stesso filtro sono alternativi (OR); filtri diversi sono combinati (AND). I valori sono ricavati dalle righe che restano nei cinque Excel dopo le esclusioni per annualità. L'anteprima conta le righe aggiuntive interessate; i criteri vengono salvati per report e anno accademico e applicati alla generazione successiva. Le righe eliminate sono registrate nel sesto file interno, con il motivo dell'esclusione. Una modifica della mappatura o delle annualità rende i criteri obsoleti e richiede una nuova verifica e un nuovo salvataggio.
