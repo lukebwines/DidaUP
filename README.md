@@ -2,7 +2,7 @@
 
 **Add-on per la programmazione didattica 2027/28 con cinque Excel completi e identici destinati ai dipartimenti.**
 
-> Stato: **0.1.10-alpha20 (etichette estrazioni e gestione dei pacchetti ZIP sul Raspberry Pi)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. **Solo dati sintetici** durante il collaudo.
+> Stato: **0.1.10-alpha21 (riferimento di confronto selezionabile e rettificabile)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. **Solo dati sintetici** durante il collaudo.
 
 ## Obiettivo
 Partire dall'offerta e dalle coperture storiche **2026/27** per costruire un archivio di riferimento verificabile. Quando saranno disponibili le estrazioni ufficiali, predisporre i fogli di programmazione **2027/28** senza trasporre automaticamente come valide assegnazioni, codici o nominativi precedenti.
@@ -100,3 +100,10 @@ Nella sezione **Prepara Excel** è disponibile una selezione multipla per esclud
 ## Gestione delle estrazioni generate
 
 In **Prepara Excel** ogni pacchetto dei cinque Excel e del registro interno può avere un'etichetta testuale facoltativa (massimo 120 caratteri), specificata alla generazione o modificata anche in seguito. L'etichetta viene salvata nel database e compare nell'elenco delle estrazioni e nel nome del file ZIP scaricato. I pacchetti esistenti senza etichetta rimangono accessibili e possono essere etichettati in seguito. **L'amministratore** può eliminare una singola estrazione o più estrazioni selezionate insieme, confermando digitando `ELIMINA`. Questa operazione elimina il record nel database DidaUP e il ZIP realmente salvato nello storage persistente `/data/working` dell'add-on sul Raspberry Pi, senza cancellare report storici, mappature, esclusioni, regole o account. Ogni eliminazione è annotata nel registro di audit. Se l'operazione viene interrotta, all'avvio DidaUP completa o annulla la pulizia in base al registro persistente. La cancellazione è irreversibile salvo recupero da backup e non coinvolge copie ZIP già scaricate altrove.
+
+
+## Estrazione di riferimento per il confronto delle restituzioni
+
+Nella sezione **Prepara Excel** l'amministratore può designare un solo pacchetto ZIP generato per anno accademico come **Riferimento per confronto**. La selezione **non è irreversibile**: per sostituire il riferimento con un'altra estrazione, o rimuoverlo del tutto, è richiesta una motivazione e viene registrata la modifica con autore e data. Il pacchetto attivo non può essere eliminato singolarmente, tramite selezione multipla né mediante azzeramento del lavoro; prima occorre selezionare un nuovo riferimento o rimuovere quello precedente.
+
+La revisione dei cinque Excel restituiti si basa esclusivamente sulla **fotografia delle righe, identificativi e TOT ORE EFFETTIVE presenti nei cinque Excel originali, conservati nello ZIP designato**. Le cinque copie devono essere identiche e il sesto Excel di audit deve essere coerente. L'integrità SHA-256 del pacchetto è fissata al momento della designazione e ricontrollata durante la restituzione. Cambiamenti successivi a mappatura, regole delle ore, annualità o esclusioni per Titolo affidamento non alterano il confronto; se un file restituito non corrisponde alla fotografia viene segnalato come anomalo. In assenza di un riferimento esplicito la restituzione viene bloccata. La funzione rimane un'anteprima istruttoria, senza acquisizione o approvazione delle proposte.
