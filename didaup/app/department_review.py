@@ -46,30 +46,45 @@ def review_five_workbooks(
     included: set[tuple[str, str, int]] | None = None,
     cohort_names: dict[tuple[str, str, int], str] | None = None,
     workload_rules: list[dict] | None = None,
+    reference_snapshot: dict | None = None,
 ) -> dict:
     if len(files) != 5:
         raise ReviewError("Occorrono esattamente cinque file Excel")
-    try:
-        (historical, excluded_count, unresolved_count, unresolved_examples,
-         missing_code_count, missing_code_examples, excluded_ambiguous_count,
-         unmatched_exclusions_count, unmatched_exclusion_examples,
-         fallback_count, fallback_examples, partial_count, partial_examples,
-         residual_count, residual_examples,
-         taf_mapping_mode, taf_rows_with_value, taf_rows_without_value,
-         mutuazione_mapping_mode, mutuazione_true_count,
-         mutuazione_false_count, mutuazione_other_count, mutuazione_blank_count,
-         excluded_records, reconciliation, workload_stats) = _prepare(
-            original, source_sha256, sheet_name, header_row, assigned,
-            history_year, excluded or set(), included, cohort_names,
-            workload_rules,
-        )
-    except WorkbookGenerationError as exc:
-        raise ReviewError(str(exc)) from exc
-
-    expected = {
-        hist_id: {"data": data, "activity_id": activity_id}
-        for data, hist_id, activity_id in historical
-    }
+    if reference_snapshot is not None:
+        # The selected ZIP is the immutable baseline. Do NOT recompute with
+        # today's source mapping, cohort exclusions or workload rules.
+        expected = reference_snapshot["expected"]
+        excluded_count = reference_snapshot["excluded_rows"]
+        unresolved_count = missing_code_count = excluded_ambiguous_count = 0
+        unmatched_exclusions_count = fallback_count = partial_count = residual_count = 0
+        unresolved_examples = missing_code_examples = unmatched_exclusion_examples = []
+        fallback_examples = partial_examples = residual_examples = []
+        taf_mapping_mode = mutuazione_mapping_mode = "Da estrazione originale"
+        taf_rows_with_value = taf_rows_without_value = 0
+        mutuazione_true_count = mutuazione_false_count = 0
+        mutuazione_other_count = mutuazione_blank_count = 0
+        workload_stats = {"source": "estrazione_originale_immutabile"}
+    else:
+        try:
+            (historical, excluded_count, unresolved_count, unresolved_examples,
+             missing_code_count, missing_code_examples, excluded_ambiguous_count,
+             unmatched_exclusions_count, unmatched_exclusion_examples,
+             fallback_count, fallback_examples, partial_count, partial_examples,
+             residual_count, residual_examples,
+             taf_mapping_mode, taf_rows_with_value, taf_rows_without_value,
+             mutuazione_mapping_mode, mutuazione_true_count,
+             mutuazione_false_count, mutuazione_other_count, mutuazione_blank_count,
+             excluded_records, reconciliation, workload_stats) = _prepare(
+                original, source_sha256, sheet_name, header_row, assigned,
+                history_year, excluded or set(), included, cohort_names,
+                workload_rules,
+            )
+        except WorkbookGenerationError as exc:
+            raise ReviewError(str(exc)) from exc
+        expected = {
+            hist_id: {"data": data, "activity_id": activity_id}
+            for data, hist_id, activity_id in historical
+        }
     changes_by_activity: dict[str, dict[int, list[tuple]]] = defaultdict(
         lambda: defaultdict(list)
     )
