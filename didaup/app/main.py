@@ -15,6 +15,7 @@ import secrets
 import sqlite3
 import stat
 import time
+import unicodedata
 from contextlib import closing
 from pathlib import Path
 from typing import Literal
@@ -206,7 +207,8 @@ def startup():
               year_id INTEGER NOT NULL REFERENCES academic_years(id),
               stored_name TEXT NOT NULL UNIQUE,
               kind TEXT NOT NULL,
-              generated_at INTEGER NOT NULL
+              generated_at INTEGER NOT NULL,
+              label TEXT NOT NULL DEFAULT ''
             );
             CREATE TABLE IF NOT EXISTS audit(
               id INTEGER PRIMARY KEY, at INTEGER NOT NULL, actor_id INTEGER,
@@ -214,6 +216,18 @@ def startup():
             );
             """
         )
+        # Existing installations keep every generated ZIP and metadata.
+        # SQLite CREATE TABLE IF NOT EXISTS does not add new columns.
+        artifact_fields = {
+            row["name"] for row in cx.execute(
+                "PRAGMA table_info(working_artifacts)"
+            ).fetchall()
+        }
+        if "label" not in artifact_fields:
+            cx.execute(
+                "ALTER TABLE working_artifacts "
+                "ADD COLUMN label TEXT NOT NULL DEFAULT ''"
+            )
         n = cx.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         if n == 0:
             username = str(settings.get("bootstrap_username", "admin")).strip()
@@ -1583,8 +1597,26 @@ async def save_department_workbook_exclusions(
 # Deliberately NOT a OneDrive publishing endpoint. This release exports five
 # review workbooks from a source previously accepted for synthetic-only testing.
 
+def normalize_export_label(label: str) -> str:
+    if not isinstance(label, str) or len(label) > 120:
+        raise HTTPException(422, "Etichetta non valida (massimo 120 caratteri)")
+    normalized = " ".join(label.split())
+    if len(normalized) > 120 or any(unicodedata.category(c).startswith("C") for c in normalized):
+        raise HTTPException(422, "L'etichetta contiene caratteri non ammessi")
+    return normalized
+
+
+def workbook_download_name(label: str, artifact_id: int) -> str:
+    # Display text remains Unicode; ZIP attachment filename is safe ASCII.
+    flattened = unicodedata.normalize("NFKD", label)
+    flattened = "".join(ch for ch in flattened if not unicodedata.combining(ch))
+    slug = re.sub(r"[^a-zA-Z0-9_-]+", "_", flattened).strip("_-")[:65]
+    return f"DidaUP_{slug or '5_file_completi'}_{artifact_id}.zip"
+
+
 class DepartmentWorkbookRequest(BaseModel):
     import_id: int = Field(ge=1)
+    label: str = Field(default="", max_length=120)
 
 
 @app.post("/api/years/{year_id}/department-workbooks")
@@ -1593,6 +1625,7 @@ async def generate_department_workbooks(
 ):
     actor = current_user(request, ("admin", "operatore"))
     require_write(request, actor)
+    export_label = normalize_export_label(body.label)
     with closing(connect()) as cx:
         ensure_year(cx, year_id)
         year = cx.execute(
@@ -1733,9 +1766,11 @@ async def generate_department_workbooks(
                     409, "Fonte, mappatura o annualità cambiate: rigenerare dopo il controllo"
                 )
             row = cx.execute(
-                "INSERT INTO working_artifacts(year_id,stored_name,kind,generated_at) "
-                "VALUES(?,?,?,?)",
-                (year_id, filename, "five_department_workbooks", int(time.time())),
+                "INSERT INTO working_artifacts("
+                "year_id,stored_name,kind,generated_at,label"
+                ") VALUES(?,?,?,?,?)",
+                (year_id, filename, "five_department_workbooks",
+                 int(time.time()), export_label),
             )
             record(cx, actor["id"], "generate_five_identical_workbooks",
                    "working_artifact", row.lastrowid)
@@ -1746,6 +1781,8 @@ async def generate_department_workbooks(
         raise
     return {
         "id": artifact_id,
+        "label": export_label,
+        "download_filename": workbook_download_name(export_label, artifact_id),
         **summary,
         "download_url": f"api/years/{year_id}/department-workbooks/{artifact_id}/download",
         "notice": "Cinque Excel identici per i referenti e un sesto Excel riservato al controllo interno delle righe escluse. Nessuna pubblicazione su OneDrive effettuata.",
@@ -1905,7 +1942,7 @@ def list_department_workbooks(year_id: int, request: Request):
     with closing(connect()) as cx:
         ensure_year(cx, year_id)
         rows = cx.execute(
-            "SELECT id,stored_name,generated_at FROM working_artifacts "
+            "SELECT id,stored_name,generated_at,label FROM working_artifacts "
             "WHERE year_id=? AND kind='five_department_workbooks' "
             "ORDER BY id DESC", (year_id,),
         ).fetchall()
@@ -1919,11 +1956,47 @@ def list_department_workbooks(year_id: int, request: Request):
             size, available = 0, False
         result.append({
             "id": row["id"], "generated_at": row["generated_at"],
+            "label": row["label"],
+            "download_filename": workbook_download_name(row["label"], row["id"]),
             "file_bytes": size if available else None,
             "available": available,
             "download_url": f"api/years/{year_id}/department-workbooks/{row['id']}/download",
         })
     return result
+
+
+class UpdateDepartmentWorkbookLabel(BaseModel):
+    label: str = Field(default="", max_length=120)
+
+
+@app.patch("/api/years/{year_id}/department-workbooks/{artifact_id}/label")
+def update_department_workbook_label(
+    year_id: int, artifact_id: int,
+    body: UpdateDepartmentWorkbookLabel, request: Request,
+):
+    actor = current_user(request, ("admin", "operatore"))
+    require_write(request, actor)
+    label = normalize_export_label(body.label)
+    with closing(connect()) as cx:
+        cx.execute("BEGIN IMMEDIATE")
+        ensure_year(cx, year_id)
+        item = cx.execute(
+            "SELECT id FROM working_artifacts "
+            "WHERE id=? AND year_id=? AND kind='five_department_workbooks'",
+            (artifact_id, year_id),
+        ).fetchone()
+        if item is None:
+            cx.rollback()
+            raise HTTPException(404, "Pacchetto non presente nell'anno selezionato")
+        cx.execute(
+            "UPDATE working_artifacts SET label=? WHERE id=?",
+            (label, artifact_id),
+        )
+        record(cx, actor["id"], "label_generated_department_workbook",
+               "working_artifact", artifact_id)
+        cx.commit()
+    return {"id": artifact_id, "label": label,
+            "download_filename": workbook_download_name(label, artifact_id)}
 
 
 @app.get("/api/years/{year_id}/department-workbooks/{artifact_id}/download")
@@ -1932,7 +2005,7 @@ def download_department_workbooks(year_id: int, artifact_id: int, request: Reque
     with closing(connect()) as cx:
         ensure_year(cx, year_id)
         row = cx.execute(
-            "SELECT stored_name FROM working_artifacts "
+            "SELECT stored_name,label FROM working_artifacts "
             "WHERE id=? AND year_id=? AND kind='five_department_workbooks'",
             (artifact_id, year_id),
         ).fetchone()
@@ -1942,7 +2015,8 @@ def download_department_workbooks(year_id: int, artifact_id: int, request: Reque
     if not available:
         raise HTTPException(404, "Pacchetto non più disponibile")
     return FileResponse(
-        path, filename="DidaUP_5_file_completi.zip",
+        path,
+        filename=workbook_download_name(row["label"], artifact_id),
         media_type="application/zip",
     )
 
