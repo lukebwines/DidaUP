@@ -1,4 +1,4 @@
-# DidaUP — Installazione e collaudo (0.1.10-alpha16)
+# DidaUP — Installazione e collaudo (0.1.10-alpha17)
 
 > Versione iniziale di sviluppo **non collaudata su una specifica istanza di Home Assistant**. Usare soltanto dati sintetici. Non caricare file reali dell'Ateneo.
 
@@ -196,3 +196,8 @@ Nella maschera **Annualità CdS** puoi combinare ricerca, selezione multipla di 
 Il riquadro **Registro delle annualità già salvate** dispone di ricerca e filtro per incluse/escluse e mostra esclusivamente lo stato persistito. I cinque Excel generati mantengono lo stesso contenuto in tutte le copie ma ora comprendono nel **nome del file** una revisione diversa a ogni generazione, per non confonderli con quelli già caricati su OneDrive. Nessun documento già caricato viene automaticamente sostituito.
 
 Attenzione: una riga originale con annualità multiple oppure con identificativi ambigui non deve essere interpretata come certezza di appartenenza; verificare gli avvisi di generazione prima di distribuire i file.
+
+
+## 0.1.10-alpha17 — Diagnostica dei conflitti tra regole di carico
+
+L'anteprima del carico identifica le regole che si sovrappongono con la stessa specificità. Il messaggio di errore riporta i numeri delle regole; la tabella diagnostica raggruppa ogni coppia di regole, conta le righe coinvolte e mostra alcune righe del report come esempio. La tabella delle regole è numerata per consentire di individuare immediatamente le configurazioni da correggere. Nessuna regola viene modificata o eliminata automaticamente: la precedenza tra regole di pari specificità deve essere decisa dall'amministratore.
