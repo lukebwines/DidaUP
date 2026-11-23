@@ -52,6 +52,9 @@ function workbookExclusionMarkDirty() {
   if (status && workbookExclusion.data) {
     status.textContent = "Modifiche non salvate. Calcola l'anteprima e salva i criteri per applicarli alla generazione.";
   }
+  if (el("workbook-exclusion-preview-result")) {
+    el("workbook-exclusion-preview-result").textContent = "";
+  }
   workbookExclusionRenderSummary();
 }
 
@@ -175,6 +178,8 @@ function workbookExclusionClear() {
     el("workbook-exclusion-" + facet.id + "-options").replaceChildren();
     el("workbook-exclusion-" + facet.id + "-search").value = "";
     el("workbook-exclusion-" + facet.id + "-filter").open = false;
+    el("workbook-exclusion-" + facet.id + "-pick").disabled = true;
+    el("workbook-exclusion-" + facet.id + "-clear").disabled = true;
   }
   el("workbook-exclusion-save").disabled = true;
   el("workbook-exclusion-preview").disabled = true;
