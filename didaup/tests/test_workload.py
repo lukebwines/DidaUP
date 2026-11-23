@@ -703,7 +703,7 @@ def test_workbook_assignment_exclusions_are_saved_previewed_and_applied(client, 
     audit_rows = audit.get_sheet_by_name("Righe escluse").to_python(
         skip_empty_area=False
     )[5:]
-    assert [row[33] for row in audit_rows] == [
+    assert [row[32] for row in audit_rows] == [
         "Titolo A", "Titolo A"
     ]
 
