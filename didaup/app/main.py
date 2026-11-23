@@ -13,6 +13,7 @@ import os
 import re
 import secrets
 import sqlite3
+import stat
 import time
 from contextlib import closing
 from pathlib import Path
@@ -1748,21 +1749,178 @@ async def generate_department_workbooks(
     }
 
 
+ARCHIVE_NAME_RE = re.compile(r"artifact_five_departments_[a-f0-9]{32}\.zip\Z")
+PENDING_ARCHIVE_RE = re.compile(
+    r"\.pending_delete_([a-f0-9]{32})_(artifact_five_departments_[a-f0-9]{32}\.zip)\Z"
+)
+
+
+def checked_department_archive(name: str) -> tuple[Path, int, bool]:
+    """Never touch arbitrary paths, source files, or symlink targets."""
+    if not ARCHIVE_NAME_RE.fullmatch(name):
+        raise HTTPException(409, "Nome del pacchetto generato non valido")
+    path = WORK_DIR / name
+    try:
+        details = path.lstat()
+    except FileNotFoundError:
+        return path, 0, False
+    if (not stat.S_ISREG(details.st_mode)
+            or not path.resolve().is_relative_to(WORK_DIR.resolve())):
+        raise HTTPException(409, "Pacchetto non sicuro: verificare il file nel Raspberry Pi")
+    return path, details.st_size, True
+
+
+def recover_staged_department_deletions():
+    """Recover an interrupted delete at startup from the database's decision."""
+    for staged in WORK_DIR.iterdir():
+        match = PENDING_ARCHIVE_RE.fullmatch(staged.name)
+        if not match:
+            continue
+        try:
+            if not stat.S_ISREG(staged.lstat().st_mode):
+                continue
+            original = WORK_DIR / match.group(2)
+            with closing(connect()) as cx:
+                existing = cx.execute(
+                    "SELECT id FROM working_artifacts WHERE stored_name=? "
+                    "AND kind='five_department_workbooks'",
+                    (original.name,),
+                ).fetchone()
+            if existing is not None:
+                if not original.exists():
+                    os.replace(staged, original)
+            else:
+                staged.unlink()
+        except OSError:
+            # Leave the staged file for a future recovery; never delete
+            # an unrelated source file or a surviving original.
+            continue
+
+
+class DeleteDepartmentWorkbooksRequest(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=250)
+
+
+@app.delete("/api/years/{year_id}/department-workbooks")
+def delete_department_workbooks(
+    year_id: int, body: DeleteDepartmentWorkbooksRequest, request: Request,
+):
+    actor = current_user(request, ("admin",))
+    require_write(request, actor)
+    selected = list(dict.fromkeys(body.ids))
+    if any(isinstance(value, bool) or value <= 0 for value in selected):
+        raise HTTPException(422, "Identificativi dei pacchetti non validi")
+    placeholders = ",".join("?" for _ in selected)
+    staged = []
+    expected_bytes = 0
+    missing_files = 0
+    with closing(connect()) as cx:
+        cx.execute("BEGIN IMMEDIATE")
+        ensure_year(cx, year_id)
+        records = cx.execute(
+            f"SELECT id,stored_name FROM working_artifacts "
+            f"WHERE year_id=? AND kind='five_department_workbooks' "
+            f"AND id IN ({placeholders})",
+            (year_id, *selected),
+        ).fetchall()
+        if len(records) != len(selected):
+            cx.rollback()
+            raise HTTPException(
+                404, "Uno o più pacchetti non esistono per l'anno selezionato: ricaricare l'elenco"
+            )
+        files = []
+        for row in records:
+            path, size, exists = checked_department_archive(row["stored_name"])
+            files.append((path, size, exists))
+        try:
+            for path, size, exists in files:
+                if not exists:
+                    missing_files += 1
+                    continue
+                pending = WORK_DIR / (
+                    ".pending_delete_" + secrets.token_hex(16) + "_" + path.name
+                )
+                os.replace(path, pending)
+                staged.append((pending, path, size))
+                expected_bytes += size
+            cx.execute(
+                f"DELETE FROM working_artifacts WHERE year_id=? "
+                f"AND kind='five_department_workbooks' "
+                f"AND id IN ({placeholders})",
+                (year_id, *selected),
+            )
+            for row in records:
+                record(
+                    cx, actor["id"], "delete_generated_department_workbook",
+                    "working_artifact", row["id"],
+                )
+            cx.commit()
+        except Exception as exc:
+            cx.rollback()
+            restore_errors = []
+            for pending, original, _ in reversed(staged):
+                try:
+                    os.replace(pending, original)
+                except OSError:
+                    restore_errors.append(original.name)
+            if restore_errors:
+                raise HTTPException(
+                    500,
+                    "Cancellazione interrotta: impossibile ripristinare alcuni file "
+                    "temporanei. Non ripetere l'operazione prima di verificare il Raspberry Pi.",
+                ) from exc
+            raise HTTPException(
+                500, "Cancellazione non riuscita: pacchetti conservati"
+            ) from exc
+
+    removed_bytes = 0
+    pending_cleanup = 0
+    for pending, _original, size in staged:
+        try:
+            pending.unlink()
+            removed_bytes += size
+        except OSError:
+            pending_cleanup += 1
+    return {
+        "deleted_count": len(records),
+        "deleted_ids": selected,
+        "removed_bytes": removed_bytes,
+        "missing_files": missing_files,
+        "pending_cleanup": pending_cleanup,
+        "message": (
+            "Pacchetti eliminati dal registro DidaUP. Alcuni ZIP restano "
+            "temporaneamente sul disco e saranno rimossi al prossimo avvio."
+            if pending_cleanup else
+            "Pacchetti eliminati dal registro DidaUP e dal disco del Raspberry Pi."
+        ),
+    }
+
+
 @app.get("/api/years/{year_id}/department-workbooks")
 def list_department_workbooks(year_id: int, request: Request):
     current_user(request, ("admin", "operatore"))
     with closing(connect()) as cx:
         ensure_year(cx, year_id)
         rows = cx.execute(
-            "SELECT id,generated_at FROM working_artifacts "
+            "SELECT id,stored_name,generated_at FROM working_artifacts "
             "WHERE year_id=? AND kind='five_department_workbooks' "
-            "ORDER BY id DESC LIMIT 30", (year_id,),
+            "ORDER BY id DESC", (year_id,),
         ).fetchall()
-    return [
-        {"id": row["id"], "generated_at": row["generated_at"],
-         "download_url": f"api/years/{year_id}/department-workbooks/{row['id']}/download"}
-        for row in rows
-    ]
+    result = []
+    for row in rows:
+        try:
+            _path, size, available = checked_department_archive(
+                row["stored_name"]
+            )
+        except HTTPException:
+            size, available = 0, False
+        result.append({
+            "id": row["id"], "generated_at": row["generated_at"],
+            "file_bytes": size if available else None,
+            "available": available,
+            "download_url": f"api/years/{year_id}/department-workbooks/{row['id']}/download",
+        })
+    return result
 
 
 @app.get("/api/years/{year_id}/department-workbooks/{artifact_id}/download")
@@ -1777,11 +1935,8 @@ def download_department_workbooks(year_id: int, artifact_id: int, request: Reque
         ).fetchone()
     if row is None:
         raise HTTPException(404, "Pacchetto non presente")
-    name = row["stored_name"]
-    if not re.fullmatch(r"artifact_five_departments_[a-f0-9]{32}\.zip", name):
-        raise HTTPException(409, "Nome archivio non valido")
-    path = WORK_DIR / name
-    if not path.is_file() or not path.resolve().is_relative_to(WORK_DIR.resolve()):
+    path, _size, available = checked_department_archive(row["stored_name"])
+    if not available:
         raise HTTPException(404, "Pacchetto non più disponibile")
     return FileResponse(
         path, filename="DidaUP_5_file_completi.zip",
