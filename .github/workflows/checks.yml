@@ -34,6 +34,7 @@ jobs:
           node --check didaup/app/static/mapping.js
           node --check didaup/app/static/cohort_review.js
           node --check didaup/app/static/workload.js
+          node --check didaup/app/static/workbook_exclusions.js
       - name: Test JavaScript (associazioni duplicate)
         run: node didaup/tests/mapping.test.cjs
       - name: Test JavaScript (ricerca ed esclusioni CdS)
