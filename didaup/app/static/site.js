@@ -349,6 +349,7 @@ async function downloadDepartmentArchive(path, button) {
 
 async function refreshWorkbooks() {
   const select = el("workbook-import-id");
+  const currentSource = select.value;
   const body = el("workbook-archives");
   select.replaceChildren();
   body.replaceChildren();
@@ -364,6 +365,9 @@ async function refreshWorkbooks() {
     item.value = String(source.id);
     item.textContent = source.original_name + " · " + source.sha256.slice(0, 12) + "…";
     select.appendChild(item);
+  }
+  if (mapped.some(source => String(source.id) === currentSource)) {
+    select.value = currentSource;
   }
   el("workbook-generate-button").disabled = !mapped.length;
   el("workbook-progress").textContent = mapped.length
