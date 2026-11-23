@@ -411,7 +411,7 @@
             </form>
             <div class="table-wrap">
               <table class="workload-table">
-                <thead><tr><th>Tipologia</th><th>CdS</th><th>TAF</th><th>Metodo</th><th>Valore</th><th>Operazioni</th></tr></thead>
+                <thead><tr><th>N.</th><th>Tipologia</th><th>CdS</th><th>TAF</th><th>Metodo</th><th>Valore</th><th>Operazioni</th></tr></thead>
                 <tbody id="workload-rules"></tbody>
               </table>
             </div>
@@ -436,6 +436,16 @@
               </div>
               <p id="workload-missing-warnings" class="workload-error-list"></p>
               <p id="workload-errors" class="workload-error-list"></p>
+              <div id="workload-conflict-panel" hidden>
+                <h4>Regole che generano conflitti</h4>
+                <p class="muted">Il numero identifica la posizione della regola nella tabella superiore. Le righe indicate sono quelle in cui le regole si sovrappongono con la stessa specificità.</p>
+                <div class="table-wrap">
+                  <table>
+                    <thead><tr><th>Regole in conflitto</th><th>Righe coinvolte</th><th>Righe di esempio</th></tr></thead>
+                    <tbody id="workload-conflict-pairs"></tbody>
+                  </table>
+                </div>
+              </div>
               <div class="table-wrap">
                 <table>
                   <thead><tr><th>Regola</th><th>Righe interessate</th></tr></thead>
