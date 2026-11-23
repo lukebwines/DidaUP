@@ -408,6 +408,7 @@ const workloadUI = (() => {
             maximumFractionDigits: 2
           })],
           ["workload-count-missing", result.rows_with_missing_planned_hours || 0],
+          ["workload-count-capped", result.rows_capped_to_planned_hours || 0],
           ["workload-count-errors", result.error_count ?? result.errors.length]
         ];
         for (const [id, value] of counts) document.getElementById(id).textContent = String(value);
@@ -423,6 +424,18 @@ const workloadUI = (() => {
             missingExamples.length + "): " + missingExamples.join(", ") +
             ". Verificare che i dati mancanti siano corretti."
           : "Nessuna cella vuota in TOT ORE PREVISTE tra le righe che richiedono un valore numerico.";
+        const capped = Number(result.rows_capped_to_planned_hours || 0);
+        const cappedExamples = (result.capped_to_planned_hours_examples || [])
+          .slice(0, 30).map(item =>
+            "riga " + item.excel_row + " (regola " + item.rule_number + "): " +
+            item.effective_hours + " ore effettive su " + item.planned_hours + " previste"
+          );
+        document.getElementById("workload-capped-info").textContent = capped
+          ? "Limite automatico applicato a " + capped +
+            " righe: il risultato della regola superava TOT ORE PREVISTE e il valore " +
+            "effettivo è stato riportato alle ore previste. Esempi: " +
+            cappedExamples.join("; ") + "."
+          : "Nessuna regola ha superato TOT ORE PREVISTE.";
         const errorCount = Number(result.error_count ?? result.errors.length);
         document.getElementById("workload-errors").textContent =
           issues.length
