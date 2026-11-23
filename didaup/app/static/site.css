@@ -287,3 +287,25 @@ td small{display:block;color:#718398}td button{padding:7px 11px!important;font-s
 [data-theme="dark"] #workbook-exclusion-preview-result{background:#1c304b;color:#c6d8ec}
 @media(max-width:980px){.workbook-exclusion-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:590px){.workbook-exclusion-grid{grid-template-columns:1fr}.workbook-exclusion-actions{align-items:stretch;flex-direction:column}.workbook-exclusion-actions .chip{margin-right:0}.workbook-exclusion-actions button{width:100%}}
+
+
+/* Generated workbook archive management: labels and explicit on-device deletion. */
+.workbook-generate-fields{grid-template-columns:minmax(235px,1.2fr) minmax(220px,1fr) minmax(225px,1.3fr);align-items:end}
+.workbook-generate-fields label{min-width:0}
+.workbook-generate-fields .primary{min-height:42px}
+.workbook-archive-manager{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:18px 0 12px}
+.workbook-archive-manager h3{margin:0 0 6px}
+.workbook-archive-manager p{margin:0;max-width:730px}
+.workbook-archive-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.workbook-archive-actions #workbook-archive-selected-summary{font-size:.79rem;color:#65778d}
+.workbook-archive-select-cell{width:36px;min-width:36px;text-align:center}
+.workbook-archive-select-cell input{min-height:0;width:17px;height:17px;accent-color:#236cd1}
+.workbook-archive-row-actions{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.workbook-archive-row-actions button{white-space:nowrap;padding:7px 11px!important;font-size:.77rem!important}
+.workbook-archive-remove{background:transparent;border:1px solid #d3a7a7;border-radius:8px;color:#a52c2c;font-weight:700}
+.workbook-archive-remove:hover{background:#fff0f0}
+[data-theme="dark"] .workbook-archive-actions #workbook-archive-selected-summary{color:#b1c5db}
+[data-theme="dark"] .workbook-archive-remove{background:#3d2832;border-color:#80535c;color:#ffb4b4}
+[data-theme="dark"] .workbook-archive-remove:hover{background:#593441}
+@media(max-width:980px){.workbook-generate-fields{grid-template-columns:1fr 1fr}.workbook-generate-fields button{grid-column:1/-1}}
+@media(max-width:620px){.workbook-generate-fields{grid-template-columns:1fr}.workbook-generate-fields button{grid-column:auto}.workbook-archive-manager{align-items:stretch;flex-direction:column}}
