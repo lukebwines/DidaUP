@@ -793,9 +793,14 @@ def test_api_generates_private_five_file_zip_and_reviews_unchanged(client, tmp_p
         sheets = [archive.read(name) for name in names]
         assert all(item == sheets[0] for item in sheets)
 
+    chosen = client.put(
+        "/api/years/1/department-workbooks/reference", headers=csrf,
+        json={"artifact_id": artifact_id, "expected_version": 0},
+    )
+    assert chosen.status_code == 200, chosen.text
     review = client.post(
         "/api/years/1/department-workbooks/review", headers=csrf,
-        data={"import_id": str(source_id), "test_data_only": "true"},
+        data={"reference_artifact_id": str(artifact_id), "test_data_only": "true"},
         files=[
             ("files", (name, content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
             for name, content in zip(names, sheets)
@@ -806,12 +811,24 @@ def test_api_generates_private_five_file_zip_and_reviews_unchanged(client, tmp_p
     assert review.json()["blocked"] is False
     assert review.json()["overlap_count"] == 0
 
-    # Archive reset deletes ONLY the generated ZIP; source and mapping remain.
+    # The reference is protected even against the bulk archive reset.
+    reset_body = {"scope": "year", "year_id": 1,
+                  "confirmation": "AZZERA LAVORAZIONE 2026/27",
+                  "password": "SyntheticTestingPass!2026"}
+    protected = client.post(
+        "/api/admin/archive/reset", headers=csrf, json=reset_body,
+    )
+    assert protected.status_code == 409
+    assert client.get(download_path).status_code == 200
+    cleared = client.put(
+        "/api/years/1/department-workbooks/reference", headers=csrf,
+        json={"artifact_id": None, "expected_version": 1,
+              "reason": "Fine della verifica sintetica"},
+    )
+    assert cleared.status_code == 200, cleared.text
+    # Archive reset deletes ONLY generated ZIPs; source and mapping remain.
     reset = client.post(
-        "/api/admin/archive/reset", headers=csrf,
-        json={"scope": "year", "year_id": 1,
-              "confirmation": "AZZERA LAVORAZIONE 2026/27",
-              "password": "SyntheticTestingPass!2026"},
+        "/api/admin/archive/reset", headers=csrf, json=reset_body,
     )
     assert reset.status_code == 200
     assert client.get(download_path).status_code == 404
