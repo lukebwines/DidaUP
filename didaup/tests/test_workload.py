@@ -41,7 +41,9 @@ def test_workload_rules_reject_duplicate_and_conflict():
     with pytest.raises(WorkloadRuleError, match="valore"):
         validate_rules([rule(value="1+1")])
     rules = validate_rules([rule(cds="SYN-A"), rule(taf="C")])
-    assert "Conflitto" in apply_workload(20, "X", "SYN-A", "C", rules)[2]
+    conflict = apply_workload(20, "X", "SYN-A", "C", rules)[2]
+    assert "Conflitto" in conflict
+    assert "regole 1, 2" in conflict
 
 
 def test_missing_planned_hours_and_fixed_quota_beyond_plan_are_errors():
@@ -97,6 +99,12 @@ def test_workload_ambiguous_rules_block_generation_but_preview_reports(tmp_path)
     )
     assert snapshot[-1]["blocked"]
     assert snapshot[-1]["errors"][0]["excel_row"] == 2
+    assert snapshot[-1]["errors"][0]["reason"] == (
+        "Conflitto tra regole 1, 2 con la stessa specificità"
+    )
+    assert snapshot[-1]["conflict_pairs"] == [{
+        "rules": [1, 2], "rows": 2, "examples": [2, 3]
+    }]
 
 
 def test_workload_choices_follow_exact_source_columns(tmp_path):
@@ -539,9 +547,13 @@ def test_workload_choices_keep_mixed_annuality_rows_that_export_keeps(client, tm
 
 def test_ui_keeps_excluded_historical_rule_values_outside_choices(client):
     script = client.get("/static/workload.js").text
+    page = client.get("/").text
     assert "Valori della regola non presenti nelle righe incluse" in script
     assert "group.options.push({value" not in script
     assert "Selettori limitati alle " in script
+    assert 'id="workload-conflict-pairs"' in page
+    assert "conflict.rules" in script
+    assert "Regola " in script
 
 
 def test_workload_release_assets_are_versioned_to_avoid_old_cached_selectors(client):
