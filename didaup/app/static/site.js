@@ -324,6 +324,54 @@ async function refreshUsers() {
 }
 
 
+let workbookReferenceState = null;
+
+async function selectWorkbookReference(artifact) {
+  if (state.user?.role !== "admin" || !state.selected || !workbookReferenceState) return;
+  const oldId = workbookReferenceState.artifact_id;
+  const nextId = artifact?.id ?? null;
+  if (oldId === nextId) return;
+  const oldLabel = oldId ? "estrazione #" + oldId : "nessuna";
+  const nextLabel = nextId ? "estrazione #" + nextId +
+    (artifact?.label ? " · " + artifact.label : "") : "nessuna";
+  let reason = "";
+  if (oldId !== null) {
+    reason = window.prompt(
+      "Correzione del riferimento: " + oldLabel + " → " + nextLabel +
+      ". Indicare la motivazione (almeno 3 caratteri):",
+      ""
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      showNotice("Per modificare il riferimento occorre una motivazione di almeno 3 caratteri.", true);
+      return;
+    }
+  }
+  if (!window.confirm(
+    "Impostare come riferimento per il confronto " + nextLabel +
+    "? I controlli delle restituzioni useranno esclusivamente le righe " +
+    "e le ore effettive contenute nello ZIP scelto. " +
+    "Il cambio sarà registrato e potrà essere corretto."
+  )) return;
+  try {
+    await api(
+      "years/" + state.selected + "/department-workbooks/reference",
+      "PUT", {
+        artifact_id: nextId,
+        expected_version: workbookReferenceState.version,
+        reason,
+      }
+    );
+    await refreshWorkbookArchiveList();
+    showNotice(nextId
+      ? "Estrazione #" + nextId + " selezionata come riferimento per il confronto."
+      : "Riferimento rimosso. Selezionare un'estrazione prima della revisione.");
+  } catch (error) {
+    showNotice(error.message, true);
+    await refreshWorkbookArchiveList().catch(() => {});
+  }
+}
+
 async function downloadDepartmentArchive(path, button, filename) {
   button.disabled = true;
   try {
@@ -354,7 +402,7 @@ function selectedWorkbookArchiveIds() {
 }
 
 function updateWorkbookArchiveSelection() {
-  const checkboxes = [...el("workbook-archives").querySelectorAll("input[type=checkbox]")];
+  const checkboxes = [...el("workbook-archives").querySelectorAll("input[type=checkbox]:not(:disabled)")];
   const count = checkboxes.filter(box => box.checked).length;
   const selectAll = el("workbook-archive-select-all");
   selectAll.disabled = !checkboxes.length || state.user?.role !== "admin";
@@ -433,7 +481,21 @@ async function refreshWorkbookArchiveList() {
     updateWorkbookArchiveSelection();
     return;
   }
-  const existing = await api("years/" + state.selected + "/department-workbooks");
+  const [existing, reference] = await Promise.all([
+    api("years/" + state.selected + "/department-workbooks"),
+    api("years/" + state.selected + "/department-workbooks/reference"),
+  ]);
+  workbookReferenceState = reference;
+  const currentReference = existing.find(item => item.id === reference.artifact_id);
+  el("workbook-reference-current").textContent = currentReference
+    ? "Riferimento attuale: estrazione #" + currentReference.id +
+      (currentReference.label ? " · " + currentReference.label : "") +
+      ". " + (currentReference.available
+        ? "Il confronto userà questa fotografia delle ore e delle esclusioni."
+        : "ATTENZIONE: lo ZIP non è disponibile sul Raspberry Pi.")
+    : "Nessun riferimento selezionato: scegliere «Usa per confronto» su un'estrazione.";
+  el("workbook-reference-clear").disabled =
+    state.user?.role !== "admin" || !reference.artifact_id;
   for (const item of existing) {
     const row = body.insertRow();
     const selectCell = row.insertCell();
@@ -441,6 +503,10 @@ async function refreshWorkbookArchiveList() {
     if (admin) {
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
+      checkbox.disabled = item.id === reference.artifact_id;
+      checkbox.title = checkbox.disabled
+        ? "Questa estrazione è protetta come riferimento"
+        : "Seleziona per la cancellazione";
       checkbox.dataset.artifactId = String(item.id);
       checkbox.setAttribute("aria-label", "Seleziona estrazione #" + item.id);
       checkbox.addEventListener("change", updateWorkbookArchiveSelection);
@@ -452,6 +518,12 @@ async function refreshWorkbookArchiveList() {
       ? "Estrazione #" + item.id + " · " + item.label
       : "5 Excel + righe escluse · #" + item.id;
     name.appendChild(title);
+    if (item.id === reference.artifact_id) {
+      const badge = document.createElement("span");
+      badge.className = "workbook-reference-badge";
+      badge.textContent = "RIFERIMENTO PER CONFRONTO";
+      name.appendChild(badge);
+    }
     const detail = document.createElement("small");
     detail.textContent = "5 Excel + registro righe escluse" +
       (item.label ? " · Etichetta personalizzata" : " · Senza etichetta");
@@ -485,10 +557,26 @@ async function refreshWorkbookArchiveList() {
     });
     actions.appendChild(rename);
     if (admin) {
+      const choose = document.createElement("button");
+      choose.type = "button";
+      choose.className = "secondary";
+      choose.textContent = item.id === reference.artifact_id
+        ? "Riferimento attivo"
+        : reference.artifact_id ? "Cambia riferimento" : "Usa per confronto";
+      choose.disabled = !item.available || item.id === reference.artifact_id;
+      choose.addEventListener("click", () => {
+        selectWorkbookReference(item)
+          .catch(error => showNotice(error.message, true));
+      });
+      actions.appendChild(choose);
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "workbook-archive-remove";
       remove.textContent = "Elimina";
+      remove.disabled = item.id === reference.artifact_id;
+      remove.title = remove.disabled
+        ? "Non eliminabile finché è il riferimento. Selezionare prima un'altra estrazione."
+        : "Elimina lo ZIP dal Raspberry Pi";
       remove.setAttribute("aria-label", "Elimina estrazione #" + item.id);
       remove.addEventListener("click", () => {
         deleteDepartmentArchives([item.id])
@@ -660,13 +748,18 @@ function hookForms() {
 
   el("workbook-archive-select-all").addEventListener("change", event => {
     const isChecked = event.target.checked;
-    el("workbook-archives").querySelectorAll("input[type=checkbox]").forEach(box => {
-      box.checked = isChecked;
-    });
+    el("workbook-archives").querySelectorAll("input[type=checkbox]:not(:disabled)")
+      .forEach(box => {
+        box.checked = isChecked;
+      });
     updateWorkbookArchiveSelection();
   });
   el("workbook-archive-delete-selected").addEventListener("click", () => {
     deleteDepartmentArchives(selectedWorkbookArchiveIds())
+      .catch(error => showNotice(error.message, true));
+  });
+  el("workbook-reference-clear").addEventListener("click", () => {
+    selectWorkbookReference(null)
       .catch(error => showNotice(error.message, true));
   });
 
@@ -828,17 +921,17 @@ function hookForms() {
       showNotice("Sono consentiti solo file XLSX, massimo 32 MB ciascuno.", true);
       return;
     }
-    const sourceId = Number(el("workbook-import-id").value);
-    if (!Number.isInteger(sourceId) || sourceId < 1) {
-      showNotice("Selezionare un report mappato.", true);
+    if (!workbookReferenceState?.artifact_id || !workbookReferenceState.available) {
+      showNotice("Selezionare un'estrazione di riferimento valida prima di controllare le restituzioni.", true);
       return;
     }
+    const referenceId = workbookReferenceState.artifact_id;
     const button = el("workbook-review-button");
     button.disabled = true;
     el("workbook-review-result").textContent = "Controllo delle cinque proposte in corso…";
     el("workbook-overlaps").replaceChildren();
     const data = new FormData();
-    data.append("import_id", String(sourceId));
+    data.append("reference_artifact_id", String(referenceId));
     data.append("test_data_only", "true");
     for (const f of uploads) data.append("files", f, f.name);
     try {
@@ -861,7 +954,9 @@ function hookForms() {
         "File " + x.file + (x.excel_row ? ", riga " + x.excel_row : "") +
         ": " + x.reason);
       el("workbook-review-result").textContent =
-        message + (examples.length ? "\n" + examples.join("\n") : "");
+        "Riferimento: estrazione #" + result.reference_artifact_id +
+        (result.reference_label ? " · " + result.reference_label : "") +
+        ". " + message + (examples.length ? "\n" + examples.join("\n") : "");
       el("workbook-review-result").style.whiteSpace = "pre-line";
       for (const overlap of result.overlaps || []) {
         const row = el("workbook-overlaps").insertRow();
