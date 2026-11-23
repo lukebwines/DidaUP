@@ -35,6 +35,7 @@ from .department_workbooks import (
 )
 from .workload import WorkloadRuleError, validate_rules, source_choices
 from .department_review import review_five_workbooks, ReviewError
+from .reference_snapshot import read_reference_snapshot, ReferenceSnapshotError
 
 BASE = Path(__file__).resolve().parent
 DATA = Path(os.environ.get("DIDAUP_DATA_DIR", "/data"))
@@ -209,6 +210,23 @@ def startup():
               kind TEXT NOT NULL,
               generated_at INTEGER NOT NULL,
               label TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS workbook_references(
+              year_id INTEGER PRIMARY KEY REFERENCES academic_years(id),
+              artifact_id INTEGER NOT NULL REFERENCES working_artifacts(id),
+              archive_sha256 TEXT NOT NULL,
+              version INTEGER NOT NULL DEFAULT 1,
+              selected_at INTEGER NOT NULL,
+              actor_id INTEGER NOT NULL REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS workbook_reference_changes(
+              id INTEGER PRIMARY KEY,
+              year_id INTEGER NOT NULL REFERENCES academic_years(id),
+              old_artifact_id INTEGER,
+              new_artifact_id INTEGER,
+              reason TEXT NOT NULL,
+              changed_at INTEGER NOT NULL,
+              actor_id INTEGER NOT NULL REFERENCES users(id)
             );
             CREATE TABLE IF NOT EXISTS audit(
               id INTEGER PRIMARY KEY, at INTEGER NOT NULL, actor_id INTEGER,
