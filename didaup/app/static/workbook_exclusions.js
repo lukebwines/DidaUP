@@ -81,6 +81,12 @@ function workbookExclusionRenderFacet(facet) {
   const chosen = workbookExclusion.selected[facet.key];
   const mapped = Boolean(workbookExclusion.data.mapped?.[facet.key]);
   const canWrite = state.user?.role !== "lettura";
+  const titleSelected = Boolean(workbookExclusion.selected.titoli?.size);
+  const pickButton = el("workbook-exclusion-" + facet.id + "-pick");
+  const clearButton = el("workbook-exclusion-" + facet.id + "-clear");
+  pickButton.disabled = !canWrite || !mapped ||
+    (facet.key !== "titoli" && !titleSelected);
+  clearButton.disabled = !canWrite;
   const query = workbookExclusionNormalize(search?.value || "");
   const options = (workbookExclusion.data.choices?.[facet.key] || []).filter(option =>
     !query || workbookExclusionNormalize(option.label).includes(query)
@@ -98,7 +104,8 @@ function workbookExclusionRenderFacet(facet) {
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.checked = chosen.has(option.value);
-      checkbox.disabled = !canWrite;
+      checkbox.disabled = !canWrite || !mapped ||
+        (facet.key !== "titoli" && !titleSelected);
       checkbox.setAttribute("aria-label", option.label);
       checkbox.addEventListener("change", () => {
         if (checkbox.checked) chosen.add(option.value);
