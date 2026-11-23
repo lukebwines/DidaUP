@@ -472,9 +472,13 @@
               Non usare report reali prima della validazione dell'ambiente e dei controlli.
               Il pulsante «+ Aggiungi variazione» richiede ancora il collaudo Office Scripts su Microsoft 365 d'Ateneo.
             </div>
-            <form id="workbook-generate-form" class="fields row-fields write-only">
+            <form id="workbook-generate-form" class="fields workbook-generate-fields write-only">
               <label>Report di offerta storica mappato
                 <select id="workbook-import-id" required></select>
+              </label>
+              <label>Etichetta estrazione (facoltativa)
+                <input id="workbook-export-label" type="text" maxlength="120"
+                       placeholder="Es. Prima estrazione di verifica" autocomplete="off">
               </label>
               <button id="workbook-generate-button" class="primary" type="submit">Genera 5 Excel + righe escluse</button>
             </form>
@@ -572,9 +576,24 @@
             </div>
             <p id="workbook-progress" class="muted" aria-live="polite"></p>
             <p class="muted">Le colonne storiche sono bloccate; solo Tipo variazione, Nuovo docente, Ore e Note sono compilabili nei cinque Excel destinati ai referenti. Il sesto file, Righe escluse · CONTROLLO INTERNO, contiene le righe effettivamente eliminate e il motivo: non va distribuito ai referenti. Le esclusioni registrate restano applicate e non c’è ripartizione dipartimentale.</p>
+            <div class="workbook-archive-manager write-only">
+              <div>
+                <h3>Estrazioni generate</h3>
+                <p>Le etichette sono modificabili anche dopo la generazione. La cancellazione elimina gli ZIP dal disco del Raspberry Pi e le relative voci dall'elenco, senza modificare i report sorgenti.</p>
+              </div>
+              <div class="workbook-archive-actions" id="workbook-archive-bulk-actions" hidden>
+                <span id="workbook-archive-selected-summary">Nessun pacchetto selezionato</span>
+                <button id="workbook-archive-delete-selected" class="danger-button" type="button" disabled>Elimina selezionati</button>
+              </div>
+            </div>
             <div class="table-wrap">
-              <table><thead><tr><th>Pacchetto</th><th>Generato</th><th>Download</th></tr></thead>
-                <tbody id="workbook-archives"></tbody></table>
+              <table>
+                <thead><tr>
+                  <th class="workbook-archive-select-cell"><input type="checkbox" id="workbook-archive-select-all" aria-label="Seleziona tutte le estrazioni"></th>
+                  <th>Pacchetto ed etichetta</th><th>Generato</th><th>Dimensione</th><th>Operazioni</th>
+                </tr></thead>
+                <tbody id="workbook-archives"></tbody>
+              </table>
             </div>
           </div>
           <div class="panel">
