@@ -858,7 +858,7 @@ def test_assignment_title_exclusions_combine_multiple_facets_and_audit_rows(tmp_
     assert info["historical_rows"] == 2
     assert info["excluded_file_rows"] == 2
     assert info["reconciliation"]["verified"] is True
-    assert info["reconciliation"]["excluded_by_assignment_filters"] == 2
+    assert info["excluded_by_assignment_filters"] == 2
 
     with ZipFile(io.BytesIO(packed)) as archive:
         names = referent_names(archive)
