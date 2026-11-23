@@ -2,7 +2,7 @@
 
 **Add-on per la programmazione didattica 2027/28 con cinque Excel completi e identici destinati ai dipartimenti.**
 
-> Stato: **0.1.10-alpha19 (esclusione incarichi con filtri multipli nei cinque Excel)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. **Solo dati sintetici** durante il collaudo.
+> Stato: **0.1.10-alpha20 (etichette estrazioni e gestione dei pacchetti ZIP sul Raspberry Pi)**. Nessuna procedura 2027/28 o codifica SSD è considerata approvata o verificata. **Solo dati sintetici** durante il collaudo.
 
 ## Obiettivo
 Partire dall'offerta e dalle coperture storiche **2026/27** per costruire un archivio di riferimento verificabile. Quando saranno disponibili le estrazioni ufficiali, predisporre i fogli di programmazione **2027/28** senza trasporre automaticamente come valide assegnazioni, codici o nominativi precedenti.
@@ -95,3 +95,8 @@ Attenzione: una riga originale con annualità multiple oppure con identificativi
 ## Esclusione mirata degli incarichi
 
 Nella sezione **Prepara Excel** è disponibile una selezione multipla per escludere singoli incarichi in base al Titolo affidamento. I filtri aggiuntivi (Tipologia CdS, Corso di studio, Sede, Annualità e TAF) restringono l'ambito. Più valori nello stesso filtro sono alternativi (OR); filtri diversi sono combinati (AND). I valori sono ricavati dalle righe che restano nei cinque Excel dopo le esclusioni per annualità. L'anteprima conta le righe aggiuntive interessate; i criteri vengono salvati per report e anno accademico e applicati alla generazione successiva. Le righe eliminate sono registrate nel sesto file interno, con il motivo dell'esclusione. Una modifica della mappatura o delle annualità rende i criteri obsoleti e richiede una nuova verifica e un nuovo salvataggio.
+
+
+## Gestione delle estrazioni generate
+
+In **Prepara Excel** ogni pacchetto dei cinque Excel e del registro interno può avere un'etichetta testuale facoltativa (massimo 120 caratteri), specificata alla generazione o modificata anche in seguito. L'etichetta viene salvata nel database e compare nell'elenco delle estrazioni e nel nome del file ZIP scaricato. I pacchetti esistenti senza etichetta rimangono accessibili e possono essere etichettati in seguito. **L'amministratore** può eliminare una singola estrazione o più estrazioni selezionate insieme, confermando digitando `ELIMINA`. Questa operazione elimina il record nel database DidaUP e il ZIP realmente salvato nello storage persistente `/data/working` dell'add-on sul Raspberry Pi, senza cancellare report storici, mappature, esclusioni, regole o account. Ogni eliminazione è annotata nel registro di audit. Se l'operazione viene interrotta, all'avvio DidaUP completa o annulla la pulizia in base al registro persistente. La cancellazione è irreversibile salvo recupero da backup e non coinvolge copie ZIP già scaricate altrove.
