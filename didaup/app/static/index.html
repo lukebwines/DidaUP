@@ -586,6 +586,13 @@
                 <button id="workbook-archive-delete-selected" class="danger-button" type="button" disabled>Elimina selezionati</button>
               </div>
             </div>
+            <div class="workbook-reference-banner">
+              <div>
+                <strong>Estrazione di riferimento per il confronto</strong>
+                <p id="workbook-reference-current" aria-live="polite">Nessun riferimento selezionato. Selezionare un'estrazione nell'elenco.</p>
+              </div>
+              <button id="workbook-reference-clear" class="secondary write-only" type="button" disabled>Rimuovi riferimento</button>
+            </div>
             <div class="table-wrap">
               <table>
                 <thead><tr>
@@ -598,7 +605,7 @@
           </div>
           <div class="panel">
             <h3>Controllo delle proposte restituite (anteprima)</h3>
-            <p>Seleziona i cinque Excel compilati. DidaUP confronta le righe con la fonte storica e segnala le proposte sullo stesso insegnamento presenti in file diversi. Non unisce e non approva alcuna copertura.</p>
+            <p>Seleziona i cinque Excel compilati. DidaUP li confronta <strong>esclusivamente con l'estrazione di riferimento scelta sopra</strong>, utilizzando le righe e le ore effettive fissate al momento della sua generazione. Eventuali modifiche successive a calcoli ed esclusioni non alterano il confronto. Nessuna proposta viene approvata o acquisita automaticamente.</p>
             <form id="workbook-review-form" class="fields row-fields write-only">
               <label>Cinque Excel modificati dai referenti
                 <input id="workbook-review-files" type="file" accept=".xlsx" multiple required>
