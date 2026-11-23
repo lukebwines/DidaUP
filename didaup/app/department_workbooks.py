@@ -165,6 +165,14 @@ def workbook_exclusion_choices(
     if not 1 <= header_row <= 40 or sheet.height <= header_row:
         raise WorkbookGenerationError("Intestazione non valida per i filtri di esclusione")
     rows = sheet.to_python(skip_empty_area=False)
+    assigned = dict(assigned)
+    if "taf" not in assigned:
+        taf_positions = [
+            index for index, heading in enumerate(rows[header_row - 1])
+            if normalize_header(heading) == "TAF"
+        ]
+        if len(taf_positions) == 1:
+            assigned["taf"] = taf_positions[0]
     mapped = {
         "titoli": "titolo_affidamento" in assigned,
         "tipologie": "cds_tipologia" in assigned,
