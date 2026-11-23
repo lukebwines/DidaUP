@@ -371,7 +371,8 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
              cohort_names: dict[tuple[str, str, int], str] | None = None,
              workload_rules: list[dict] | None = None,
              strict_workload: bool = True,
-             allow_empty: bool = False):
+             allow_empty: bool = False,
+             assignment_exclusions: dict[str, list[str]] | None = None):
     if not re.fullmatch(r"[0-9a-f]{64}", source_sha256):
         raise WorkbookGenerationError("Hash dello storico non valido")
     if not source.is_file():
@@ -453,6 +454,17 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         effective_rules = validate_rules(workload_rules or [])
     except WorkloadRuleError as exc:
         raise WorkbookGenerationError(str(exc)) from exc
+    effective_assignment_exclusions = assignment_exclusions or {}
+    if effective_assignment_exclusions:
+        if not effective_assignment_exclusions.get("titoli"):
+            raise WorkbookGenerationError(
+                "Esclusione incarichi: selezionare almeno un Titolo affidamento"
+            )
+        for facet, field in WORKBOOK_EXCLUSION_FILTER_KEYS.items():
+            if effective_assignment_exclusions.get(facet) and field not in assigned:
+                raise WorkbookGenerationError(
+                    f"Esclusione incarichi: associare il campo necessario al filtro «{facet}»"
+                )
     if "ore_previste" not in assigned:
         raise WorkbookGenerationError(
             "Calcolo carico: associare TOT ORE PREVISTE prima di generare i file"
@@ -535,6 +547,8 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     prepared = []
     excluded_records = []
     excluded_count = 0
+    excluded_by_assignment_count = 0
+    excluded_by_assignment_examples = []
     excluded_by_missing_year_count = 0
     workload_matches = 0
     workload_unmatched = 0
@@ -656,8 +670,44 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
             unresolved_annuality_rows += 1
             if len(unresolved_annuality_examples) < 30:
                 unresolved_annuality_examples.append(excel_row)
+        # Apply the assignment-title selection only after the existing
+        # CdS/annuality rules, so an already excluded row is counted once.
+        if matches_workbook_exclusion_filters(
+            effective_assignment_exclusions, get
+        ):
+            excluded_count += 1
+            excluded_by_assignment_count += 1
+            selected_title = _display(get("titolo_affidamento"))
+            selected_facets = [
+                ("Tipologia CdS", "tipologie"),
+                ("CdS", "cds"),
+                ("Sede", "sedi"),
+                ("Annualità", "annualita"),
+                ("TAF", "taf"),
+            ]
+            matched_description = "Titolo affidamento: " + selected_title
+            for label, facet in selected_facets:
+                chosen = effective_assignment_exclusions.get(facet) or []
+                if chosen:
+                    matched_description += "; " + label + ": " + ", ".join(chosen[:5])
+            excluded_records.append((
+                excel_row, data,
+                "Esclusione per titolo affidamento e filtri aggiuntivi",
+                matched_description[:1000],
+                _display(get("anno_corso"))[:120],
+            ))
+            if len(excluded_by_assignment_examples) < 50:
+                excluded_by_assignment_examples.append({
+                    "excel_row": excel_row,
+                    "assignment_title": selected_title[:200],
+                    "course": _display(get("cds_nome"))[:200],
+                    "course_code": _display(get("cds_codice"))[:80],
+                    "campus": _display(get("sede"))[:100],
+                })
+            continue
+
         # The year of reference is the imported report's archived year, not
-        # a per-row equality check. Keep the original A.A. value unchanged,
+        # a per-row equality check; keep the original A.A. value unchanged,
         # including conventions used by Schools of Specialization.
         # Start every retained line at zero, irrespective of any old mapping
         # or old effective-hour values. The future workload rule engine will
@@ -780,6 +830,8 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         "source_nonempty_rows": len(source_row_numbers),
         "included_in_each_workbook": len(kept_ids),
         "excluded_in_internal_register": len(excluded_ids),
+        "excluded_by_assignment_filters": excluded_by_assignment_count,
+        "assignment_exclusion_examples": excluded_by_assignment_examples,
         "missing_from_outputs": 0,
         "duplicate_ids": 0,
     }
@@ -845,6 +897,7 @@ def build_five_workbooks(
     included: set[tuple[str, str, int]] | None = None,
     cohort_names: dict[tuple[str, str, int], str] | None = None,
     workload_rules: list[dict] | None = None,
+    assignment_exclusions: dict[str, list[str]] | None = None,
 ) -> tuple[bytes, dict]:
     """ZIP with five byte-identical referent XLSX and one internal excluded-row audit."""
     proposal_year = next_academic_year(history_year)
@@ -859,6 +912,7 @@ def build_five_workbooks(
      excluded_records, reconciliation, workload_stats) = _prepare(
         source, source_sha256, sheet_name, header_row, assigned,
         history_year, excluded or set(), included, cohort_names, workload_rules,
+        assignment_exclusions=assignment_exclusions,
     )
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output, {"in_memory": True})
@@ -1106,6 +1160,8 @@ def build_five_workbooks(
         "excluded_audit_sha256": hashlib.sha256(excluded_template).hexdigest(),
         "historical_rows": len(prepared),
         "excluded_rows": excluded_count,
+        "excluded_by_assignment_filters": excluded_by_assignment_count,
+        "assignment_exclusion_examples": excluded_by_assignment_examples,
         "excluded_rows_with_missing_year": excluded_ambiguous_count,
         "unmatched_exclusion_count": unmatched_exclusions_count,
         "unmatched_exclusion_examples": unmatched_exclusion_examples,
