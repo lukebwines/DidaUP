@@ -792,15 +792,34 @@ def reset_archive(body: ArchiveReset, request: Request):
                     "SELECT id,stored_name FROM working_artifacts WHERE year_id=?",
                     (body.year_id,),
                 ).fetchall()
-                cx.execute(
-                    "DELETE FROM working_artifacts WHERE year_id=?", (body.year_id,)
-                )
             else:
                 if body.confirmation != "AZZERA LAVORAZIONI":
                     raise HTTPException(422, "Conferma testuale non valida")
                 artifacts = cx.execute(
                     "SELECT id,stored_name FROM working_artifacts"
                 ).fetchall()
+
+            # Protect the definitive comparison baseline even from the
+            # bulk "reset working area" action, not only the ZIP delete route.
+            locked = cx.execute(
+                "SELECT r.artifact_id FROM workbook_references r "
+                "JOIN working_artifacts a ON a.id=r.artifact_id "
+                "WHERE a.id IN (" + ",".join("?" for _ in artifacts) + ")",
+                tuple(artifact["id"] for artifact in artifacts),
+            ).fetchone() if artifacts else None
+            if locked is not None:
+                raise HTTPException(
+                    409,
+                    "La lavorazione comprende un'estrazione di riferimento "
+                    "per il confronto. Selezionarne un'altra o rimuovere il "
+                    "riferimento con motivazione prima dell'azzeramento.",
+                )
+
+            if body.scope == "year":
+                cx.execute(
+                    "DELETE FROM working_artifacts WHERE year_id=?", (body.year_id,)
+                )
+            else:
                 cx.execute("DELETE FROM working_artifacts")
 
             # Strict allowlist: do not delete academic_years, cohorts,
