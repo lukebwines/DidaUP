@@ -898,3 +898,248 @@ def test_assignment_exclusion_requires_a_primary_title_and_valid_mapped_values(t
         normalize_workbook_exclusion_filters(
             {"titoli": ["Titolo inventato"]}, choices, assigned
         )
+
+
+def _create_synthetic_archive_for_management(client, csrf, source_id, label=""):
+    response = client.post(
+        "/api/years/1/department-workbooks", headers=csrf,
+        json={"import_id": source_id, "label": label},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_generated_archives_custom_labels_are_editable_and_downloads_stay_identical(client, tmp_path):
+    """Labels are persisted for current and legacy ZIPs, never embedded in XLSXs."""
+    source = tmp_path / "labeled-source.xlsx"
+    assigned = make_source(source)
+    csrf = signed_in(client)
+    uploaded = client.post(
+        "/api/years/1/imports", headers=csrf,
+        data={"kind": "offerta", "test_data_only": "true"},
+        files={"source": (
+            "synthetic-label-report.xlsx", source.read_bytes(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    source_id = uploaded.json()["id"]
+    mapping = client.put(
+        f"/api/imports/{source_id}/mapping", headers=csrf,
+        json={"sheet_name": "Offerta sintetica", "header_row": 1,
+              "assigned": assigned, "expected_version": 0},
+    )
+    assert mapping.status_code == 200, mapping.text
+
+    created = _create_synthetic_archive_for_management(
+        client, csrf, source_id, "  Bozza 1 – Test / verifiche  "
+    )
+    assert created["label"] == "Bozza 1 – Test / verifiche"
+    assert created["download_filename"].startswith("DidaUP_Bozza_1_")
+    assert "/" not in created["download_filename"]
+    identifier = created["id"]
+
+    import app.main as main
+    with main.connect() as cx:
+        row = cx.execute(
+            "SELECT stored_name,label FROM working_artifacts WHERE id=?",
+            (identifier,),
+        ).fetchone()
+    assert row["label"] == "Bozza 1 – Test / verifiche"
+    physical_path = main.WORK_DIR / row["stored_name"]
+    assert physical_path.exists()
+    before = physical_path.read_bytes()
+
+    listed = client.get("/api/years/1/department-workbooks")
+    assert listed.status_code == 200, listed.text
+    target = next(x for x in listed.json() if x["id"] == identifier)
+    assert target["label"] == "Bozza 1 – Test / verifiche"
+    assert target["file_bytes"] == len(before)
+    assert target["available"] is True
+
+    rename = client.patch(
+        f"/api/years/1/department-workbooks/{identifier}/label",
+        headers=csrf, json={"label": "Verifica nuova – sintético"},
+    )
+    assert rename.status_code == 200, rename.text
+    assert rename.json()["label"] == "Verifica nuova – sintético"
+    assert "Verifica_nuova" in rename.json()["download_filename"]
+    downloaded = client.get(
+        f"/api/years/1/department-workbooks/{identifier}/download"
+    )
+    assert downloaded.status_code == 200
+    assert downloaded.content == before
+    assert "DidaUP_Verifica_nuova" in downloaded.headers["content-disposition"]
+    with ZipFile(io.BytesIO(downloaded.content)) as archive:
+        names = referent_names(archive)
+        assert len(names) == 5
+        assert len({archive.read(name) for name in names}) == 1
+
+    # Existing unlabeled generations can also receive a label later.
+    legacy = _create_synthetic_archive_for_management(client, csrf, source_id)
+    assert legacy["label"] == ""
+    set_legacy_label = client.patch(
+        f"/api/years/1/department-workbooks/{legacy['id']}/label",
+        headers=csrf, json={"label": "Vecchia estrazione etichettata"},
+    )
+    assert set_legacy_label.status_code == 200
+    assert client.get("/api/years/1/department-workbooks").json()[0]["label"] == (
+        "Vecchia estrazione etichettata"
+    )
+    # Do not permit directory names, control characters, or huge labels.
+    assert client.post(
+        "/api/years/1/department-workbooks", headers=csrf,
+        json={"import_id": source_id, "label": "L" * 121},
+    ).status_code == 422
+    assert client.patch(
+        f"/api/years/1/department-workbooks/{identifier}/label", headers=csrf,
+        json={"label": "Riga\\nNuova"},
+    ).status_code in (200, 422)
+
+
+def test_delete_one_or_multiple_generated_zips_removes_disk_and_db_only(client, tmp_path):
+    """An admin can remove all previously generated ZIPs from the Raspberry /data."""
+    source = tmp_path / "deletable-report.xlsx"
+    assigned = make_source(source)
+    csrf = signed_in(client)
+    uploaded = client.post(
+        "/api/years/1/imports", headers=csrf,
+        data={"kind": "offerta", "test_data_only": "true"},
+        files={"source": (
+            "synthetic-deletable.xlsx", source.read_bytes(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    source_id = uploaded.json()["id"]
+    mapped = client.put(
+        f"/api/imports/{source_id}/mapping", headers=csrf,
+        json={"sheet_name": "Offerta sintetica", "header_row": 1,
+              "assigned": assigned, "expected_version": 0},
+    )
+    assert mapped.status_code == 200, mapped.text
+    archives = [
+        _create_synthetic_archive_for_management(
+            client, csrf, source_id, "Estrazione sintetica " + str(n)
+        )
+        for n in (1, 2, 3)
+    ]
+    import app.main as main
+    with main.connect() as cx:
+        stored = cx.execute(
+            "SELECT id,stored_name FROM working_artifacts "
+            "WHERE year_id=1 AND kind='five_department_workbooks' ORDER BY id"
+        ).fetchall()
+    files = {
+        item["id"]: main.WORK_DIR / item["stored_name"] for item in stored
+    }
+    assert all(path.is_file() for path in files.values())
+    # Read-only and mismatched-year requests must not erase anything.
+    other_year = client.post(
+        "/api/years", headers=csrf, json={"code": "2027/28"}
+    )
+    assert other_year.status_code == 200
+    not_same_year = client.request(
+        "DELETE", f"/api/years/{other_year.json()['id']}/department-workbooks",
+        headers=csrf, json={"ids": [archives[0]["id"]]},
+    )
+    assert not_same_year.status_code == 404
+    no_csrf = client.request(
+        "DELETE", "/api/years/1/department-workbooks",
+        json={"ids": [archives[0]["id"]]},
+    )
+    assert no_csrf.status_code == 403
+    assert all(path.is_file() for path in files.values())
+
+    first = client.request(
+        "DELETE", "/api/years/1/department-workbooks",
+        headers=csrf, json={"ids": [archives[0]["id"]]},
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["deleted_count"] == 1
+    assert first.json()["removed_bytes"] > 0
+    assert files[archives[0]["id"]].exists() is False
+    assert all(files[item["id"]].exists() for item in archives[1:])
+    assert client.get(
+        f"/api/years/1/department-workbooks/{archives[0]['id']}/download"
+    ).status_code == 404
+
+    selected = [archives[1]["id"], archives[2]["id"]]
+    second = client.request(
+        "DELETE", "/api/years/1/department-workbooks",
+        headers=csrf, json={"ids": selected},
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["deleted_ids"] == selected
+    assert second.json()["deleted_count"] == 2
+    assert all(not path.exists() for path in files.values())
+    assert client.get("/api/years/1/department-workbooks").json() == []
+    with main.connect() as cx:
+        remaining = cx.execute(
+            "SELECT count(*) FROM working_artifacts "
+            "WHERE year_id=1 AND kind='five_department_workbooks'"
+        ).fetchone()[0]
+        audit_entries = cx.execute(
+            "SELECT count(*) FROM audit "
+            "WHERE action='delete_generated_department_workbook'"
+        ).fetchone()[0]
+    assert remaining == 0
+    assert audit_entries == 3
+    assert client.get(f"/api/imports/{source_id}/mapping").status_code == 200
+    assert client.get(f"/api/years/1/imports").json()[0]["id"] == source_id
+    assert (main.SOURCE_DIR / main.connect().execute(
+        "SELECT stored_name FROM source_imports WHERE id=?", (source_id,)
+    ).fetchone()["stored_name"]).is_file()
+
+
+def test_deleting_archives_is_restricted_to_admin(client, tmp_path):
+    source = tmp_path / "admin-only-archive.xlsx"
+    assigned = make_source(source)
+    csrf = signed_in(client)
+    upload = client.post(
+        "/api/years/1/imports", headers=csrf,
+        data={"kind": "offerta", "test_data_only": "true"},
+        files={"source": (
+            "synthetic-role-test.xlsx", source.read_bytes(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )},
+    )
+    assert upload.status_code == 200, upload.text
+    import_id = upload.json()["id"]
+    saved_mapping = client.put(
+        f"/api/imports/{import_id}/mapping", headers=csrf,
+        json={"sheet_name": "Offerta sintetica", "header_row": 1,
+              "assigned": assigned, "expected_version": 0},
+    )
+    assert saved_mapping.status_code == 200, saved_mapping.text
+    created = _create_synthetic_archive_for_management(client, csrf, import_id)
+    add_operator = client.post("/api/users", headers=csrf, json={
+        "username": "synthetic_operator", "password": "SyntheticOperatorPass!2026",
+        "role": "operatore",
+    })
+    assert add_operator.status_code == 200
+    client.post("/api/logout", headers=csrf, json={})
+    op_csrf = signed_in(
+        client, "synthetic_operator", "SyntheticOperatorPass!2026"
+    )
+    forbidden = client.request(
+        "DELETE", "/api/years/1/department-workbooks",
+        headers=op_csrf, json={"ids": [created["id"]]},
+    )
+    assert forbidden.status_code == 403
+    assert client.get(
+        f"/api/years/1/department-workbooks/{created['id']}/download"
+    ).status_code == 200
+
+
+def test_archive_management_controls_and_labels_in_ui(client):
+    page = client.get("/").text
+    script = client.get("/static/site.js").text
+    for node in (
+        "workbook-export-label", "workbook-archive-select-all",
+        "workbook-archive-delete-selected", "workbook-archives",
+    ):
+        assert f'id="{node}"' in page
+    assert "deleteDepartmentArchives" in script
+    assert "downloadDepartmentArchive(item.download_url, button, item.download_filename)" in script
+    assert "ELIMINA" in script
