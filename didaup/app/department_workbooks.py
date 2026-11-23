@@ -26,7 +26,7 @@ from .column_mapping import OFFER_HEADER_TO_FIELD, source_header_conflicts, norm
 from .row_identity import source_row_id
 from .workload import (
     WorkloadRuleError, validate_rules, apply_workload, is_missing_planned_hours,
-    matching_rule_indices,
+    matching_rule_indices, workload_cap_applied,
 )
 
 # Order of the pre-existing outgoing referent layout (not the 110-col source).
@@ -383,6 +383,8 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     workload_conflicts = {}
     workload_missing_warnings = []
     workload_missing_count = 0
+    workload_capped_count = 0
+    workload_capped_examples = []
     workload_by_rule = [0] * len(effective_rules)
     unresolved_annuality_rows = 0
     unresolved_annuality_examples = []
@@ -500,10 +502,23 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         # populate this field from TOT ORE PREVISTE; the source is unchanged.
         # Excluded rows above retain their source values in the internal audit.
         planned_hours = get("ore_previste")
+        cap_applied = workload_cap_applied(
+            planned_hours, get("cds_tipologia"), course,
+            data.get("TAF", ""), effective_rules,
+        )
         effective, matched_index, rule_issue = apply_workload(
             planned_hours, get("cds_tipologia"), course,
             data.get("TAF", ""), effective_rules,
         )
+        if cap_applied:
+            workload_capped_count += 1
+            if len(workload_capped_examples) < 100:
+                workload_capped_examples.append({
+                    "excel_row": excel_row,
+                    "rule_number": matched_index + 1 if matched_index is not None else None,
+                    "planned_hours": _display(planned_hours),
+                    "effective_hours": _display(effective),
+                })
         data["TOT ORE EFFETTIVE"] = effective
         if matched_index is None and rule_issue is None:
             # No matching rule: carry the explicitly mapped planned hours,
@@ -616,6 +631,8 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
         "per_rule_rows": workload_by_rule,
         "rows_with_missing_planned_hours": workload_missing_count,
         "missing_planned_hours_examples": workload_missing_warnings,
+        "rows_capped_to_planned_hours": workload_capped_count,
+        "capped_to_planned_hours_examples": workload_capped_examples,
         "error_count": workload_error_count,
         "errors": workload_errors,
         "conflict_pairs": [
