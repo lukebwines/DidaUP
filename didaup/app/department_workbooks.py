@@ -480,7 +480,7 @@ def _prepare(source: Path, source_sha256: str, sheet_name: str, header_row: int,
     except WorkloadRuleError as exc:
         raise WorkbookGenerationError(str(exc)) from exc
     effective_assignment_exclusions = assignment_exclusions or {}
-    if effective_assignment_exclusions:
+    if any(effective_assignment_exclusions.values()):
         if not effective_assignment_exclusions.get("titoli"):
             raise WorkbookGenerationError(
                 "Esclusione incarichi: selezionare almeno un Titolo affidamento"
