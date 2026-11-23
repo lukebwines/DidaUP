@@ -188,10 +188,12 @@ async function loadWorkbookExclusions(force = false) {
   const sameSource = workbookExclusion.yearId === yearId &&
     workbookExclusion.importId === importId && workbookExclusion.data;
   if (sameSource && !force) return;
-  if (sameSource && force && workbookExclusion.previewKey &&
-      workbookExclusionFiltersKey(workbookExclusion.selected) !==
-      workbookExclusionFiltersKey(workbookExclusion.saved) &&
+  const hasDraft = Boolean(workbookExclusion.data) &&
+    workbookExclusionFiltersKey(workbookExclusion.selected) !==
+    workbookExclusionFiltersKey(workbookExclusion.saved);
+  if (hasDraft && force &&
       !window.confirm("Sono presenti modifiche non salvate ai filtri. Ricaricare e perderle?")) {
+    if (sameSource) el("workbook-import-id").value = String(workbookExclusion.importId);
     return;
   }
   workbookExclusion.loading = true;
@@ -388,4 +390,7 @@ function hookWorkbookExclusions() {
 window.DidaUPWorkbookExclusions = {
   load: loadWorkbookExclusions,
   hook: hookWorkbookExclusions,
+  hasUnsavedChanges: () => Boolean(workbookExclusion.data) &&
+    workbookExclusionFiltersKey(workbookExclusion.selected) !==
+    workbookExclusionFiltersKey(workbookExclusion.saved),
 };
