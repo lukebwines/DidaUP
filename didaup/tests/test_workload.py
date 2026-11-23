@@ -590,7 +590,7 @@ def test_workload_release_assets_are_versioned_to_avoid_old_cached_selectors(cli
     manifest = (Path(__file__).resolve().parents[1] / "config.yaml").read_text(
         encoding="utf-8"
     )
-    release = "0.1.10-alpha20"
+    release = "0.1.10-alpha21"
     assert f'version: "{release}"' in manifest
     assert f'ALPHA · {release}' in html
     for asset in ("site.css", "site.js", "mapping.js", "cohort_review.js", "workload.js", "workbook_exclusions.js"):
