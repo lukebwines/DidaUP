@@ -10,6 +10,7 @@
   <script src="static/mapping.js?v=0.1.10-alpha18" defer></script>
   <script src="static/cohort_review.js?v=0.1.10-alpha18" defer></script>
   <script src="static/workload.js?v=0.1.10-alpha18" defer></script>
+  <script src="static/workbook_exclusions.js?v=0.1.10-alpha18" defer></script>
 </head>
 <body>
   <section id="login-view" class="login-shell" hidden>
@@ -477,6 +478,98 @@
               </label>
               <button id="workbook-generate-button" class="primary" type="submit">Genera 5 Excel + righe escluse</button>
             </form>
+            <div class="workbook-exclusion-panel">
+              <div class="panel-heading">
+                <div>
+                  <h3>Esclusione mirata degli incarichi</h3>
+                  <p>Seleziona uno o più Titoli affidamento. Gli altri filtri restringono l'esclusione ai soli incarichi che corrispondono anche ai criteri selezionati. Le esclusioni per CdS e annualità restano indipendenti.</p>
+                </div>
+                <span class="chip">Filtri multipli</span>
+              </div>
+              <p class="muted">Più valori nello stesso filtro sono alternativi (OR); filtri diversi sono combinati (AND). Il Titolo affidamento è obbligatorio. I valori disponibili provengono soltanto dalle righe che restano nei cinque Excel dopo le esclusioni per annualità.</p>
+              <div class="cohort-facet-grid workbook-exclusion-grid">
+                <details class="cohort-multiselect" id="workbook-exclusion-title-filter">
+                  <summary id="workbook-exclusion-title-summary">Titolo affidamento · Tutti</summary>
+                  <div class="cohort-filter-popup">
+                    <label for="workbook-exclusion-title-search">Cerca titolo affidamento</label>
+                    <input id="workbook-exclusion-title-search" type="search" placeholder="Cerca un titolo…" autocomplete="off">
+                    <div class="cohort-filter-actions">
+                      <button type="button" class="secondary" id="workbook-exclusion-title-pick">Seleziona risultati</button>
+                      <button type="button" class="secondary" id="workbook-exclusion-title-clear">Azzera filtro</button>
+                    </div>
+                    <div class="cohort-filter-values" id="workbook-exclusion-title-options" role="group" aria-label="Titoli affidamento"></div>
+                  </div>
+                </details>
+                <details class="cohort-multiselect" id="workbook-exclusion-type-filter">
+                  <summary id="workbook-exclusion-type-summary">Tipologia CdS · Tutte</summary>
+                  <div class="cohort-filter-popup">
+                    <label for="workbook-exclusion-type-search">Cerca tipologia</label>
+                    <input id="workbook-exclusion-type-search" type="search" placeholder="Cerca una tipologia…" autocomplete="off">
+                    <div class="cohort-filter-actions">
+                      <button type="button" class="secondary" id="workbook-exclusion-type-pick">Seleziona risultati</button>
+                      <button type="button" class="secondary" id="workbook-exclusion-type-clear">Azzera filtro</button>
+                    </div>
+                    <div class="cohort-filter-values" id="workbook-exclusion-type-options" role="group" aria-label="Tipologie CdS"></div>
+                  </div>
+                </details>
+                <details class="cohort-multiselect" id="workbook-exclusion-cds-filter">
+                  <summary id="workbook-exclusion-cds-summary">Corso di studio · Tutti</summary>
+                  <div class="cohort-filter-popup">
+                    <label for="workbook-exclusion-cds-search">Cerca corso</label>
+                    <input id="workbook-exclusion-cds-search" type="search" placeholder="Cerca nome o codice CdS…" autocomplete="off">
+                    <div class="cohort-filter-actions">
+                      <button type="button" class="secondary" id="workbook-exclusion-cds-pick">Seleziona risultati</button>
+                      <button type="button" class="secondary" id="workbook-exclusion-cds-clear">Azzera filtro</button>
+                    </div>
+                    <div class="cohort-filter-values" id="workbook-exclusion-cds-options" role="group" aria-label="Corsi di studio"></div>
+                  </div>
+                </details>
+                <details class="cohort-multiselect" id="workbook-exclusion-campus-filter">
+                  <summary id="workbook-exclusion-campus-summary">Sede · Tutte</summary>
+                  <div class="cohort-filter-popup">
+                    <label for="workbook-exclusion-campus-search">Cerca sede</label>
+                    <input id="workbook-exclusion-campus-search" type="search" placeholder="Cerca una sede…" autocomplete="off">
+                    <div class="cohort-filter-actions">
+                      <button type="button" class="secondary" id="workbook-exclusion-campus-pick">Seleziona risultati</button>
+                      <button type="button" class="secondary" id="workbook-exclusion-campus-clear">Azzera filtro</button>
+                    </div>
+                    <div class="cohort-filter-values" id="workbook-exclusion-campus-options" role="group" aria-label="Sedi"></div>
+                  </div>
+                </details>
+                <details class="cohort-multiselect" id="workbook-exclusion-year-filter">
+                  <summary id="workbook-exclusion-year-summary">Annualità · Tutte</summary>
+                  <div class="cohort-filter-popup">
+                    <label for="workbook-exclusion-year-search">Cerca annualità</label>
+                    <input id="workbook-exclusion-year-search" type="search" placeholder="Cerca annualità…" autocomplete="off">
+                    <div class="cohort-filter-actions">
+                      <button type="button" class="secondary" id="workbook-exclusion-year-pick">Seleziona risultati</button>
+                      <button type="button" class="secondary" id="workbook-exclusion-year-clear">Azzera filtro</button>
+                    </div>
+                    <div class="cohort-filter-values" id="workbook-exclusion-year-options" role="group" aria-label="Annualità"></div>
+                  </div>
+                </details>
+                <details class="cohort-multiselect" id="workbook-exclusion-taf-filter">
+                  <summary id="workbook-exclusion-taf-summary">TAF · Tutti</summary>
+                  <div class="cohort-filter-popup">
+                    <label for="workbook-exclusion-taf-search">Cerca TAF</label>
+                    <input id="workbook-exclusion-taf-search" type="search" placeholder="Cerca un TAF…" autocomplete="off">
+                    <div class="cohort-filter-actions">
+                      <button type="button" class="secondary" id="workbook-exclusion-taf-pick">Seleziona risultati</button>
+                      <button type="button" class="secondary" id="workbook-exclusion-taf-clear">Azzera filtro</button>
+                    </div>
+                    <div class="cohort-filter-values" id="workbook-exclusion-taf-options" role="group" aria-label="TAF"></div>
+                  </div>
+                </details>
+              </div>
+              <div class="workbook-exclusion-actions write-only">
+                <span id="workbook-exclusion-selected-count" class="chip">0 titoli principali · 0 valori complessivi selezionati</span>
+                <button type="button" class="secondary" id="workbook-exclusion-clear">Azzera tutti i filtri</button>
+                <button type="button" class="secondary" id="workbook-exclusion-preview" disabled>Anteprima righe da escludere</button>
+                <button type="button" class="primary" id="workbook-exclusion-save" disabled>Salva criteri di esclusione</button>
+              </div>
+              <p id="workbook-exclusion-status" class="muted" aria-live="polite">Seleziona un report mappato per caricare i valori disponibili.</p>
+              <p id="workbook-exclusion-preview-result" class="workbook-exclusion-preview-result" aria-live="polite"></p>
+            </div>
             <p id="workbook-progress" class="muted" aria-live="polite"></p>
             <p class="muted">Le colonne storiche sono bloccate; solo Tipo variazione, Nuovo docente, Ore e Note sono compilabili nei cinque Excel destinati ai referenti. Il sesto file, Righe escluse · CONTROLLO INTERNO, contiene le righe effettivamente eliminate e il motivo: non va distribuito ai referenti. Le esclusioni registrate restano applicate e non c’è ripartizione dipartimentale.</p>
             <div class="table-wrap">
