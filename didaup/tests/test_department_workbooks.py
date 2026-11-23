@@ -25,7 +25,7 @@ def referent_names(archive):
             if "_Dipartimento_" in name and name.endswith(".xlsx")]
 
 
-def make_source(path: Path, *, malicious=False, wrong_year=False, incomplete_annuality=False, mutuazione_bool=False, with_tipologia=False, blank_planned_rows=(), invalid_planned_rows=None, taf_by_course=None, annualities_by_row=None):
+def make_source(path: Path, *, malicious=False, wrong_year=False, incomplete_annuality=False, mutuazione_bool=False, with_tipologia=False, blank_planned_rows=(), invalid_planned_rows=None, taf_by_course=None, annualities_by_row=None, assignment_titles_by_row=None):
     source_headers = list(HISTORIC_HEADERS) + (["TIPOLOGIA"] if with_tipologia else [])
     assert len(source_headers) == (34 if with_tipologia else 33)
     wb = xlsxwriter.Workbook(str(path))
@@ -51,6 +51,7 @@ def make_source(path: Path, *, malicious=False, wrong_year=False, incomplete_ann
             ),
             "SSD INSEGNAMENTO": "TEST-SSD",
             "TAF": (taf_by_course or {}).get(course, "TAF-SINTETICO"),
+            "TITOLO AFFIDAMENTO": (assignment_titles_by_row or {}).get(row_number),
             "MUTUAZIONE": (row_number in (1, 4)) if mutuazione_bool else None,
             "NOME DOCENTE": teacher,
             "DIPARTIMENTO AFFERENZA DOCENTE": dept,
