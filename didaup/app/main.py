@@ -1855,6 +1855,142 @@ def recover_staged_department_deletions():
             continue
 
 
+class WorkbookReferenceDecision(BaseModel):
+    artifact_id: int | None = Field(default=None, ge=1)
+    expected_version: int = Field(ge=0)
+    reason: str = Field(default="", max_length=500)
+
+
+@app.get("/api/years/{year_id}/department-workbooks/reference")
+def get_department_workbook_reference(year_id: int, request: Request):
+    current_user(request, ("admin", "operatore"))
+    with closing(connect()) as cx:
+        ensure_year(cx, year_id)
+        row = cx.execute(
+            "SELECT r.artifact_id,r.archive_sha256,r.version,r.selected_at,"
+            "a.label,a.generated_at,a.stored_name "
+            "FROM workbook_references r "
+            "JOIN working_artifacts a ON a.id=r.artifact_id "
+            "WHERE r.year_id=? AND a.year_id=? "
+            "AND a.kind='five_department_workbooks'",
+            (year_id, year_id),
+        ).fetchone()
+    if row is None:
+        return {"artifact_id": None, "version": 0, "label": "",
+                "available": False}
+    try:
+        _, _, available = checked_department_archive(row["stored_name"])
+    except HTTPException:
+        available = False
+    return {
+        "artifact_id": row["artifact_id"], "version": row["version"],
+        "label": row["label"], "selected_at": row["selected_at"],
+        "generated_at": row["generated_at"], "available": available,
+    }
+
+
+@app.put("/api/years/{year_id}/department-workbooks/reference")
+def set_department_workbook_reference(
+    year_id: int, body: WorkbookReferenceDecision, request: Request,
+):
+    actor = current_user(request, ("admin",))
+    require_write(request, actor)
+    change_reason = " ".join(body.reason.split())
+    with closing(connect()) as cx:
+        ensure_year(cx, year_id)
+        existing = cx.execute(
+            "SELECT artifact_id,version FROM workbook_references WHERE year_id=?",
+            (year_id,),
+        ).fetchone()
+        current_version = existing["version"] if existing else 0
+        if body.expected_version != current_version:
+            raise HTTPException(409, "Riferimento modificato: aggiornare l'elenco")
+        old_id = existing["artifact_id"] if existing else None
+        if old_id == body.artifact_id:
+            return {"artifact_id": old_id, "version": current_version}
+        if old_id is not None and len(change_reason) < 3:
+            raise HTTPException(
+                422, "Per correggere il riferimento indicare un motivo di almeno 3 caratteri"
+            )
+        selected = None
+        if body.artifact_id is not None:
+            selected = cx.execute(
+                "SELECT stored_name FROM working_artifacts "
+                "WHERE id=? AND year_id=? AND kind='five_department_workbooks'",
+                (body.artifact_id, year_id),
+            ).fetchone()
+            if selected is None:
+                raise HTTPException(404, "Estrazione non presente in questo anno")
+    digest = None
+    if selected is not None:
+        path, _size, available = checked_department_archive(selected["stored_name"])
+        if not available:
+            raise HTTPException(409, "ZIP assente sul Raspberry Pi")
+        try:
+            digest = read_reference_snapshot(path)["archive_sha256"]
+        except ReferenceSnapshotError as exc:
+            raise HTTPException(422, "Estrazione non utilizzabile: " + str(exc)) from exc
+
+    with closing(connect()) as cx:
+        cx.execute("BEGIN IMMEDIATE")
+        active = cx.execute(
+            "SELECT artifact_id,version FROM workbook_references WHERE year_id=?",
+            (year_id,),
+        ).fetchone()
+        active_version = active["version"] if active else 0
+        active_id = active["artifact_id"] if active else None
+        if active_version != body.expected_version or active_id != old_id:
+            cx.rollback()
+            raise HTTPException(409, "Riferimento modificato da un altro utente")
+        if selected is not None:
+            current = cx.execute(
+                "SELECT stored_name FROM working_artifacts "
+                "WHERE id=? AND year_id=? AND kind='five_department_workbooks'",
+                (body.artifact_id, year_id),
+            ).fetchone()
+            if current is None or current["stored_name"] != selected["stored_name"]:
+                cx.rollback()
+                raise HTTPException(409, "L'estrazione scelta non è più disponibile")
+            path, _size, available = checked_department_archive(current["stored_name"])
+            if not available or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                cx.rollback()
+                raise HTTPException(409, "Il contenuto dello ZIP è cambiato: scelta annullata")
+        if body.artifact_id is None:
+            cx.execute("DELETE FROM workbook_references WHERE year_id=?", (year_id,))
+            version = 0
+        else:
+            version = active_version + 1
+            cx.execute(
+                """INSERT INTO workbook_references(
+                    year_id,artifact_id,archive_sha256,version,selected_at,actor_id
+                ) VALUES(?,?,?,?,?,?)
+                ON CONFLICT(year_id) DO UPDATE SET
+                    artifact_id=excluded.artifact_id,
+                    archive_sha256=excluded.archive_sha256,
+                    version=excluded.version,
+                    selected_at=excluded.selected_at,
+                    actor_id=excluded.actor_id""",
+                (year_id, body.artifact_id, digest, version,
+                 int(time.time()), actor["id"]),
+            )
+        cx.execute(
+            "INSERT INTO workbook_reference_changes("
+            "year_id,old_artifact_id,new_artifact_id,reason,changed_at,actor_id"
+            ") VALUES(?,?,?,?,?,?)",
+            (year_id, old_id, body.artifact_id,
+             change_reason if old_id else "Prima selezione del riferimento",
+             int(time.time()), actor["id"]),
+        )
+        record(cx, actor["id"], "change_workbook_reference",
+               "academic_year", year_id)
+        cx.commit()
+    return {
+        "artifact_id": body.artifact_id, "version": version,
+        "previous_artifact_id": old_id,
+        "message": "Estrazione di riferimento aggiornata e registrata",
+    }
+
+
 class DeleteDepartmentWorkbooksRequest(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=250)
 
@@ -1885,6 +2021,17 @@ def delete_department_workbooks(
             cx.rollback()
             raise HTTPException(
                 404, "Uno o più pacchetti non esistono per l'anno selezionato: ricaricare l'elenco"
+            )
+        reference = cx.execute(
+            "SELECT artifact_id FROM workbook_references WHERE year_id=?",
+            (year_id,),
+        ).fetchone()
+        if reference is not None and reference["artifact_id"] in selected:
+            cx.rollback()
+            raise HTTPException(
+                409,
+                "Impossibile eliminare l'estrazione di riferimento. "
+                "Selezionarne prima un'altra o rimuovere il riferimento con motivazione.",
             )
         files = []
         for row in records:
