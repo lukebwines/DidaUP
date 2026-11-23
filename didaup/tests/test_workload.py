@@ -9,7 +9,10 @@ from zipfile import ZipFile
 import pytest
 from python_calamine import CalamineWorkbook
 
-from app.workload import validate_rules, apply_workload, WorkloadRuleError, source_choices
+from app.workload import (
+    validate_rules, apply_workload, WorkloadRuleError, source_choices,
+    workload_cap_applied,
+)
 from app.department_workbooks import build_five_workbooks, _prepare, WorkbookGenerationError
 from test_department_workbooks import make_source, referent_names
 
@@ -46,11 +49,25 @@ def test_workload_rules_reject_duplicate_and_conflict():
     assert "regole 1, 2" in conflict
 
 
-def test_missing_planned_hours_and_fixed_quota_beyond_plan_are_errors():
+def test_fixed_quota_above_planned_hours_is_automatically_capped():
     rules = validate_rules([rule(mode="fissa", value="12")])
-    assert "superiore" in apply_workload(10, "A", "B", "C", rules)[2]
-    assert "mancante" in apply_workload("", "A", "B", "C", rules)[2]
+    assert apply_workload(10, "A", "B", "C", rules) == (10.0, 0, None)
+    assert workload_cap_applied(10, "A", "B", "C", rules) is True
+    assert apply_workload("", "A", "B", "C", rules)[2].startswith(
+        "TOT ORE PREVISTE mancante"
+    )
+    assert workload_cap_applied("", "A", "B", "C", rules) is False
     assert apply_workload("15", "A", "B", "C", rules) == (12.0, 0, None)
+    assert workload_cap_applied(15, "A", "B", "C", rules) is False
+
+
+def test_percentage_above_planned_hours_is_automatically_capped():
+    rules = validate_rules([rule(mode="percentuale", value="150")])
+    assert apply_workload(10, "A", "B", "C", rules) == (10.0, 0, None)
+    assert workload_cap_applied(10, "A", "B", "C", rules) is True
+    exactly_one_hundred = validate_rules([rule(mode="percentuale", value="100")])
+    assert apply_workload(10, "A", "B", "C", exactly_one_hundred) == (10.0, 0, None)
+    assert workload_cap_applied(10, "A", "B", "C", exactly_one_hundred) is False
 
 
 def test_workload_applied_only_to_retained_lines_in_all_five(tmp_path):
@@ -60,16 +77,25 @@ def test_workload_applied_only_to_retained_lines_in_all_five(tmp_path):
     original_hash = hashlib.sha256(src.read_bytes()).hexdigest()
     rules = validate_rules([
         rule(value="25"),
-        rule(cds="SYN-A", taf="TAF-SINTETICO", value="75"),
-        rule(cds="SYN-B", mode="fissa", value="4"),
+        rule(cds="SYN-A", taf="TAF-SINTETICO", value="150"),
+        rule(cds="SYN-B", mode="fissa", value="12"),
     ])
     bundle, info = build_five_workbooks(
         src, original_hash, "Offerta sintetica", 1, assigned,
         "2026/27", workload_rules=rules,
     )
     assert info["workload"]["rows_calculated"] == 4
-    assert info["workload"]["total_effective_hours"] == 26.5
+    assert info["workload"]["total_effective_hours"] == 38
     assert info["workload"]["rows_without_rule"] == 0
+    assert info["workload"]["rows_capped_to_planned_hours"] == 3
+    assert info["workload"]["capped_to_planned_hours_examples"] == [
+        {"excel_row": 2, "rule_number": 2, "planned_hours": "20",
+         "effective_hours": "20"},
+        {"excel_row": 3, "rule_number": 2, "planned_hours": "10",
+         "effective_hours": "10"},
+        {"excel_row": 5, "rule_number": 3, "planned_hours": "8",
+         "effective_hours": "8"},
+    ]
     assert hashlib.sha256(src.read_bytes()).hexdigest() == original_hash
     with ZipFile(io.BytesIO(bundle)) as archive:
         files = referent_names(archive)
@@ -80,7 +106,7 @@ def test_workload_applied_only_to_retained_lines_in_all_five(tmp_path):
     values = CalamineWorkbook.from_path(output).get_sheet_by_name("Proposte SSD").to_python(
         skip_empty_area=False
     )
-    assert [line[28] for line in values[6:10]] == [15, 7.5, 0, 4]
+    assert [line[28] for line in values[6:10]] == [20, 10, 0, 8]
 
 
 def test_workload_ambiguous_rules_block_generation_but_preview_reports(tmp_path):
