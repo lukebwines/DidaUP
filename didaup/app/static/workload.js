@@ -172,6 +172,7 @@ const workloadUI = (() => {
     body.replaceChildren();
     for (const [index, rule] of stateLocal.rules.entries()) {
       const row = body.insertRow();
+      row.insertCell().textContent = String(index + 1);
       // Saved rules are preserved, but flagged if their selections no longer
       // occur in any included row. This is NOT a selectable course.
       const currentValues = stateLocal.choices && {
@@ -228,7 +229,7 @@ const workloadUI = (() => {
     if (!stateLocal.rules.length) {
       const row = body.insertRow();
       const cell = row.insertCell();
-      cell.colSpan = 6;
+      cell.colSpan = 7;
       cell.textContent = "Nessuna regola: TOT ORE EFFETTIVE sarà uguale a TOT ORE PREVISTE (se disponibile).";
     }
     const status = document.getElementById("workload-save-status");
@@ -428,11 +429,29 @@ const workloadUI = (() => {
             ? errorCount + " errori bloccanti (primi " + issues.length + "): " +
               issues.join("; ")
             : "Nessun errore bloccante di calcolo.";
+
+        const conflictBody = document.getElementById("workload-conflict-pairs");
+        const conflictPanel = document.getElementById("workload-conflict-panel");
+        conflictBody.replaceChildren();
+        const conflictPairs = result.conflict_pairs || [];
+        conflictPanel.hidden = conflictPairs.length === 0;
+        for (const conflict of conflictPairs) {
+          const row = conflictBody.insertRow();
+          const descriptions = conflict.rules.map(number => {
+            const rule = stateLocal.rules[number - 1];
+            return "Regola " + number + ": " +
+              (rule ? labelOf(rule) : "non disponibile");
+          });
+          row.insertCell().textContent = descriptions.join("  ↔  ");
+          row.insertCell().textContent = Number(conflict.rows).toLocaleString("it-IT");
+          row.insertCell().textContent = (conflict.examples || []).join(", ");
+        }
+
         const table = document.getElementById("workload-rule-summary");
         table.replaceChildren();
         for (let index = 0; index < stateLocal.rules.length; index++) {
           const row = table.insertRow();
-          row.insertCell().textContent = labelOf(stateLocal.rules[index]);
+          row.insertCell().textContent = "Regola " + (index + 1) + ": " + labelOf(stateLocal.rules[index]);
           row.insertCell().textContent = String(result.per_rule_rows[index] || 0);
         }
         document.getElementById("workload-results").hidden = false;
